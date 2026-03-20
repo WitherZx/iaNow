@@ -1,0 +1,391 @@
+'use client'
+
+import React, { useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import {
+  ArrowLeft,
+  FileText,
+  Download,
+  Copy,
+  AlertCircle,
+  Loader2,
+  ShieldCheck,
+  Zap,
+  CheckCircle2,
+  AlertTriangle,
+  Sparkles,
+  MessageSquare,
+  Pencil,
+  Save,
+  X,
+  Send,
+  RefreshCcw,
+  Clock,
+  Trash2
+} from 'lucide-react'
+import { Button } from '@/components/shared/Button'
+import { Card } from '@/components/shared/Card'
+import { DashboardLayout } from '@/components/layout/DashboardLayout'
+import { PageContainer } from '@/components/layout/PageContainer'
+import { DocumentActionBar } from '@/components/shared/DocumentActionBar'
+import { DocumentHero } from '@/components/shared/DocumentHero'
+import { DocumentAuditLayout } from '@/components/shared/DocumentAuditLayout'
+import { SidebarActionItem } from '@/components/shared/SidebarActionItem'
+import ReactMarkdown from 'react-markdown'
+import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
+import { cn } from '@/utils/cn'
+
+export default function ViewDocumentPage() {
+  const { id } = useParams()
+  const router = useRouter()
+  const supabase = createClient() as any
+
+  const [loading, setLoading] = useState(true)
+  const [doc, setDoc] = useState<any>(null)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [refining, setRefining] = useState(false)
+  const [refinePrompt, setRefinePrompt] = useState('')
+  const [resolvedSuggestions, setResolvedSuggestions] = useState<string[]>([])
+
+  useEffect(() => {
+    async function loadDocument() {
+      if (!id) return
+      try {
+        setLoading(true)
+        const { data, error } = await supabase
+          .from('generated_documents')
+          .select('*')
+          .eq('id', id)
+          .single() as any
+
+        if (error) throw error
+        setDoc(data)
+        setEditContent(data.content || '')
+      } catch (err) {
+        console.error('Erro ao carregar documento:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadDocument()
+  }, [id, supabase])
+
+  const handleSave = async () => {
+    try {
+      setSaving(true)
+      const { error } = await supabase
+        .from('generated_documents')
+        .update({ content: editContent })
+        .eq('id', id)
+
+      if (error) throw error
+
+      setDoc({ ...doc, content: editContent })
+      setIsEditing(false)
+      toast.success('Documento atualizado com sucesso!')
+    } catch (err) {
+      console.error('Erro ao salvar:', err)
+      toast.error('Erro ao salvar alterações.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!id || !window.confirm('Excluir este documento?')) return
+    try {
+      const { error: upError } = await supabase
+        .from('generated_documents')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id as string)
+      
+      if (upError) {
+        const { error: delError } = await supabase
+          .from('generated_documents')
+          .delete()
+          .eq('id', id as string)
+        if (delError) throw delError
+      }
+      
+      toast.success('Documento excluído!')
+      router.push('/juridico')
+    } catch (err: any) {
+      toast.error('Erro ao excluir: ' + (err.message || 'Sem permissão'))
+    }
+  }
+
+  const handleRefine = async (customPrompt?: string) => {
+    const promptToUse = (typeof customPrompt === 'string') ? customPrompt : refinePrompt
+    if (!promptToUse.trim() || refining) return
+
+    if (customPrompt) setResolvedSuggestions(prev => [...prev, customPrompt])
+
+    setRefining(true)
+    const toastId = toast.loading('Processando ajustes com IA...')
+
+    try {
+      const response = await fetch('/api/juridico/gerar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          refineContent: doc.content,
+          prompt: promptToUse,
+          documentId: id,
+          skipAudit: true
+        })
+      })
+
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Erro ao refinar')
+
+      setDoc({ ...doc, content: data.content })
+      setEditContent(data.content)
+      if (!customPrompt) setRefinePrompt('')
+
+      toast.success('Ajustes aplicados!', { id: toastId })
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao processar ajustes.', { id: toastId })
+    } finally {
+      setRefining(false)
+    }
+  }
+
+  const handleReaudit = async () => {
+    if (refining) return
+    setRefining(true)
+    const toastId = toast.loading('Reavaliando blindagem jurídica...')
+    try {
+      const response = await fetch('/api/juridico/gerar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          refineContent: doc.content,
+          prompt: "Mantenha o texto EXATAMENTE como está, mas execute uma nova auditoria de compliance completa e retorne o score e sugestões atualizadas.",
+          documentId: id
+        })
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Erro na reavaliação')
+
+      setDoc({ ...doc, metadata: { ...doc.metadata, audit: data.audit } })
+      setResolvedSuggestions([])
+      toast.success('Auditoria atualizada!', { id: toastId })
+    } catch (err: any) {
+      toast.error('Falha ao reavaliar.', { id: toastId })
+    } finally {
+      setRefining(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex h-full w-full items-center justify-center min-h-[400px]">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  if (!doc) {
+    return (
+      <DashboardLayout>
+        <PageContainer>
+          <div className="flex flex-col items-center justify-center p-20 text-center">
+            <AlertCircle className="w-16 h-16 text-slate-300 mb-4" />
+            <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-800 to-slate-500">Documento não encontrado</h2>
+            <p className="text-slate-500 mt-2">O documento que você tentou acessar não existe ou foi removido.</p>
+            <Link href="/juridico" className="mt-8">
+              <Button variant="outline"><ArrowLeft className="w-4 h-4 mr-2" /> Voltar ao Jurídico</Button>
+            </Link>
+          </div>
+        </PageContainer>
+      </DashboardLayout>
+    )
+  }
+
+  const isGenerating = doc.status === 'generating'
+  const isFailed = doc.status === 'failed'
+  const audit = doc.metadata?.audit
+
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'text-emerald-500 bg-emerald-50 border-emerald-100'
+    if (score >= 50) return 'text-amber-500 bg-amber-50 border-amber-100'
+    return 'text-red-500 bg-red-50 border-red-100'
+  }
+
+  return (
+    <DocumentAuditLayout
+      backLink="/juridico"
+      actions={
+        <DocumentActionBar
+          isEditing={isEditing}
+          onEdit={() => setIsEditing(true)}
+          onCancel={() => setIsEditing(false)}
+          onSave={handleSave}
+          isSaving={saving}
+          onCopy={() => {
+            navigator.clipboard.writeText(doc.content || '')
+            toast.success('Conteúdo copiado!')
+          }}
+          onDownload={() => window.print()}
+          onDelete={handleDelete}
+        />
+      }
+      hero={
+        <DocumentHero
+          category={doc.document_type === 'contract' ? 'Contrato' : doc.document_type === 'company_structure' ? 'Societário' : 'Compliance'}
+          date={new Date(doc.created_at).toLocaleDateString('pt-BR')}
+          title={doc.title}
+          description={doc.metadata?.description || 'Documento jurídico gerado e auditado com inteligência artificial para máxima segurança e conformidade.'}
+        />
+      }
+      sidebar={
+        <>
+          {/* AJUSTAR COM IA */}
+          <div className="p-6 bg-primary/5 border border-primary/20 rounded-3xl space-y-4 shadow-sm">
+            <div className="flex items-center gap-2 text-[10px] font-black text-primary uppercase tracking-widest">
+              <Zap className="w-4 h-4 fill-primary" /> Ajustar com IA
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium">Descreva o que deseja mudar ou adicionar ao documento.</p>
+            <div className="relative">
+              <textarea
+                value={refinePrompt}
+                onChange={(e) => setRefinePrompt(e.target.value)}
+                placeholder="Ex: Adicione uma cláusula de confidencialidade de 2 anos..."
+                className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-xs focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all resize-none h-32 font-semibold text-slate-700 placeholder:text-slate-400"
+              />
+              <Button
+                size="icon"
+                onClick={() => handleRefine()}
+                disabled={!refinePrompt.trim() || refining}
+                className="absolute bottom-3 right-3 rounded-xl shadow-lg shadow-primary/20 h-10 w-10 bg-primary hover:bg-blue-700 flex items-center justify-center p-0"
+              >
+                {refining ? (
+                  <Loader2 className="w-5 h-5 text-white animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4 text-white" />
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* SCORE E RISCO */}
+          {audit && (
+            <Card padding="none" className="p-6 bg-white border-slate-100 shadow-sm rounded-3xl flex flex-col items-center">
+              <div className={cn(
+                "w-20 h-20 rounded-full flex items-center justify-center mb-4 border-2",
+                getScoreColor(audit.score).split(' ')[0],
+                getScoreColor(audit.score).split(' ')[1]
+              )}>
+                <span className="text-3xl font-black">{audit.score}</span>
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Score de Compliance</span>
+              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-4">
+                <div className={cn(
+                  "h-full transition-all duration-1000",
+                  audit.score >= 80 ? "bg-emerald-500" : audit.score >= 50 ? "bg-amber-500" : "bg-red-500"
+                )} style={{ width: `${audit.score}%` }} />
+              </div>
+              <div className="px-3 py-1.5 bg-slate-50 rounded-xl flex items-center gap-2 w-full justify-center mb-3">
+                <span className={`w-2 h-2 rounded-full ${audit.risk_level === 'baixo' ? 'bg-emerald-500' : audit.risk_level === 'médio' ? 'bg-amber-500' : 'bg-red-500'}`} />
+                <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight">Risco {audit.risk_level}</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleReaudit}
+                disabled={refining}
+                className="w-full text-xs font-black uppercase text-primary hover:bg-primary/5 rounded-xl h-10 gap-2"
+              >
+                <RefreshCcw className={cn("w-3.5 h-3.5", refining && "animate-spin")} />
+                Reavaliar Blindagem
+              </Button>
+            </Card>
+          )}
+          {/* SUGESTÕES */}
+          {audit?.suggestions?.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 px-1 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                <Sparkles className="w-3 h-3" /> Sugestões Críticas
+              </div>
+              {audit.suggestions
+                .filter((s: string) => !resolvedSuggestions.includes(s))
+                .map((s: string, i: number) => (
+                  <SidebarActionItem
+                    key={i}
+                    icon={<CheckCircle2 size={16} className="text-emerald-500" />}
+                    text={s}
+                    onAction={() => handleRefine(s)}
+                    isLoading={refining}
+                    variant="primary"
+                  />
+                ))}
+            </div>
+          )}
+        </>
+      }
+    >
+      <div className="min-w-0 flex flex-col">
+        {!isGenerating && !isFailed && (
+          <Card className="min-h-[600px] border-none shadow-2xl shadow-slate-200/50 rounded-[32px] overflow-hidden bg-white flex flex-col relative print:min-h-0 print:h-auto print:shadow-none print:border-none print:rounded-none">
+            {isEditing ? (
+              <div className="flex-1">
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full h-[800px] border-none focus:ring-0 text-lg text-slate-700 leading-relaxed font-mono whitespace-pre-wrap outline-none resize-none p-8"
+                  placeholder="Edite o conteúdo do contrato..."
+                />
+              </div>
+            ) : (
+              <div className="flex-1 p-8 print:p-0 prose prose-slate max-w-none whitespace-normal break-words [overflow-wrap:anywhere] prose-headings:font-black prose-h1:text-3xl prose-h2:text-2xl prose-p:text-slate-600 prose-p:leading-relaxed prose-li:text-slate-600 text-lg overflow-hidden">
+                <ReactMarkdown
+                  components={{
+                    li: ({node, ...props}) => <li className="break-all [word-break:break-all] whitespace-normal [overflow-wrap:anywhere]" {...props} />,
+                    p: ({node, ...props}) => <p className="break-all [word-break:break-all] whitespace-normal [overflow-wrap:anywhere]" {...props} />,
+                    blockquote: ({node, ...props}) => <blockquote className="break-all [word-break:break-all] whitespace-normal [overflow-wrap:anywhere]" {...props} />
+                  }}
+                >
+                  {doc.content?.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '') || ''}
+                </ReactMarkdown>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {isGenerating && (
+          <div className="flex-1 bg-white rounded-[32px] border border-slate-100 p-20 flex flex-col items-center justify-center text-center shadow-xl shadow-slate-100">
+            <div className="relative mb-10">
+              <div className="w-24 h-24 border-4 border-slate-100 rounded-full animate-spin border-t-primary" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <FileText className="w-8 h-8 text-primary animate-pulse" />
+              </div>
+            </div>
+            <h3 className="text-3xl font-black text-slate-800 mb-4">Gerando Blindagem Legal...</h3>
+            <p className="text-slate-500 font-medium max-w-md mx-auto leading-relaxed">
+              Nossa Inteligência Sistêmica está redigindo seu documento aplicando todo o contexto jurídico. Por favor, aguarde alguns instantes.
+            </p>
+          </div>
+        )}
+
+        {isFailed && (
+          <div className="flex-1 bg-white rounded-[32px] border border-slate-100 p-20 flex flex-col items-center justify-center text-center shadow-xl shadow-slate-100">
+            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-8">
+              <AlertCircle className="w-10 h-10" />
+            </div>
+            <h3 className="text-3xl font-black text-slate-800 mb-4">Falha na Geração</h3>
+            <p className="text-slate-500 font-medium mb-10">{doc.content || 'Ocorreu um erro ao processar o contrato.'}</p>
+            <Link href="/juridico/novo">
+              <Button size="lg" className="rounded-2xl px-10 font-bold">Tentar Novamente</Button>
+            </Link>
+          </div>
+        )}
+      </div>
+    </DocumentAuditLayout>
+  )
+}

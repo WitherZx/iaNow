@@ -1,0 +1,466 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase/client'
+import { 
+  ArrowLeft, 
+  CheckCircle2, 
+  Zap, 
+  TrendingUp,
+  ShieldCheck,
+  Rocket,
+  Download,
+  Share2,
+  Sparkles,
+  Clock,
+  Layout,
+  Send,
+  CheckCircle,
+  Trash2,
+  Loader2
+} from 'lucide-react'
+import { Card } from "@/components/shared/Card"
+import { Button } from "@/components/shared/Button"
+import { StatusBadge } from "@/components/shared/StatusBadge"
+import { DashboardLayout } from '@/components/layout/DashboardLayout'
+import { PageContainer } from '@/components/layout/PageContainer'
+import { cn } from "@/utils/cn"
+import { toast } from 'sonner'
+
+// Standard local components
+const Badge = ({ children, className }: { children: React.ReactNode, className?: string }) => (
+  <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase", className)}>
+    {children}
+  </span>
+)
+
+const Skeleton = ({ className }: { className?: string }) => (
+  <div className={cn("animate-pulse bg-slate-200/60 rounded-xl", className)} />
+)
+
+export default function EstrategiaDetalhePage() {
+  const { id } = useParams()
+  const router = useRouter()
+  const [strategy, setStrategy] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [refining, setRefining] = useState(false)
+  const [refinePrompt, setRefinePrompt] = useState('')
+  const [isGuest, setIsGuest] = useState(true)
+
+  useEffect(() => {
+    console.log('Current Strategy State:', strategy)
+  }, [strategy])
+
+  useEffect(() => {
+    async function checkUser() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        console.log('Auth Check - User:', user ? user.email : 'No user')
+        if (user) {
+          setIsGuest(false)
+        } else {
+          setIsGuest(true)
+        }
+      } catch (err) {
+        console.error('Auth Check Error:', err)
+        setIsGuest(true)
+      }
+    }
+    checkUser()
+  }, [])
+
+  useEffect(() => {
+    async function fetchStrategy() {
+      if (!id) return
+      try {
+        const response = await fetch(`/api/strategy/public?id=${id as string}`)
+        
+        if (!response.ok) {
+          throw new Error('Falha ao carregar estratégia')
+        }
+        
+        const data = await response.json()
+        setStrategy(data)
+      } catch (err) {
+        console.error('Erro ao buscar estratégia:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (id) fetchStrategy()
+  }, [id])
+
+  const handleRefine = async () => {
+    if (!refinePrompt.trim() || refining || isGuest) return
+    setRefining(true)
+    try {
+      const response = await fetch('/api/ai/strategy/refine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ strategyId: id as string, prompt: refinePrompt })
+      })
+      const data = await response.json()
+      if (data.success) {
+        setStrategy({ ...strategy, content: data.content })
+        setRefinePrompt('')
+      } else {
+        throw new Error(data.error)
+      }
+    } catch (err) {
+      console.error('Erro ao refinar estratégia:', err)
+    } finally {
+      setRefining(false)
+    }
+  }
+
+  const toggleTask = async (taskIndex: number) => {
+    if (refining || isGuest) return
+    
+    const toastId = toast.loading('Sincronizando...')
+    
+    // Optimistic update
+    const newContent = { ...strategy.content }
+    const updatedActionPlan = [...newContent.actionPlan]
+    updatedActionPlan[taskIndex] = {
+      ...updatedActionPlan[taskIndex],
+      completed: !updatedActionPlan[taskIndex].completed
+    }
+    newContent.actionPlan = updatedActionPlan
+    
+    // UI Update
+    setStrategy({ ...strategy, content: newContent })
+
+    try {
+      const response = await fetch('/api/strategy/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: id as string, content: newContent })
+      })
+      
+      const resData = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(resData.error || 'Erro no servidor')
+      }
+
+      toast.success('Alteração salva!', { id: toastId })
+    } catch (err: any) {
+      console.error('Erro ao salvar:', err)
+      toast.error('Erro ao salvar: ' + err.message, { id: toastId })
+      
+      // Rollback UI
+      const originalContent = { ...strategy.content }
+      setStrategy({ ...strategy, content: originalContent })
+    }
+  }
+
+  const handleDelete = async () => {
+    if (isGuest) return
+    if (!confirm('Tem certeza que deseja deletar este plano permanentemente?')) return
+    
+    try {
+      const response = await fetch('/api/strategy/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: id as string })
+      })
+      const resData = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(resData.error || 'Erro no servidor')
+      }
+
+      toast.success('Plano deletado com sucesso')
+      router.refresh()
+      router.push('/estrategia')
+    } catch (err) {
+      console.error('Erro ao deletar:', err)
+      toast.error('Erro ao deletar o plano')
+    }
+  }
+
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: strategy?.content.title,
+        text: strategy?.content.description,
+        url: window.location.href,
+      }).catch(() => {
+        navigator.clipboard.writeText(window.location.href)
+        toast.success('Link copiado para a área de transferência!')
+      })
+    } else {
+      navigator.clipboard.writeText(window.location.href)
+      toast.success('Link copiado!')
+    }
+  }
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <PageContainer>
+          <div className="space-y-8">
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-[200px] w-full" />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <Skeleton className="lg:col-span-2 h-[400px]" />
+              <Skeleton className="h-[400px]" />
+            </div>
+          </div>
+        </PageContainer>
+      </DashboardLayout>
+    )
+  }
+
+  if (!strategy) {
+    return (
+      <DashboardLayout>
+        <PageContainer>
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <Layout className="w-12 h-12 text-slate-200 mb-4" />
+            <h1 className="text-xl font-bold mb-2">Plano não encontrado</h1>
+            {!isGuest && (
+              <Button variant="outline" onClick={() => router.push('/estrategia')}>Voltar</Button>
+            )}
+          </div>
+        </PageContainer>
+      </DashboardLayout>
+    )
+  }
+
+  const { content } = strategy
+
+  return (
+    <DashboardLayout>
+      <PageContainer>
+        <div className="flex flex-col gap-y-12 pb-20 animate-in fade-in slide-in-from-bottom-2 duration-700">
+          
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            {!isGuest ? (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-slate-400 hover:text-slate-900"
+                onClick={() => router.push('/estrategia')}
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
+              </Button>
+            ) : (
+              <div className="flex items-center gap-2 text-primary font-black text-sm uppercase">
+                <Sparkles className="w-5 h-5 fill-primary" /> iaNow Strategic Plan
+              </div>
+            )}
+            
+            <div className="flex gap-2">
+              <Button variant="primary" size="sm" onClick={handleShare}>
+                <Share2 className="w-4 h-4 mr-2" /> Compartilhar
+              </Button>
+              {!isGuest && (
+                <Button variant="outline" size="sm" className="text-rose-500 hover:bg-rose-50 border-slate-200" onClick={handleDelete}>
+                  <Trash2 className="w-4 h-4 mr-2" /> Deletar
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Hero - Reverting to Dark Style but with Standard Radius */}
+          <div className="relative overflow-hidden bg-slate-900 rounded-2xl p-10 text-white shadow-xl shadow-slate-200/50">
+            <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 bg-primary/20 blur-[100px] pointer-events-none" />
+            <div className="relative z-10 space-y-6">
+              <div className="flex items-center gap-3">
+                <StatusBadge status={strategy.status} className="bg-white/10 text-white border-white/10" />
+                <div className="flex items-center gap-2 text-white/40 text-xs font-bold uppercase">
+                  <Clock className="w-3.5 h-3.5" />
+                  {new Date(strategy.created_at).toLocaleDateString('pt-BR')}
+                </div>
+              </div>
+              <div className="space-y-4">
+                <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-[1.1] font-montserrat">
+                  {content.title}
+                </h1>
+                <p className="text-slate-400 text-lg md:text-xl leading-relaxed max-w-none w-full">
+                  {content.description}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            {/* Left Column */}
+            <div className="lg:col-span-8 flex flex-col gap-y-12">
+              
+              {/* Pillars */}
+              <section className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck className="w-6 h-6 text-primary" />
+                  <h2 className="text-2xl font-bold text-slate-950 font-montserrat">Pilares Estratégicos</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {content.pillars?.map((pillar: any, index: number) => (
+                    <Card key={index} className="rounded-2xl border-slate-100 hover:border-primary/20 transition-all" padding="none">
+                      <div className="p-6 h-full flex flex-col gap-y-4">
+                        <Badge className={cn(
+                          pillar.priority === 'Alta' ? "bg-rose-50 text-rose-600" : 
+                          pillar.priority === 'Média' ? "bg-amber-50 text-amber-600" : 
+                          "bg-blue-50 text-blue-600"
+                        )}>
+                          Prioridade {pillar.priority}
+                        </Badge>
+                        <h3 className="text-lg font-bold text-slate-900 leading-tight">
+                          {pillar.title}
+                        </h3>
+                        <p className="text-slate-500 text-sm leading-relaxed flex-grow">
+                          {pillar.description}
+                        </p>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </section>
+
+              {/* Action Plan - High Visibility Interactive Checklist */}
+              <section className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <Rocket className="w-6 h-6 text-emerald-600" />
+                  <h2 className="text-2xl font-bold text-slate-950 font-montserrat">Plano de Ação</h2>
+                </div>
+                <div className="flex flex-col gap-y-4">
+                  {content.actionPlan?.map((item: any, index: number) => (
+                    <div 
+                      key={index} 
+                      onClick={() => toggleTask(index)}
+                      className={cn(
+                        "group flex items-center gap-6 p-6 border rounded-2xl transition-all select-none",
+                        isGuest ? "cursor-default" : "cursor-pointer",
+                        item.completed 
+                          ? "bg-emerald-50/20 border-emerald-100/50" 
+                          : cn(
+                              "bg-white border-slate-100",
+                              !isGuest && "hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-50/50"
+                            )
+                      )}
+                    >
+                      <div className={cn(
+                        "w-12 h-12 flex-shrink-0 rounded-xl flex items-center justify-center font-bold text-lg transition-all",
+                        item.completed && !isGuest
+                          ? "bg-emerald-500 text-white" 
+                          : "bg-slate-50 text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600"
+                      )}>
+                        {item.completed && !isGuest ? <CheckCircle2 className="w-6 h-6" /> : (index + 1)}
+                      </div>
+                      <div className="flex-grow space-y-1">
+                        <h4 className={cn(
+                          "text-lg font-bold transition-all",
+                          item.completed ? "text-slate-400 line-through" : "text-slate-900"
+                        )}>
+                          {item.task}
+                        </h4>
+                        <div className={cn(
+                          "flex items-center gap-2 text-xs font-bold px-2.5 py-1 rounded-lg w-fit transition-colors border",
+                          item.completed ? "bg-slate-100 text-slate-400 border-transparent" : "bg-emerald-50 text-emerald-600 border-emerald-100"
+                        )}>
+                          <TrendingUp className="w-3.5 h-3.5" />
+                          Impacto: {item.impact}
+                        </div>
+                      </div>
+                      
+                      {/* Right Checkbox - Only for owners */}
+                      {!isGuest && (
+                        <div className={cn(
+                          "w-10 h-10 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all",
+                          item.completed 
+                            ? "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]" 
+                            : "border-slate-200 bg-white group-hover:border-emerald-500"
+                        )}>
+                          <CheckCircle2 className={cn(
+                            "w-5 h-5 transition-all text-white",
+                            item.completed ? "scale-100 opacity-100" : "scale-75 opacity-0 group-hover:opacity-20 group-hover:scale-95"
+                          )} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+
+            {/* Sidebar */}
+            <div className="lg:col-span-4 flex flex-col gap-y-8 sticky top-24">
+              
+              {/* AI Insights Group */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 px-2 text-[10px] font-black uppercase text-primary">
+                  <Sparkles className="w-4 h-4 fill-primary" /> AI Intelligence
+                </div>
+                {content.aiInsights?.map((item: any, index: number) => {
+                  const insightText = typeof item === 'string' ? item : item?.insight || JSON.stringify(item)
+                  return (
+                    <div key={index} className="p-8 bg-white border border-primary/10 rounded-2xl relative overflow-hidden group hover:shadow-md transition-all flex flex-col gap-y-3">
+                      <Zap className="absolute -top-4 -right-4 w-16 h-16 text-primary opacity-[0.03]" />
+                      <p className="relative z-10 text-slate-700 italic font-medium leading-relaxed">
+                        "{insightText}"
+                      </p>
+                      {typeof item === 'object' && item?.impact && (
+                         <span className="text-[10px] font-bold text-amber-500 uppercase flex items-center gap-1">
+                           <TrendingUp className="w-3 h-3" /> Impacto: {item.impact}
+                         </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* AI Refinement Box - Hidden for Guests */}
+              {!isGuest && (
+                <div className="p-6 bg-primary/5 border border-primary/20 rounded-2xl space-y-4 shadow-sm animate-in fade-in slide-in-from-right-4 transition-all duration-500">
+                  <div className="flex items-center gap-2 text-[10px] font-black text-primary uppercase tracking-widest">
+                    <Zap className="w-4 h-4 fill-primary" /> Ajustar com IA
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium whitespace-nowrap overflow-hidden text-ellipsis">Descreva o que deseja mudar ou adicionar ao plano.</p>
+                  <div className="relative">
+                    <textarea 
+                      value={refinePrompt}
+                      onChange={(e) => setRefinePrompt(e.target.value)}
+                      placeholder="Ex: 'Focar mais em Instagram', 'Incluir custos'..."
+                      className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-xs focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all resize-none h-32 font-semibold text-slate-700 placeholder:text-slate-400"
+                    />
+                    <Button 
+                      onClick={handleRefine}
+                      disabled={!refinePrompt.trim() || refining}
+                      className="absolute bottom-3 right-3 rounded-xl shadow-lg shadow-primary/20 h-10 w-10 bg-primary hover:bg-blue-700 flex items-center justify-center p-0"
+                    >
+                      {refining ? <Loader2 size={18} className="animate-spin text-white" /> : <Send size={16} className="text-white" />}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Meta Card */}
+              <div className="p-8 bg-slate-900 rounded-2xl border border-slate-800 space-y-6">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[10px] font-black uppercase text-slate-500">Relatório Técnico</span>
+                </div>
+                <div className="space-y-4 text-xs font-bold uppercase">
+                  <div className="flex justify-between border-b border-white/5 pb-4">
+                    <span className="text-slate-600">Modelo</span>
+                    <span className="text-white font-mono lowercase tracking-normal">{strategy.ai_model}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-white/5 pb-4">
+                    <span className="text-slate-600">Criado em</span>
+                    <span className="text-white">{new Date(strategy.created_at).toLocaleDateString('pt-BR')}</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </PageContainer>
+    </DashboardLayout>
+  )
+}
