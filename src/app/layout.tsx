@@ -14,9 +14,15 @@ export const metadata: Metadata = {
   title: { default: 'iaNow — The Power of Execution', template: '%s | iaNow' },
   description: 'Plataforma SaaS de inteligência artificial para acelerar sua empresa: estratégia, jurídico e financeiro em um só lugar.',
   keywords: ['SaaS', 'inteligência artificial', 'gestão empresarial', 'estratégia', 'PME'],
+  icons: {
+    icon: '/favicon.webp',
+    shortcut: '/favicon.webp',
+    apple: '/favicon.webp',
+  },
   openGraph: {
     title: 'iaNow — The Power of Execution',
     description: 'Plataforma SaaS de IA para PMEs brasileiras.',
+    images: ['/logo.webp'],
     locale: 'pt_BR',
     type: 'website',
   },

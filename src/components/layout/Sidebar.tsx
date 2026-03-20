@@ -31,11 +31,12 @@ export function Sidebar() {
   return (
     <aside className="flex flex-col w-[240px] shrink-0 bg-slate-950 py-6 h-screen border-r border-white/5">
       {/* Logo */}
-      <div className="px-5 mb-8 flex items-center gap-[10px]">
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white font-extrabold text-sm shadow-[0_0_15px_rgba(37,99,235,0.4)]">
-          iN
-        </div>
-        <span className="text-white font-bold text-lg font-montserrat tracking-tight">iaNow</span>
+      <div className="px-6 mb-8 flex items-center">
+        <img 
+          src="/logo.webp" 
+          alt="iaNow" 
+          className="h-10 w-auto object-contain brightness-0 invert opacity-90 hover:opacity-100 transition-opacity" 
+        />
       </div>
 
       {/* Nav */}

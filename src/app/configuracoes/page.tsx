@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, Suspense } from 'react'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { Card } from '@/components/shared/Card'
@@ -38,7 +38,7 @@ import { Loader2 } from 'lucide-react'
 
 import { upgradeToProAction } from '@/app/actions/asaas-actions'
 
-export default function ConfiguraçõesPage() {
+function ConfiguraçõesPageContent() {
   const searchParams = useSearchParams()
   const { session } = useAuth()
   const supabase = createClient()
@@ -537,6 +537,18 @@ export default function ConfiguraçõesPage() {
         </div>
       </PageContainer>
     </div>
-  </DashboardLayout>
-)
+      </DashboardLayout>
+    )
+}
+
+export default function ConfiguraçõesPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen w-full items-center justify-center bg-slate-50">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
+      <ConfiguraçõesPageContent />
+    </Suspense>
+  )
 }

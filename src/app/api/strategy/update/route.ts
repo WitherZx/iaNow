@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing data' }, { status: 400 })
     }
 
-    const adminClient = createAdminClient()
+    const adminClient: any = createAdminClient()
     const { data, error } = await adminClient
       .from('strategies')
       .update({ content: content } as any)
