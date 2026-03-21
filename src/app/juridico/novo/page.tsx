@@ -96,19 +96,26 @@ export default function NewDocumentPage() {
             </p>
           </div>
 
-          <Card className="min-h-[400px] p-8 md:p-12 border-slate-100 shadow-xl shadow-slate-200/40 relative overflow-visible">
+          <Card className="min-h-[400px] p-5 md:p-12 border-slate-100 shadow-xl shadow-slate-200/40 relative overflow-visible">
             
             {/* STEP PROGRESS INSTRUCTION */}
-            <div className="absolute top-0 right-0 p-8">
+            <div className="hidden md:block absolute top-0 right-0 p-8">
                <StepBadge current={step} total={3} />
             </div>
 
             {/* STEP 1: CONTEXTO GERAL */}
             {step === 1 && (
               <div className="flex flex-col gap-y-10 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="mb-2 border-b border-slate-100 pb-4">
-                  <h3 className="text-2xl font-black text-slate-800 tracking-tight">1. Contexto do Contrato</h3>
-                  <p className="text-slate-500 text-sm mt-1 font-medium">Defina os parâmetros centrais e o escopo fundamental da negociação.</p>
+                <div className="mb-2 border-b border-slate-100 pb-6 flex flex-col gap-y-4">
+                  <div className="md:hidden">
+                    <StepBadge current={step} total={3} />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">
+                      1. Contexto do <span className="text-primary">Contrato</span>
+                    </h3>
+                    <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Defina os parâmetros centrais e o escopo fundamental da negociação.</p>
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -187,7 +194,7 @@ export default function NewDocumentPage() {
                 <div className="flex justify-end mt-4 pt-10 border-t border-slate-100">
                   <Button 
                     size="lg" disabled={!isStep1Valid} onClick={() => setStep(2)}
-                    className="bg-primary hover:bg-blue-700 font-black px-12 h-14 rounded-xl text-white shadow-[0_15px_30px_-10px_rgba(37,99,235,0.4)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-base"
+                    className="w-full md:w-auto bg-primary hover:bg-blue-700 font-black px-12 h-14 rounded-xl text-white shadow-[0_15px_30px_-10px_rgba(37,99,235,0.4)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-base"
                   >
                     Próxima Etapa <ArrowRight className="ml-3 w-5 h-5" />
                   </Button>
@@ -198,12 +205,19 @@ export default function NewDocumentPage() {
             {/* STEP 2: DADOS DAS PARTES */}
             {step === 2 && (
               <div className="flex flex-col gap-y-10 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="mb-2 border-b border-slate-100 pb-4">
-                  <h3 className="text-2xl font-black text-slate-800 tracking-tight">2. Qualificação das Partes</h3>
-                  <p className="text-slate-500 text-sm mt-1 font-medium">Identifique quem compõe o polo ativo e passivo deste documento.</p>
+                <div className="mb-2 border-b border-slate-100 pb-6 flex flex-col gap-y-4">
+                  <div className="md:hidden">
+                    <StepBadge current={step} total={3} />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">
+                      2. <span className="text-primary">Qualificação</span> das Partes
+                    </h3>
+                    <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Identifique quem compõe o polo ativo e passivo deste documento.</p>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 p-8 md:p-10 bg-slate-100 rounded-[40px] border-2 border-slate-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-12 p-4 md:p-10 bg-slate-100 rounded-[24px] md:rounded-[40px] border-2 border-slate-200">
                   
                   {/* Parte A */}
                   <div className="flex flex-col gap-y-6">
@@ -214,7 +228,7 @@ export default function NewDocumentPage() {
                       </h4>
                     </div>
                     
-                    <div className="space-y-6 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm">
+                    <div className="space-y-4 md:space-y-6 bg-white p-4 md:p-6 rounded-[20px] md:rounded-[32px] border border-slate-200 shadow-sm">
                       <div className="space-y-2.5">
                         <Label>Papel na Relação</Label>
                         <input 
@@ -256,7 +270,7 @@ export default function NewDocumentPage() {
                       </h4>
                     </div>
 
-                    <div className="space-y-6 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm">
+                    <div className="space-y-4 md:space-y-6 bg-white p-4 md:p-6 rounded-[20px] md:rounded-[32px] border border-slate-200 shadow-sm">
                       <div className="space-y-2.5">
                         <Label>Papel na Relação</Label>
                         <input 
@@ -290,13 +304,13 @@ export default function NewDocumentPage() {
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center mt-4 pt-10 border-t border-slate-100">
-                  <Button variant="ghost" onClick={() => setStep(1)} className="font-bold text-slate-400 hover:text-slate-900 h-14 px-6">
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4 mt-4 pt-10 border-t border-slate-100">
+                  <Button variant="ghost" onClick={() => setStep(1)} className="w-full md:w-auto font-bold text-slate-400 hover:text-slate-900 h-14 px-6 order-2 md:order-1">
                     <ArrowRight className="mr-2 w-5 h-5 rotate-180" /> Voltar
                   </Button>
                   <Button 
                     size="lg" onClick={() => setStep(3)} disabled={!partyA.name.trim() || !partyB.name.trim()}
-                    className="bg-primary hover:bg-blue-700 font-black px-12 h-14 rounded-xl text-white shadow-[0_15px_30px_-10px_rgba(37,99,235,0.4)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-base group"
+                    className="w-full md:w-auto bg-primary hover:bg-blue-700 font-black px-12 h-14 rounded-xl text-white shadow-[0_15px_30px_-10px_rgba(37,99,235,0.4)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-base group order-1 md:order-2"
                   >
                     Cláusulas Específicas <ArrowRight className="ml-3 w-5 h-5" />
                   </Button>
@@ -307,9 +321,16 @@ export default function NewDocumentPage() {
             {/* STEP 3: PARÂMETROS ADICIONAIS E GERAÇÃO */}
             {step === 3 && !isSubmitting && (
               <div className="flex flex-col gap-y-10 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="mb-2 border-b border-slate-100 pb-4">
-                  <h3 className="text-2xl font-black text-slate-800 tracking-tight">3. Parâmetros Adicionais</h3>
-                  <p className="text-slate-500 text-sm mt-1 font-medium">Insira cláusulas específicas de proteção, multas ou exceções particulares.</p>
+                <div className="mb-2 border-b border-slate-100 pb-6 flex flex-col gap-y-4">
+                  <div className="md:hidden">
+                    <StepBadge current={step} total={3} />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">
+                      3. Parâmetros <span className="text-primary">Adicionais</span>
+                    </h3>
+                    <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Insira cláusulas específicas de proteção, multas ou exceções particulares.</p>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-y-4">
@@ -323,18 +344,18 @@ export default function NewDocumentPage() {
                   />
                 </div>
 
-                <div className="flex justify-between items-center mt-6 pt-10 border-t border-slate-100">
-                  <Button variant="ghost" onClick={() => setStep(2)} className="font-bold text-slate-400 hover:text-slate-900 h-16 px-6">
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4 mt-6 pt-10 border-t border-slate-100">
+                  <Button variant="ghost" onClick={() => setStep(2)} className="w-full md:w-auto font-bold text-slate-400 hover:text-slate-900 h-14 px-6 order-2 md:order-1">
                     <ArrowRight className="mr-2 w-5 h-5 rotate-180" /> Partes
                   </Button>
                   <Button 
                     size="lg" 
                     disabled={isSubmitting} 
                     onClick={handleGenerate}
-                    className="bg-primary hover:bg-blue-700 font-black px-12 h-16 rounded-2xl text-white shadow-[0_20px_40px_-15px_rgba(37,99,235,0.5)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-xl group overflow-hidden relative"
+                    className="w-full md:w-auto bg-primary hover:bg-blue-700 font-black px-12 h-14 rounded-xl text-white shadow-[0_15px_30px_-10px_rgba(37,99,235,0.4)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-base group overflow-hidden relative order-1 md:order-2"
                   >
                     <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 pointer-events-none" />
-                    <Sparkles className="mr-3 w-6 h-6 group-hover:animate-pulse text-blue-200" />
+                    <Sparkles className="mr-3 w-5 h-5 group-hover:animate-pulse text-blue-200" />
                     Gerar Blindagem Jurídica
                   </Button>
                 </div>

@@ -21,7 +21,7 @@ const ORBIT_MODULES = [
 
 export function ExecutionShield({ className, onClick }: ExecutionShieldProps) {
   return (
-    <div className={cn("relative flex items-center justify-center p-12", className)} onClick={onClick}>
+    <div className={cn("relative flex items-center justify-center p-4 sm:p-8 md:p-12 max-w-full overflow-hidden", className)} onClick={onClick}>
       {/* Background Aura */}
       <div className="absolute w-[400px] h-[400px] bg-primary/5 rounded-full blur-[100px] opacity-50" />
       

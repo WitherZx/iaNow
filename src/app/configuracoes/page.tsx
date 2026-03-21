@@ -169,50 +169,51 @@ function ConfiguraçõesPageContent() {
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-[#f8fafc] -m-8 p-8">
         <PageContainer>
           <div className="flex flex-col gap-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
             
             <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8">
               {/* SIDEBAR TABS */}
               <aside className="p-4 bg-white/50 backdrop-blur-sm rounded-[40px] border border-slate-200/60 h-fit space-y-2 shadow-sm">
-                <div className="px-6 py-4 border-b border-slate-100 mb-2">
-                  <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">Configurações</h2>
+                <div className="px-5 py-3 border-b border-slate-100 mb-2">
+                  <h2 className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest leading-none">Configurações</h2>
                 </div>
-                {tabs.map(tab => {
-                  const Icon = tab.icon
-                  const active = activeTab === tab.id
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={cn(
-                        "w-full flex items-center gap-4 px-6 py-4 rounded-3xl transition-all duration-300 group",
-                        active 
-                          ? "bg-primary text-white shadow-lg shadow-primary/20 scale-[1.02]" 
-                          : "text-slate-500 hover:bg-white hover:text-primary hover:shadow-sm"
-                      )}
-                    >
-                      <Icon size={20} className={cn(active ? "text-white" : "text-slate-400 group-hover:text-primary")} />
-                      <span className="font-bold text-sm">{tab.label}</span>
-                    </button>
-                  )
-                })}
+                <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-2">
+                  {tabs.map(tab => {
+                    const Icon = tab.icon
+                    const active = activeTab === tab.id
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-4 md:px-6 py-3 md:py-4 rounded-2xl md:rounded-3xl transition-all duration-300 group",
+                          active 
+                            ? "bg-primary text-white shadow-lg shadow-primary/20 scale-[1.02]" 
+                            : "text-slate-500 hover:bg-white hover:text-primary hover:shadow-sm"
+                        )}
+                      >
+                        <Icon size={18} className={cn(active ? "text-white" : "text-slate-400 group-hover:text-primary")} />
+                        <span className="font-bold text-[11px] md:text-sm">{tab.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
 
-              <div className="mt-8 p-6 rounded-3xl bg-white border border-slate-100 space-y-4 shadow-xl">
+              <div className="mt-4 md:mt-8 p-4 md:p-6 rounded-2xl md:rounded-3xl bg-white border border-slate-100 space-y-4 shadow-xl">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                    <CreditCard size={20} />
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <CreditCard size={18} className="md:size-5" />
                   </div>
                   <div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Plano Atual</p>
-                    <p className="text-sm font-bold text-slate-900">{org?.plan_id ? 'Enterprise' : 'Free Explorer'}</p>
+                    <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest">Plano Atual</p>
+                    <p className="text-[11px] md:text-sm font-bold text-slate-900">{org?.plan_id ? 'Enterprise' : 'Free Explorer'}</p>
                   </div>
                 </div>
                 <Button 
                   variant="outline" 
                   onClick={() => setActiveTab('assinaturas')}
-                  className="w-full text-[10px] font-black uppercase tracking-widest h-10 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-100 transition-all"
+                  className="w-full text-[9px] md:text-[10px] font-black uppercase tracking-widest h-10 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-100 transition-all"
                 >
                   Gerenciar Assinatura
                 </Button>
@@ -223,27 +224,27 @@ function ConfiguraçõesPageContent() {
             <main className="flex flex-col gap-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
               {activeTab === 'perfil' && (
                 <div className="space-y-8">
-                  <div className="flex items-center gap-8">
+                  <div className="flex flex-col md:flex-row items-center gap-6 md:gap-8 text-center md:text-left">
                     <div className="relative group">
-                      <div className="w-32 h-32 rounded-[40px] bg-slate-100 border-4 border-white shadow-lg flex items-center justify-center overflow-hidden">
+                      <div className="w-24 h-24 md:w-32 md:h-32 rounded-[32px] md:rounded-[40px] bg-slate-100 border-4 border-white shadow-lg flex items-center justify-center overflow-hidden">
                         {profile.avatar_url ? (
                           <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
                         ) : (
-                          <User size={64} className="text-slate-300" />
+                          <User size={48} className="text-slate-300 md:size-16" />
                         )}
                       </div>
-                      <button className="absolute bottom-1 right-1 w-10 h-10 rounded-2xl bg-primary text-white border-4 border-white shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all">
-                        <Camera size={18} />
+                      <button className="absolute -bottom-1 -right-1 md:bottom-1 md:right-1 w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl bg-primary text-white border-2 md:border-4 border-white shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all">
+                        <Camera size={14} className="md:size-4.5" />
                       </button>
                     </div>
                     <div className="space-y-1">
-                      <h2 className="text-2xl font-black text-slate-900 tracking-tight">{profile.nome}</h2>
-                      <p className="text-slate-500 font-medium">{profile.email}</p>
-                      <span className="inline-flex px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase tracking-widest rounded-full border border-emerald-100 mt-2">{profile.cargo}</span>
+                      <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">{profile.nome}</h2>
+                      <p className="text-sm md:text-base text-slate-500 font-medium">{profile.email}</p>
+                      <span className="inline-flex px-3 py-1 bg-emerald-50 text-emerald-600 text-[9px] md:text-[10px] font-black uppercase tracking-widest rounded-full border border-emerald-100 mt-2">{profile.cargo}</span>
                     </div>
                   </div>
 
-                  <Card className="bg-white border-slate-100 shadow-sm p-8">
+                  <Card className="bg-white border-slate-100 shadow-sm p-5 md:p-8">
                     <form onSubmit={handleSaveProfile} className="space-y-8">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-3">
@@ -285,8 +286,8 @@ function ConfiguraçõesPageContent() {
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-slate-50 flex justify-end">
-                        <Button type="submit" isLoading={saving} className="h-14 px-12 rounded-2xl bg-primary text-white font-bold shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all">
+                      <div className="pt-4 border-t border-slate-50 flex justify-center md:justify-end">
+                        <Button type="submit" isLoading={saving} className="w-full md:w-auto h-12 md:h-14 px-12 rounded-2xl bg-primary text-white font-bold shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all">
                           {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Salvar Alterações
                         </Button>
                       </div>
@@ -298,21 +299,21 @@ function ConfiguraçõesPageContent() {
               {activeTab === 'notificacoes' && (
                 <div className="space-y-6">
                   <SectionTitle title="Notificações" subtitle="Controle como você recebe alertas e atualizações" />
-                  <Card className="bg-white border-slate-100 shadow-sm p-4 divide-y divide-slate-50">
+                  <Card className="bg-white border-slate-100 shadow-sm p-3 md:p-4 divide-y divide-slate-50">
                     {[
-                      { title: 'Alertas de Compliance', desc: 'Receba avisos quando um documento perder conformidade.', icon: ShieldCheck },
-                      { title: 'Relatórios Mensais', desc: 'Envio automático do consolidado de performance no fim do mês.', icon: Bell },
-                      { title: 'Novo Diagnóstico IA', desc: 'Seja notificado quando um novo plano estratégico estiver pronto.', icon: Zap },
-                      { title: 'Acessos de Segurança', desc: 'Alertas de logins novos ou de dispositivos desconhecidos.', icon: Mail },
+                      { title: 'Alertas de Compliance', desc: 'Conformidade de documentos.', icon: ShieldCheck },
+                      { title: 'Relatórios Mensais', desc: 'Consolidado de performance mensal.', icon: Bell },
+                      { title: 'Novo Diagnóstico IA', desc: 'Notificações de planos prontos.', icon: Zap },
+                      { title: 'Acessos de Segurança', desc: 'Alertas de logins novos.', icon: Mail },
                     ].map((item, i) => (
-                      <div key={i} className="flex items-center justify-between py-6 px-4 hover:bg-slate-50/50 transition-all rounded-2xl first:rounded-b-none last:rounded-t-none">
-                        <div className="flex items-center gap-5">
-                          <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
-                            <item.icon size={20} />
+                      <div key={i} className="flex items-center justify-between py-4 md:py-6 px-3 md:px-4 hover:bg-slate-50/50 transition-all rounded-2xl first:rounded-b-none last:rounded-t-none">
+                        <div className="flex items-center gap-3 md:gap-5">
+                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 shrink-0">
+                            <item.icon size={18} className="md:size-5" />
                           </div>
-                          <div className="space-y-1">
-                            <p className="font-bold text-slate-900">{item.title}</p>
-                            <p className="text-xs text-slate-500 font-medium">{item.desc}</p>
+                          <div className="space-y-0.5">
+                            <p className="text-[13px] md:text-base font-bold text-slate-900">{item.title}</p>
+                            <p className="text-[10px] md:text-xs text-slate-500 font-medium">{item.desc}</p>
                           </div>
                         </div>
                         <div className="relative inline-flex items-center cursor-pointer">
@@ -331,15 +332,15 @@ function ConfiguraçõesPageContent() {
                   <SectionTitle title="Dados da Organização" subtitle="Configurações corporativas da sua empresa" />
                   
                   {org ? (
-                    <Card className="bg-white border-slate-100 shadow-sm p-8 space-y-8">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <Card className="bg-white border-slate-100 shadow-sm p-5 md:p-8 space-y-8">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                         <div className="space-y-3">
                           <Label>Nome da Organização</Label>
                           <input 
                             type="text" 
                             value={org.name || ''}
                             onChange={e => setOrg({...org, name: e.target.value})}
-                            className="w-full h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm" 
+                            className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm" 
                           />
                         </div>
                         <div className="space-y-3">
@@ -349,7 +350,7 @@ function ConfiguraçõesPageContent() {
                             value={org.document || ''}
                             onChange={e => setOrg({...org, document: e.target.value})}
                             placeholder="00.000.000/0001-00"
-                            className="w-full h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm" 
+                            className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm" 
                           />
                         </div>
                         <div className="space-y-3 col-span-full">
@@ -359,12 +360,12 @@ function ConfiguraçõesPageContent() {
                             value={org.address || ''}
                             onChange={e => setOrg({...org, address: e.target.value})}
                             placeholder="Rua, Número, Bairro, Cidade - UF"
-                            className="w-full h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm" 
+                            className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm" 
                           />
                         </div>
                       </div>
-                      <div className="pt-4 border-t border-slate-50 flex justify-end">
-                        <Button className="h-14 px-12 rounded-2xl bg-primary text-white font-bold shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all">
+                      <div className="pt-4 border-t border-slate-50 flex justify-center md:justify-end">
+                        <Button className="w-full md:w-auto h-12 md:h-14 px-12 rounded-2xl bg-primary text-white font-bold shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all">
                           Salvar Dados da Org
                         </Button>
                       </div>
@@ -381,31 +382,31 @@ function ConfiguraçõesPageContent() {
               {activeTab === 'assinaturas' && (
                 <div className="space-y-12">
                   {/* CURRENT PLAN HEADER */}
-                  <div className="flex flex-col md:flex-row items-center justify-between p-8 bg-slate-900 rounded-[40px] text-white relative overflow-hidden shadow-2xl">
+                  <div className="flex flex-col lg:flex-row items-center justify-between p-6 md:p-8 bg-slate-900 rounded-[32px] md:rounded-[40px] text-white relative overflow-hidden shadow-2xl gap-8">
                     <div className="absolute top-0 right-0 w-[400px] h-full bg-primary/20 blur-[100px] pointer-events-none" />
-                    <div className="relative z-10 flex items-center gap-6">
-                      <div className="w-16 h-16 rounded-3xl bg-primary/20 backdrop-blur-xl border border-white/10 flex items-center justify-center text-primary">
-                        <Zap size={32} className="fill-primary animate-pulse" />
+                    <div className="relative z-10 flex flex-col md:flex-row items-center gap-4 md:gap-6 text-center md:text-left">
+                      <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl md:rounded-3xl bg-primary/20 backdrop-blur-xl border border-white/10 flex items-center justify-center text-primary">
+                        <Zap size={28} className="fill-primary animate-pulse md:size-8" />
                       </div>
                       <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Seu Plano Atual</p>
-                        <h3 className="text-3xl font-black font-montserrat tracking-tight">
+                        <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Seu Plano Atual</p>
+                        <h3 className="text-xl md:text-3xl font-black font-montserrat tracking-tight">
                           {org?.plan_id ? 'Enterprise Evolution' : 'iaNow Free Explorer'}
                         </h3>
-                        <div className="flex items-center gap-3 mt-1">
-                          <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-bold">
-                            <CheckCircle2 size={14} /> Ativo e Seguro
+                        <div className="flex items-center justify-center md:justify-start gap-3 mt-1">
+                          <span className="flex items-center gap-1.5 text-[10px] md:text-xs text-emerald-400 font-bold">
+                            <CheckCircle2 size={12} className="md:size-[14px]" /> Ativo e Seguro
                           </span>
                           {!org?.plan_id && (
-                            <span className="text-xs text-slate-500 font-medium">• 14 dias restantes no teste</span>
+                            <span className="text-[10px] md:text-xs text-slate-500 font-medium">• 14 d restantes</span>
                           )}
                         </div>
                       </div>
                     </div>
-                    <div className="relative z-10 mt-8 md:mt-0">
-                       <div className="text-right">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Próxima Fatura</p>
-                          <p className="font-bold">{org?.plan_id ? 'R$ 49,90 em 15/04' : 'Upgrade Necessário'}</p>
+                    <div className="relative z-10 w-full lg:w-auto border-t lg:border-t-0 border-white/10 pt-6 lg:pt-0">
+                       <div className="text-center lg:text-right">
+                          <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Próxima Fatura</p>
+                          <p className="font-bold text-sm md:text-base">{org?.plan_id ? 'R$ 49,90 em 15/04' : 'Upgrade Necessário'}</p>
                        </div>
                     </div>
                   </div>
@@ -413,24 +414,23 @@ function ConfiguraçõesPageContent() {
                   {/* SUBSCRIPTION DASHBOARD GRID */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
                     {/* FREE */}
-                    <div className="p-8 bg-white border border-slate-100 rounded-[40px] flex flex-col items-center text-center space-y-6 hover:shadow-xl transition-all border-b-4 border-b-slate-100 min-h-[520px]">
-                      <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
-                        <User size={24} />
+                    <div className="p-6 md:p-8 bg-white border border-slate-100 rounded-[32px] md:rounded-[40px] flex flex-col items-center text-center space-y-6 hover:shadow-xl transition-all border-b-4 border-b-slate-100 min-h-0 lg:min-h-[520px]">
+                      <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
+                        <User size={20} className="md:size-6" />
                       </div>
                       <div className="space-y-2">
-                        <h4 className="text-xl font-black text-slate-900">Free</h4>
-                        <p className="text-xs text-slate-400 font-medium px-4">Ideal para testar o potencial de execução total da iaNow.</p>
+                        <h4 className="text-lg md:text-xl font-black text-slate-900">Free</h4>
+                        <p className="text-[11px] md:text-xs text-slate-400 font-medium px-4">Ideal para testar o potencial de execução total da iaNow.</p>
                       </div>
-                      <div className="text-3xl font-black text-slate-900">R$ 0<span className="text-sm text-slate-400 font-bold tracking-tight">/mês</span></div>
+                      <div className="text-2xl md:text-3xl font-black text-slate-900">R$ 0<span className="text-sm text-slate-400 font-bold tracking-tight">/mês</span></div>
                       <ul className="w-full text-left space-y-3 pt-4 border-t border-slate-50 flex-1">
                         {[
                           '1 Geração de Estratégia', 
                           '1 Geração Jurídica (Contrato)', 
                           '1 Protocolo Jus Postulandi',
-                          'Visualização completa'
                         ].map(f => (
-                          <li key={f} className="flex items-center gap-2 text-[11px] font-bold text-slate-600">
-                            <Check className="text-emerald-500" size={14} /> {f}
+                          <li key={f} className="flex items-center gap-2 text-[10px] md:text-[11px] font-bold text-slate-600">
+                            <Check className="text-emerald-500 md:size-[14px]" size={12} /> {f}
                           </li>
                         ))}
                       </ul>
@@ -438,29 +438,29 @@ function ConfiguraçõesPageContent() {
                     </div>
 
                     {/* PRO */}
-                    <div className="bg-white border border-primary/20 rounded-[40px] flex flex-col items-center text-center hover:shadow-2xl transition-all border-b-4 border-b-primary shadow-xl shadow-primary/5 relative overflow-hidden group min-h-[520px]">
-                      <div className="w-full bg-primary py-2.5 text-center">
-                        <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Acesso Total</span>
+                    <div className="bg-white border border-primary/20 rounded-[32px] md:rounded-[40px] flex flex-col items-center text-center hover:shadow-2xl transition-all border-b-4 border-b-primary shadow-xl shadow-primary/5 relative overflow-hidden group min-h-0 lg:min-h-[520px]">
+                      <div className="w-full bg-primary py-2 text-center">
+                        <span className="text-[9px] md:text-[10px] font-black text-white uppercase tracking-[0.2em]">Acesso Total</span>
                       </div>
                       
-                      <div className="p-8 flex flex-col items-center text-center space-y-6 flex-1 w-full">
-                        <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner">
-                          <Zap size={24} className="fill-primary" />
+                      <div className="p-6 md:p-8 flex flex-col items-center text-center space-y-6 flex-1 w-full">
+                        <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner">
+                          <Zap size={20} className="fill-primary md:size-6" />
                         </div>
                         <div className="space-y-2">
-                          <h4 className="text-xl font-black text-slate-900">Plano Pro</h4>
-                          <p className="text-xs text-slate-400 font-medium px-4">Acesso total ilimitado aos 3 módulos principais do ERP iaNow.</p>
+                          <h4 className="text-lg md:text-xl font-black text-slate-900">Plano Pro</h4>
+                          <p className="text-[11px] md:text-xs text-slate-400 font-medium px-4">Acesso total ilimitado aos 3 módulos principais do ERP iaNow.</p>
                         </div>
-                        <div className="text-3xl font-black text-slate-900">R$ 49,90<span className="text-sm text-slate-400 font-bold tracking-tight">/mês</span></div>
+                        <div className="text-2xl md:text-3xl font-black text-slate-900">R$ 49,90<span className="text-sm text-slate-400 font-bold tracking-tight">/mês</span></div>
                         <ul className="w-full text-left space-y-3 pt-4 border-t border-slate-50 flex-1">
                           {[
                             'Estratégia Ilimitada', 
-                            'Jurídico (Contratos) Ilimitado', 
-                            'Jus Postulandi Express Ilimitado', 
-                            'Suporte Prioritário 24h'
+                            'Jurídico Ilimitado', 
+                            'Jus Postulandi Ilimitado', 
+                            'Suporte Prioritário'
                           ].map(f => (
-                            <li key={f} className="flex items-center gap-2 text-[11px] font-bold text-slate-900">
-                              <Check className="text-primary" size={14} /> {f}
+                            <li key={f} className="flex items-center gap-2 text-[10px] md:text-[11px] font-bold text-slate-900">
+                              <Check className="text-primary md:size-[14px]" size={12} /> {f}
                             </li>
                           ))}
                         </ul>
@@ -469,10 +469,10 @@ function ConfiguraçõesPageContent() {
                     </div>
 
                     {/* INVOICES COLUMN */}
-                    <div className="p-8 bg-white border border-slate-100 rounded-[40px] flex flex-col space-y-6 hover:shadow-xl transition-all border-b-4 border-b-slate-100 min-h-[520px]">
+                    <div className="p-6 md:p-8 bg-white border border-slate-100 rounded-[32px] md:rounded-[40px] flex flex-col space-y-6 hover:shadow-xl transition-all border-b-4 border-b-slate-100 min-h-0 lg:min-h-[520px]">
                       <div className="flex items-center">
                         <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                           <CreditCard size={14} /> Faturas Recentes
+                           <CreditCard size={14} /> Faturamentos
                         </h4>
                       </div>
                       
@@ -509,13 +509,13 @@ function ConfiguraçõesPageContent() {
                       </div>
                         
                       {/* HELPER CARD */}
-                      <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 flex items-start gap-4 mt-auto">
+                      <div className="p-4 md:p-6 bg-slate-50 rounded-2xl md:rounded-[32px] border border-slate-100 flex items-start gap-4 mt-auto">
                         <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center text-slate-400 flex-shrink-0">
                           <ShieldCheck size={16} />
                         </div>
                         <div className="space-y-1">
-                          <p className="text-[11px] font-black text-slate-900 uppercase leading-none">Pagamento Seguro</p>
-                          <p className="text-[9px] text-slate-500 leading-relaxed">Protegido por criptografia de ponta e processado pelo Asaas.</p>
+                          <p className="text-[10px] md:text-[11px] font-black text-slate-900 uppercase leading-none">Checkout Seguro</p>
+                          <p className="text-[9px] text-slate-500 leading-relaxed">Blindagem por criptografia Asaas.</p>
                         </div>
                       </div>
                     </div>
@@ -536,8 +536,7 @@ function ConfiguraçõesPageContent() {
           </div>
         </div>
       </PageContainer>
-    </div>
-      </DashboardLayout>
+    </DashboardLayout>
     )
 }
 

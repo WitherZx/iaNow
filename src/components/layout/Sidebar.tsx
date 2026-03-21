@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, Lightbulb, Scale, LineChart,
-  FileText, Users, LogOut, Gavel, PlayCircle, Share2
+  FileText, Users, LogOut, Gavel, PlayCircle, Share2, X
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { supabase } from '@/lib/supabase/client'
@@ -19,17 +19,34 @@ const NAV_ITEMS = [
   { href: '/parceiros',        label: 'Partner Hub',   icon: PlayCircle },
 ] as const
 
-export function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean
+  onClose?: () => void
+}
+
+export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
+    onClose?.()
   }
 
   return (
-    <aside className="flex flex-col w-[240px] shrink-0 bg-slate-950 py-6 h-screen border-r border-white/5">
+    <aside className={cn(
+      "fixed inset-y-0 left-0 z-50 flex flex-col w-[280px] bg-slate-950 py-6 h-screen border-r border-white/5 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0",
+      isOpen ? "translate-x-0" : "-translate-x-full"
+    )}>
+      {/* Mobile Close Button */}
+      <button 
+        onClick={onClose}
+        className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white lg:hidden"
+      >
+        <X size={24} />
+      </button>
+
       {/* Logo */}
       <div className="px-6 mb-8 flex items-center">
         <img 
@@ -47,6 +64,7 @@ export function Sidebar() {
             <Link 
               key={href} 
               href={href} 
+              onClick={onClose}
               className={cn(
                 "flex items-center gap-x-3 px-3 py-[10px] rounded-lg text-sm transition-all duration-150 font-montserrat",
                 isActive 

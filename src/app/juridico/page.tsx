@@ -9,7 +9,8 @@ import { MetricCard } from '@/components/shared/MetricCard'
 import { SectionTitle } from '@/components/shared/SectionTitle'
 import { Card } from '@/components/shared/Card'
 import { StatusBadge } from '@/components/shared/StatusBadge'
-import { FileText, Plus, ShieldAlert, Scale, FileSignature, Loader2, Search, ArrowRight, ChevronRight, Calendar, Clock, PlusCircle } from 'lucide-react'
+import { FileText, ShieldAlert, Scale, FileSignature, Loader2, Search, Clock, PlusCircle, Sparkles } from 'lucide-react'
+import { DocumentCard } from '@/components/shared/DocumentCard'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/utils/cn'
@@ -108,7 +109,7 @@ export default function JuridicoPage() {
         title="Central Jurídica"
         subtitle="Geração de contratos inteligentes, procurações automáticas e blindagem legal."
         action={
-          <Link href="/juridico/novo">
+          <Link href="/juridico/novo" className="w-full lg:w-auto">
             <CTAButton icon={PlusCircle}>
                Novo Documento
             </CTAButton>
@@ -174,87 +175,39 @@ export default function JuridicoPage() {
               {documents.length > 0 ? (
                 documents.map((doc) => {
                   const isGenerating = doc.status === 'generating'
+                  const isReady = doc.status === 'ready'
                   
                   return (
-                    <Card key={doc.id} className={cn("transition-all border-slate-200 p-0 overflow-hidden group", isGenerating ? "opacity-90 bg-slate-50/50" : "hover:shadow-lg")}>
-                      <div className="flex flex-col md:flex-row md:items-stretch">
-                        {/* Left Icon Area */}
-                        <div className="p-6 md:w-32 flex items-center justify-center bg-slate-100/50 border-r border-slate-200">
-                          <div className={cn("w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center border border-slate-200 transition-all duration-500", isGenerating ? "text-blue-500 shadow-blue-500/10" : "text-primary group-hover:scale-110 group-hover:shadow-md")}>
-                            {isGenerating ? <Clock size={28} className="animate-spin" /> : <Scale size={28} />}
-                          </div>
-                        </div>
-
-                        {/* Content Area */}
-                        <div className="flex-1 p-6 md:p-8 flex flex-col justify-center gap-y-4">
-                          {/* Top Header Row */}
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-3">
-                              <StatusBadge status={isGenerating ? 'processing' : (doc.status as any)} />
-                              {!isGenerating && (
-                                <span className="text-[10px] font-bold text-slate-400 uppercase">
-                                  <span className="w-1 h-1 rounded-full bg-slate-400 inline-block mr-1" /> Inteligência Jurídica
-                                </span>
-                              )}
-                            </div>
-                            <span className="flex items-center gap-2 text-xs font-bold text-slate-500 text-right">
-                              <Calendar size={14} className="text-slate-400" />
-                              {new Date(doc.created_at).toLocaleDateString('pt-BR', {
-                                day: '2-digit',
-                                month: 'short',
-                                year: 'numeric'
-                              })}
-                            </span>
-                          </div>
-
-                          {/* Title and Description */}
-                          <div className="space-y-1">
-                            <h3 className={cn("text-xl font-black transition-colors leading-tight", isGenerating ? "text-slate-800" : "text-slate-900 group-hover:text-primary")}>
-                              {doc.title}
-                            </h3>
-                            <p className="text-slate-500 text-sm font-bold uppercase tracking-widest leading-relaxed">
-                              {doc.document_type}
-                            </p>
-                          </div>
-
-                          {/* Footer Info Area */}
-                          {!isGenerating && (
-                            <div className="flex items-center gap-6 mt-1 pt-4 border-t border-slate-100">
-                              <div className="flex items-center gap-2">
-                                <div className="flex -space-x-1.5">
-                                  {[1, 2, 3].map(i => (
-                                    <div key={i} className="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center">
-                                      <Scale size={10} className="text-primary" />
-                                    </div>
-                                  ))}
-                                </div>
-                                <span className="text-[11px] font-bold text-slate-500 uppercase">Documento Blindado</span>
-                              </div>
-                              
-                              <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 uppercase">
-                                <FileSignature size={12} className="text-amber-500 fill-amber-500" />
-                                Pronto para Assinar
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Right Action Area */}
-                        <div className="p-6 md:w-32 flex items-center justify-center bg-slate-100/50 border-l border-slate-200">
-                          {isGenerating ? (
-                            <div className="w-12 h-12 rounded-full bg-slate-200 border border-slate-200 flex items-center justify-center text-slate-400">
-                              <Clock size={20} className="animate-spin" />
-                            </div>
-                          ) : (
-                            <Link href={`/juridico/${doc.id}`}>
-                              <div className="w-12 h-12 rounded-full bg-white border border-slate-200 flex items-center justify-center text-primary shadow-sm group-hover:bg-primary group-hover:border-primary group-hover:text-white group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-primary/20 transition-all duration-300">
-                                <ChevronRight size={24} />
-                              </div>
-                            </Link>
-                          )}
-                        </div>
-                      </div>
-                    </Card>
+                    <DocumentCard
+                      key={doc.id}
+                      id={doc.id}
+                      href={`/juridico/${doc.id}`}
+                      title={doc.title}
+                      subtitle={doc.document_type}
+                      date={new Date(doc.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      isGenerating={isGenerating}
+                      icon={<Scale size={22} />}
+                      generatingIcon={<Clock size={16} className="animate-spin" />}
+                      moduleLabel="Inteligência Jurídica"
+                      badge={{
+                        label: isGenerating ? 'Gerando' : isReady ? 'Pronto' : 'Falhou',
+                        className: isGenerating
+                          ? 'bg-blue-100 text-blue-700 border-blue-200'
+                          : isReady
+                          ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                          : 'bg-red-100 text-red-700 border-red-200'
+                      }}
+                      footerTags={[
+                        {
+                          icon: <div className="flex -space-x-1.5 mr-1">{[1,2,3].map(i => <div key={i} className="w-5 h-5 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center"><Scale size={8} className="text-primary" /></div>)}</div>,
+                          label: 'Blindado'
+                        },
+                        {
+                          icon: <FileSignature size={11} className="text-amber-500 fill-amber-500" />,
+                          label: 'Pronto para Assinar'
+                        }
+                      ]}
+                    />
                   )
                 })
               ) : (

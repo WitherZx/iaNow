@@ -238,50 +238,62 @@ export default function EstrategiaDetalhePage() {
         <div className="flex flex-col gap-y-12 pb-20 animate-in fade-in slide-in-from-bottom-2 duration-700">
           
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             {!isGuest ? (
               <Button 
-                variant="ghost" 
+                variant="outline" 
                 size="sm" 
-                className="text-slate-400 hover:text-slate-900"
+                className="h-10 w-10 md:w-auto md:px-5 rounded-xl border-slate-200 bg-white text-slate-500 hover:text-slate-900 shadow-sm transition-all"
                 onClick={() => router.push('/estrategia')}
               >
-                <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
+                <ArrowLeft className="w-5 h-5 md:mr-2 shrink-0" /> <span className="hidden md:inline">Voltar</span>
               </Button>
             ) : (
-              <div className="flex items-center gap-2 text-primary font-black text-sm uppercase">
-                <Sparkles className="w-5 h-5 fill-primary" /> iaNow Strategic Plan
+              <div className="flex items-center gap-2 text-primary font-black text-[10px] md:text-sm uppercase tracking-widest bg-white/50 backdrop-blur-sm px-4 py-2 rounded-xl border border-slate-100">
+                <Sparkles className="w-4 h-4 fill-primary" /> iaNow <span className="hidden sm:inline">Strategic Plan</span>
               </div>
             )}
             
-            <div className="flex gap-2">
-              <Button variant="primary" size="sm" onClick={handleShare}>
-                <Share2 className="w-4 h-4 mr-2" /> Compartilhar
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="primary" 
+                size="sm" 
+                onClick={handleShare} 
+                className="h-10 w-10 md:w-auto md:px-5 rounded-xl bg-primary text-white shadow-md shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+              >
+                <Share2 className="w-4 h-4 md:mr-2 shrink-0" /> 
+                <span className="hidden md:inline">Compartilhar</span>
               </Button>
               {!isGuest && (
-                <Button variant="outline" size="sm" className="text-rose-500 hover:bg-rose-50 border-slate-200" onClick={handleDelete}>
-                  <Trash2 className="w-4 h-4 mr-2" /> Deletar
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-10 w-10 md:w-auto md:px-5 rounded-xl border-slate-200 bg-white text-rose-500 hover:bg-rose-50 shadow-sm hover:scale-105 active:scale-95 transition-all" 
+                  onClick={handleDelete}
+                >
+                  <Trash2 className="w-4 h-4 md:mr-2 shrink-0" /> 
+                  <span className="hidden md:inline">Deletar</span>
                 </Button>
               )}
             </div>
           </div>
 
           {/* Hero - Reverting to Dark Style but with Standard Radius */}
-          <div className="relative overflow-hidden bg-slate-900 rounded-2xl p-10 text-white shadow-xl shadow-slate-200/50">
+          <div className="relative overflow-hidden bg-slate-900 rounded-[24px] md:rounded-[40px] p-6 md:p-12 text-white shadow-xl shadow-slate-200/50">
             <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 bg-primary/20 blur-[100px] pointer-events-none" />
-            <div className="relative z-10 space-y-6">
+            <div className="relative z-10 space-y-4 md:space-y-6">
               <div className="flex items-center gap-3">
-                <StatusBadge status={strategy.status} className="bg-white/10 text-white border-white/10" />
-                <div className="flex items-center gap-2 text-white/40 text-xs font-bold uppercase">
-                  <Clock className="w-3.5 h-3.5" />
+                <StatusBadge status={strategy.status} className="bg-white/10 text-white border-white/10 text-[9px] md:text-sm" />
+                <div className="flex items-center gap-2 text-white/40 text-[10px] md:text-xs font-bold uppercase">
+                  <Clock className="w-3 md:w-3.5 h-3 md:h-3.5" />
                   {new Date(strategy.created_at).toLocaleDateString('pt-BR')}
                 </div>
               </div>
-              <div className="space-y-4">
-                <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-[1.1] font-montserrat">
+              <div className="space-y-3 md:space-y-4">
+                <h1 className="text-2xl md:text-5xl font-black tracking-tight leading-[1.1] font-montserrat">
                   {content.title}
                 </h1>
-                <p className="text-slate-400 text-lg md:text-xl leading-relaxed max-w-none w-full">
+                <p className="text-slate-400 text-sm md:text-xl leading-relaxed max-w-none w-full font-medium">
                   {content.description}
                 </p>
               </div>
@@ -296,8 +308,8 @@ export default function EstrategiaDetalhePage() {
               {/* Pillars */}
               <section className="space-y-6">
                 <div className="flex items-center gap-3">
-                  <ShieldCheck className="w-6 h-6 text-primary" />
-                  <h2 className="text-2xl font-bold text-slate-950 font-montserrat">Pilares Estratégicos</h2>
+                  <ShieldCheck className="w-5 h-5 md:w-6 md:h-6 text-primary" />
+                  <h2 className="text-lg md:text-2xl font-bold text-slate-950 font-montserrat">Pilares Estratégicos</h2>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {content.pillars?.map((pillar: any, index: number) => (
@@ -325,8 +337,8 @@ export default function EstrategiaDetalhePage() {
               {/* Action Plan - High Visibility Interactive Checklist */}
               <section className="space-y-6">
                 <div className="flex items-center gap-3">
-                  <Rocket className="w-6 h-6 text-emerald-600" />
-                  <h2 className="text-2xl font-bold text-slate-950 font-montserrat">Plano de Ação</h2>
+                  <Rocket className="w-5 h-5 md:w-6 md:h-6 text-emerald-600" />
+                  <h2 className="text-lg md:text-2xl font-bold text-slate-950 font-montserrat">Plano de Ação</h2>
                 </div>
                 <div className="flex flex-col gap-y-4">
                   {content.actionPlan?.map((item: any, index: number) => (
@@ -334,7 +346,7 @@ export default function EstrategiaDetalhePage() {
                       key={index} 
                       onClick={() => toggleTask(index)}
                       className={cn(
-                        "group flex items-center gap-6 p-6 border rounded-2xl transition-all select-none",
+                        "group flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6 p-5 md:p-6 border rounded-[24px] md:rounded-2xl transition-all select-none",
                         isGuest ? "cursor-default" : "cursor-pointer",
                         item.completed 
                           ? "bg-emerald-50/20 border-emerald-100/50" 
@@ -344,23 +356,41 @@ export default function EstrategiaDetalhePage() {
                             )
                       )}
                     >
-                      <div className={cn(
-                        "w-12 h-12 flex-shrink-0 rounded-xl flex items-center justify-center font-bold text-lg transition-all",
-                        item.completed && !isGuest
-                          ? "bg-emerald-500 text-white" 
-                          : "bg-slate-50 text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600"
-                      )}>
-                        {item.completed && !isGuest ? <CheckCircle2 className="w-6 h-6" /> : (index + 1)}
+                      <div className="flex items-center justify-between w-full md:w-auto md:flex-initial">
+                        <div className={cn(
+                          "w-10 h-10 md:w-12 md:h-12 flex-shrink-0 rounded-xl flex items-center justify-center font-bold text-sm md:text-lg transition-all",
+                          item.completed && !isGuest
+                            ? "bg-emerald-500 text-white" 
+                            : "bg-slate-50 text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600"
+                        )}>
+                          {item.completed && !isGuest ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : (index + 1)}
+                        </div>
+
+                        {/* Right Checkbox - Only for owners, visible on mobile right of the number */}
+                        {!isGuest && (
+                          <div className={cn(
+                            "w-8 h-8 md:w-10 md:h-10 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all md:hidden",
+                            item.completed 
+                              ? "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]" 
+                              : "border-slate-200 bg-white"
+                          )}>
+                            <CheckCircle2 className={cn(
+                              "w-4 h-4 transition-all text-white",
+                              item.completed ? "scale-100 opacity-100" : "scale-75 opacity-0"
+                            )} />
+                          </div>
+                        )}
                       </div>
-                      <div className="flex-grow space-y-1">
+
+                      <div className="flex-grow space-y-2 w-full">
                         <h4 className={cn(
-                          "text-lg font-bold transition-all",
+                          "text-base md:text-lg font-bold transition-all leading-tight",
                           item.completed ? "text-slate-400 line-through" : "text-slate-900"
                         )}>
                           {item.task}
                         </h4>
                         <div className={cn(
-                          "flex items-center gap-2 text-xs font-bold px-2.5 py-1 rounded-lg w-fit transition-colors border",
+                          "flex items-center gap-2 text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-lg w-fit transition-colors border",
                           item.completed ? "bg-slate-100 text-slate-400 border-transparent" : "bg-emerald-50 text-emerald-600 border-emerald-100"
                         )}>
                           <TrendingUp className="w-3.5 h-3.5" />
@@ -368,10 +398,10 @@ export default function EstrategiaDetalhePage() {
                         </div>
                       </div>
                       
-                      {/* Right Checkbox - Only for owners */}
+                      {/* Desktop Checkbox Column */}
                       {!isGuest && (
                         <div className={cn(
-                          "w-10 h-10 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all",
+                          "hidden md:flex w-10 h-10 flex-shrink-0 rounded-full border-2 items-center justify-center transition-all",
                           item.completed 
                             ? "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]" 
                             : "border-slate-200 bg-white group-hover:border-emerald-500"

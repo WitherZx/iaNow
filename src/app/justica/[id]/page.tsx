@@ -318,23 +318,33 @@ export default function DemandDetailPage() {
         </>
       }
     >
-      <Card className="min-h-[600px] border-none shadow-2xl shadow-slate-200/50 rounded-[40px] bg-white flex flex-col overflow-hidden print:shadow-none print:border print:border-slate-100 print:rounded-none">
-        <div className="bg-slate-50 p-6 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
-            <FileText size={14} /> Minuta Gerada pela IA
+      <div className="min-w-0 flex flex-col">
+        <Card className="min-h-[600px] border-none shadow-2xl shadow-slate-200/50 rounded-[20px] md:rounded-[40px] bg-white flex flex-col overflow-hidden print:shadow-none print:border print:border-slate-100 print:rounded-none">
+          <div className="bg-slate-50 p-4 md:p-6 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+              <FileText size={14} /> Minuta Gerada pela IA
           </div>
           <div className="text-[10px] font-bold text-slate-400">Pág 1 de 1</div>
         </div>
-        <div className="flex-1 p-8">
+        <div className="flex-1 p-4 md:p-8">
           {isEditing ? (
-            <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} className="w-full h-full min-h-[800px] border-none focus:ring-0 text-md text-slate-700 leading-relaxed font-mono resize-none outline-none" />
+            <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} className="w-full h-full min-h-[800px] border-none focus:ring-0 text-sm md:text-base text-slate-700 leading-relaxed font-mono resize-none outline-none" />
           ) : (
-            <div className="prose prose-slate max-w-none prose-headings:font-black prose-p:text-slate-700 text-md leading-relaxed selection:bg-primary/20">
-              <ReactMarkdown>{demand.metadata?.petition_content || ''}</ReactMarkdown>
+            <div className="prose prose-slate max-w-none break-words whitespace-normal prose-headings:font-black prose-p:text-slate-700 text-sm sm:text-base md:text-lg leading-relaxed selection:bg-primary/20 overflow-hidden">
+              <ReactMarkdown
+                components={{
+                  li: ({node, ...props}) => <li className="break-words whitespace-normal" {...props} />,
+                  p: ({node, ...props}) => <p className="break-words whitespace-normal" {...props} />,
+                  blockquote: ({node, ...props}) => <blockquote className="break-words whitespace-normal" {...props} />
+                }}
+              >
+                {demand.metadata?.petition_content || ''}
+              </ReactMarkdown>
             </div>
           )}
         </div>
       </Card>
+    </div>
     </DocumentAuditLayout>
   )
 }

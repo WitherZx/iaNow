@@ -102,7 +102,7 @@ export default function EstrategiaPage() {
         title="CENTRAL DE ESTRATÉGIA" 
         subtitle="Gerencie seus planos de ação e diretrizes geradas por inteligência sistêmica."
         action={
-          <Link href="/estrategia/novo">
+          <Link href="/estrategia/novo" className="w-full lg:w-auto">
             <CTAButton icon={PlusCircle}>
               Novo Diagnóstico
             </CTAButton>
@@ -146,21 +146,21 @@ export default function EstrategiaPage() {
 
           {/* Filters and Search */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/30 p-2 rounded-[22px] border border-slate-100 shadow-inner-sm">
-            <div className="relative flex items-center p-1 bg-slate-100/50 rounded-2xl">
+            <div className="relative flex items-center p-1 bg-slate-100/50 rounded-2xl w-full sm:w-auto">
               {/* Active Pill Background */}
               <div 
                 className={cn(
                   "absolute h-[34px] transition-all duration-300 ease-out bg-white rounded-xl shadow-sm border border-slate-200/50",
-                  filter === 'all' && "w-[80px] left-1",
-                  filter === 'ready' && "w-[94px] left-[88px]",
-                  filter === 'generating' && "w-[94px] left-[186px]"
+                  filter === 'all' && "w-[calc(33.33%-4px)] left-1 sm:w-[80px] sm:left-1",
+                  filter === 'ready' && "w-[calc(33.33%-4px)] left-[33.33%] sm:w-[94px] sm:left-[88px]",
+                  filter === 'generating' && "w-[calc(33.33%-4px)] left-[calc(66.66%+2px)] sm:w-[94px] sm:left-[186px]"
                 )}
               />
               
               <button 
                 onClick={() => setFilter('all')}
                 className={cn(
-                  "relative z-10 px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-[80px]",
+                  "relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[80px]",
                   filter === 'all' ? 'text-primary' : 'text-slate-400 hover:text-slate-600'
                 )}
               >
@@ -169,7 +169,7 @@ export default function EstrategiaPage() {
               <button 
                 onClick={() => setFilter('ready')}
                 className={cn(
-                  "relative z-10 px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-[94px]",
+                  "relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[94px]",
                   filter === 'ready' ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'
                 )}
               >
@@ -178,7 +178,7 @@ export default function EstrategiaPage() {
               <button 
                 onClick={() => setFilter('generating')}
                 className={cn(
-                  "relative z-10 px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-[94px]",
+                  "relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[94px]",
                   filter === 'generating' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
                 )}
               >
@@ -206,83 +206,100 @@ export default function EstrategiaPage() {
               filteredStrategies.map((strategy) => {
                 const isGenerating = strategy.status === 'generating'
                 
-                return (
-                <Card key={strategy.id} className={cn("transition-all border-slate-200 p-0 overflow-hidden group", isGenerating ? "opacity-90 bg-slate-50/50" : "hover:shadow-lg")}>
-                  <div className="flex flex-col md:flex-row md:items-stretch">
-                    {/* Left Icon Area - Increased Contrast */}
-                    <div className="p-6 md:w-32 flex items-center justify-center bg-slate-100/50 border-r border-slate-200">
-                      <div className={cn("w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center border border-slate-200 transition-all duration-500", isGenerating ? "text-blue-500 shadow-blue-500/10" : "text-primary group-hover:scale-110 group-hover:shadow-md")}>
-                        {isGenerating ? <Clock size={28} className="animate-pulse" /> : <Lightbulb size={28} />}
-                      </div>
-                    </div>
-
-                    {/* Content Area */}
-                    <div className="flex-1 p-6 md:p-8 flex flex-col justify-center gap-y-4">
-                      {/* Top Header Row */}
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                          <StatusBadge status={strategy.status} />
-                          {!isGenerating && (
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">
-                              <span className="w-1 h-1 rounded-full bg-slate-400 inline-block mr-1" /> {strategy.ai_model}
-                            </span>
-                          )}
+                             return (
+                  <Card key={strategy.id} className={cn("transition-all border-slate-200 p-0 overflow-hidden group relative", isGenerating ? "opacity-90 bg-slate-50/50" : "hover:shadow-lg")}>
+                    <div className="flex flex-col md:flex-row md:items-stretch min-h-[220px] md:min-h-0">
+                      {/* Icon Area - Compact and hidden on mobile, or move it inside */}
+                      <div className="hidden md:flex p-6 md:w-32 items-center justify-center bg-slate-50/50 border-r border-slate-200 shrink-0">
+                        <div className={cn("w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center border border-slate-200 transition-all duration-500", isGenerating ? "text-blue-500 shadow-blue-500/10" : "text-primary group-hover:scale-110 group-hover:shadow-md")}>
+                          {isGenerating ? <Clock size={28} className="animate-pulse" /> : <Lightbulb size={28} />}
                         </div>
-                        <span className="flex items-center gap-2 text-xs font-bold text-slate-500 text-right">
-                          <Calendar size={14} className="text-slate-400" />
-                          {strategy.created_at}
-                        </span>
                       </div>
 
-                      {/* Title and Description */}
-                      <div className="space-y-1">
-                        <h3 className={cn("text-xl font-black transition-colors leading-tight", isGenerating ? "text-slate-800" : "text-slate-900 group-hover:text-primary")}>
-                          {strategy.title}
-                        </h3>
-                        <p className="text-slate-500 text-sm leading-relaxed line-clamp-2 max-w-4xl">
-                          {strategy.description}
-                        </p>
+                      {/* Content Area */}
+                      <div className="flex-1 p-5 md:p-8 flex flex-col justify-center gap-y-4">
+                        {/* Top Header Row */}
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-2 md:gap-3">
+                            {/* Mobile Icon */}
+                            <div className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary">
+                              {isGenerating ? <Clock size={16} className="animate-spin" /> : <Lightbulb size={16} />}
+                            </div>
+                            <StatusBadge status={strategy.status} />
+                            {!isGenerating && (
+                              <span className="hidden sm:inline-block text-[10px] font-bold text-slate-400 uppercase">
+                                <span className="w-1 h-1 rounded-full bg-slate-400 inline-block mr-1" /> {strategy.ai_model}
+                              </span>
+                            )}
+                          </div>
+                          <span className="flex items-center gap-1.5 text-[10px] md:text-xs font-bold text-slate-500 text-right whitespace-nowrap">
+                            <Calendar size={12} className="text-slate-400" />
+                            {strategy.created_at}
+                          </span>
+                        </div>
+
+                        {/* Title and Description */}
+                        <div className="space-y-2">
+                          <h3 className={cn("text-base md:text-xl font-black transition-colors leading-tight pr-8 md:pr-0", isGenerating ? "text-slate-800" : "text-slate-900 group-hover:text-primary")}>
+                            {strategy.title}
+                          </h3>
+                          <p className="text-slate-500 text-[13px] md:text-sm leading-relaxed line-clamp-2 max-w-4xl">
+                            {strategy.description}
+                          </p>
+                        </div>
+
+                        {/* Footer Info Area */}
+                        {!isGenerating && (
+                          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mt-1 pt-4 border-t border-slate-100">
+                            <div className="flex items-center gap-2">
+                               <div className="flex -space-x-1.5">
+                                  {[1, 2, 3].map(i => (
+                                    <div key={i} className="w-5 h-5 md:w-6 md:h-6 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center">
+                                       <Sparkles size={8} className="text-primary" />
+                                    </div>
+                                  ))}
+                               </div>
+                               <span className="text-[10px] md:text-[11px] font-bold text-slate-500 uppercase">AI Intelligence</span>
+                            </div>
+                            
+                            <div className="flex items-center gap-2 text-[10px] md:text-[11px] font-bold text-slate-600 uppercase">
+                              <Zap size={11} className="text-amber-500 fill-amber-500" />
+                              Execução Imediata
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Mobile Action Chevron - Positioned Absolutely */}
+                        {!isGenerating && (
+                          <div className="md:hidden absolute top-1/2 -translate-y-1/2 right-4 text-slate-300">
+                             <ChevronRight size={20} />
+                          </div>
+                        )}
                       </div>
 
-                      {/* Footer Info Area */}
+                      {/* Desktop Right Action Area */}
+                      <div className="hidden md:flex p-6 md:w-32 items-center justify-center bg-slate-50/50 border-l border-slate-200">
+                        {isGenerating ? (
+                          <div className="w-12 h-12 rounded-full bg-slate-200 border border-slate-200 flex items-center justify-center text-slate-400">
+                            <Clock size={20} className="animate-spin" />
+                          </div>
+                        ) : (
+                          <Link href={`/estrategia/${strategy.id}`}>
+                            <div className="w-12 h-12 rounded-full bg-white border border-slate-200 flex items-center justify-center text-primary shadow-sm group-hover:bg-primary group-hover:border-primary group-hover:text-white group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-primary/20 transition-all duration-300">
+                              <ChevronRight size={24} />
+                            </div>
+                          </Link>
+                        )}
+                      </div>
+                      
+                      {/* Mobile Catch-all Link */}
                       {!isGenerating && (
-                        <div className="flex items-center gap-6 mt-1 pt-4 border-t border-slate-100">
-                          <div className="flex items-center gap-2">
-                             <div className="flex -space-x-1.5">
-                                {[1, 2, 3].map(i => (
-                                  <div key={i} className="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center">
-                                     <Sparkles size={10} className="text-primary" />
-                                  </div>
-                                ))}
-                             </div>
-                             <span className="text-[11px] font-bold text-slate-500 uppercase">AI Intelligence</span>
-                          </div>
-                          
-                          <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 uppercase">
-                            <Zap size={12} className="text-amber-500 fill-amber-500" />
-                            Execução Imediata
-                          </div>
-                        </div>
+                        <Link href={`/estrategia/${strategy.id}`} className="md:hidden absolute inset-0 z-10" />
                       )}
                     </div>
-
-                    {/* Right Action Area - Increased Contrast */}
-                    <div className="p-6 md:w-32 flex items-center justify-center bg-slate-100/50 border-l border-slate-200">
-                      {isGenerating ? (
-                        <div className="w-12 h-12 rounded-full bg-slate-200 border border-slate-200 flex items-center justify-center text-slate-400">
-                          <Clock size={20} className="animate-spin" />
-                        </div>
-                      ) : (
-                        <Link href={`/estrategia/${strategy.id}`}>
-                          <div className="w-12 h-12 rounded-full bg-white border border-slate-200 flex items-center justify-center text-primary shadow-sm group-hover:bg-primary group-hover:border-primary group-hover:text-white group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-primary/20 transition-all duration-300">
-                            <ChevronRight size={24} />
-                          </div>
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-              )})
+                  </Card>
+                )
+              })
             ) : (
               <EmptyState 
                 icon={Lightbulb}

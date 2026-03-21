@@ -52,10 +52,11 @@ export default function ViewDocumentPage() {
   const [resolvedSuggestions, setResolvedSuggestions] = useState<string[]>([])
 
   useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null
+
     async function loadDocument() {
       if (!id) return
       try {
-        setLoading(true)
         const { data, error } = await supabase
           .from('generated_documents')
           .select('*')
@@ -65,14 +66,30 @@ export default function ViewDocumentPage() {
         if (error) throw error
         setDoc(data)
         setEditContent(data.content || '')
+
+        // Stop polling if no longer generating
+        if (data.status !== 'generating' && interval) {
+          clearInterval(interval)
+          interval = null
+        }
       } catch (err) {
         console.error('Erro ao carregar documento:', err)
+        if (interval) clearInterval(interval)
       } finally {
         setLoading(false)
       }
     }
+
+    // Initial load
     loadDocument()
-  }, [id, supabase])
+
+    // Poll every 4s — will stop once status changes
+    interval = setInterval(loadDocument, 4000)
+
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [id])
 
   const handleSave = async () => {
     try {
@@ -332,23 +349,23 @@ export default function ViewDocumentPage() {
     >
       <div className="min-w-0 flex flex-col">
         {!isGenerating && !isFailed && (
-          <Card className="min-h-[600px] border-none shadow-2xl shadow-slate-200/50 rounded-[32px] overflow-hidden bg-white flex flex-col relative print:min-h-0 print:h-auto print:shadow-none print:border-none print:rounded-none">
+          <Card className="min-h-[600px] border-none shadow-2xl shadow-slate-200/50 rounded-[20px] md:rounded-[32px] overflow-hidden bg-white flex flex-col relative print:min-h-0 print:h-auto print:shadow-none print:border-none print:rounded-none">
             {isEditing ? (
               <div className="flex-1">
                 <textarea
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full h-[800px] border-none focus:ring-0 text-lg text-slate-700 leading-relaxed font-mono whitespace-pre-wrap outline-none resize-none p-8"
+                  className="w-full h-[800px] border-none focus:ring-0 text-base md:text-lg text-slate-700 leading-relaxed font-mono whitespace-pre-wrap outline-none resize-none p-4 md:p-8"
                   placeholder="Edite o conteúdo do contrato..."
                 />
               </div>
             ) : (
-              <div className="flex-1 p-8 print:p-0 prose prose-slate max-w-none whitespace-normal break-words [overflow-wrap:anywhere] prose-headings:font-black prose-h1:text-3xl prose-h2:text-2xl prose-p:text-slate-600 prose-p:leading-relaxed prose-li:text-slate-600 text-lg overflow-hidden">
+              <div className="flex-1 p-4 md:p-8 print:p-0 prose prose-slate max-w-none whitespace-normal break-words prose-headings:font-black prose-h1:text-2xl md:prose-h1:text-3xl prose-h2:text-xl md:prose-h2:text-2xl prose-p:text-slate-600 prose-p:leading-relaxed prose-li:text-slate-600 text-sm sm:text-base md:text-lg overflow-hidden">
                 <ReactMarkdown
                   components={{
-                    li: ({node, ...props}) => <li className="break-all [word-break:break-all] whitespace-normal [overflow-wrap:anywhere]" {...props} />,
-                    p: ({node, ...props}) => <p className="break-all [word-break:break-all] whitespace-normal [overflow-wrap:anywhere]" {...props} />,
-                    blockquote: ({node, ...props}) => <blockquote className="break-all [word-break:break-all] whitespace-normal [overflow-wrap:anywhere]" {...props} />
+                    li: ({node, ...props}) => <li className="break-words whitespace-normal" {...props} />,
+                    p: ({node, ...props}) => <p className="break-words whitespace-normal" {...props} />,
+                    blockquote: ({node, ...props}) => <blockquote className="break-words whitespace-normal" {...props} />
                   }}
                 >
                   {doc.content?.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '') || ''}
@@ -359,14 +376,14 @@ export default function ViewDocumentPage() {
         )}
 
         {isGenerating && (
-          <div className="flex-1 bg-white rounded-[32px] border border-slate-100 p-20 flex flex-col items-center justify-center text-center shadow-xl shadow-slate-100">
-            <div className="relative mb-10">
-              <div className="w-24 h-24 border-4 border-slate-100 rounded-full animate-spin border-t-primary" />
+          <div className="flex-1 bg-white rounded-[32px] border border-slate-100 p-8 md:p-20 flex flex-col items-center justify-center text-center shadow-xl shadow-slate-100">
+            <div className="relative mb-6 md:mb-10">
+              <div className="w-20 h-20 md:w-24 md:h-24 border-4 border-slate-100 rounded-full animate-spin border-t-primary" />
               <div className="absolute inset-0 flex items-center justify-center">
-                <FileText className="w-8 h-8 text-primary animate-pulse" />
+                <FileText className="w-7 h-7 md:w-8 md:h-8 text-primary animate-pulse" />
               </div>
             </div>
-            <h3 className="text-3xl font-black text-slate-800 mb-4">Gerando Blindagem Legal...</h3>
+            <h3 className="text-2xl md:text-3xl font-black text-slate-800 mb-3 md:mb-4">Gerando Blindagem Legal...</h3>
             <p className="text-slate-500 font-medium max-w-md mx-auto leading-relaxed">
               Nossa Inteligência Sistêmica está redigindo seu documento aplicando todo o contexto jurídico. Por favor, aguarde alguns instantes.
             </p>
@@ -374,12 +391,12 @@ export default function ViewDocumentPage() {
         )}
 
         {isFailed && (
-          <div className="flex-1 bg-white rounded-[32px] border border-slate-100 p-20 flex flex-col items-center justify-center text-center shadow-xl shadow-slate-100">
-            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-8">
-              <AlertCircle className="w-10 h-10" />
+          <div className="flex-1 bg-white rounded-[32px] border border-slate-100 p-8 md:p-20 flex flex-col items-center justify-center text-center shadow-xl shadow-slate-100">
+            <div className="w-16 h-16 md:w-20 md:h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6 md:mb-8">
+              <AlertCircle className="w-8 h-8 md:w-10 md:h-10" />
             </div>
-            <h3 className="text-3xl font-black text-slate-800 mb-4">Falha na Geração</h3>
-            <p className="text-slate-500 font-medium mb-10">{doc.content || 'Ocorreu um erro ao processar o contrato.'}</p>
+            <h3 className="text-2xl md:text-3xl font-black text-slate-800 mb-3 md:mb-4">Falha na Geração</h3>
+            <p className="text-slate-500 font-medium mb-6 md:mb-10">{doc.content || 'Ocorreu um erro ao processar o contrato.'}</p>
             <Link href="/juridico/novo">
               <Button size="lg" className="rounded-2xl px-10 font-bold">Tentar Novamente</Button>
             </Link>

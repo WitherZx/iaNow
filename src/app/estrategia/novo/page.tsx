@@ -160,24 +160,26 @@ export default function NovoDiagnosticoPage() {
         <div className="max-w-5xl mx-auto flex flex-col gap-y-12 pb-20">
 
           {/* Progress Bar Container */}
-          <div className="relative">
-            <div className="absolute top-1/2 left-0 w-full h-0.5 bg-slate-100 -translate-y-1/2" />
-            <div className="relative flex justify-between items-center px-2">
+          <div className="relative px-2 sm:px-0">
+            {/* Progress Line */}
+            <div className="absolute top-[20px] sm:top-[32px] left-0 w-full h-0.5 bg-slate-200 -translate-y-1/2" />
+            
+            <div className="relative flex justify-between items-start">
               {STEPS.map((step, idx) => (
-                <div key={step.id} className="flex flex-col items-center gap-y-3 relative z-10 bg-slate-50 md:bg-white px-4 py-4">
+                <div key={step.id} className="flex flex-col items-center gap-y-1 sm:gap-y-3 relative z-10 w-16 sm:w-24 transition-all">
                   <div className={cn(
-                    "w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-500 border-2",
+                    "w-10 h-10 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center transition-all duration-500 border-4 border-[#e2e8f0] sm:border-[6px] relative z-20",
                     idx === currentStep
-                      ? "bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-110"
+                      ? "bg-primary text-white border-primary/20 shadow-lg shadow-primary/20 scale-110"
                       : idx < currentStep
-                        ? "bg-emerald-500 text-white border-emerald-500"
-                        : "bg-white text-slate-300 border-slate-100"
+                        ? "bg-emerald-500 text-white border-emerald-500/20"
+                        : "bg-white text-slate-300 border-white shadow-sm"
                   )}>
-                    {idx < currentStep ? <CheckCircle2 size={24} /> : <step.icon size={24} />}
+                    {idx < currentStep ? <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" /> : <step.icon className="w-5 h-5 sm:w-6 sm:h-6" />}
                   </div>
                   <span className={cn(
-                    "text-[10px] font-black uppercase tracking-widest",
-                    idx === currentStep ? "text-primary" : "text-slate-400"
+                    "text-[8px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest transition-all text-center",
+                    idx === currentStep ? "text-primary scale-110 sm:scale-100" : "text-slate-400 hidden sm:block"
                   )}>
                     {step.title}
                   </span>
@@ -187,8 +189,8 @@ export default function NovoDiagnosticoPage() {
           </div>
 
           {/* Form Content */}
-          <Card className="min-h-[400px] p-8 md:p-12 border-slate-100 shadow-sm relative group overflow-visible">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -mr-32 -mt-32" />
+          <Card className="min-h-[400px] p-5 sm:p-8 md:p-12 border-slate-100 shadow-sm relative group overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-primary/5 rounded-full blur-2xl md:blur-3xl -mr-16 -mt-16 md:-mr-32 md:-mt-32 pointer-events-none" />
             
             <div className="absolute top-0 right-0 p-8 hidden md:block">
               <StepBadge current={currentStep + 1} total={STEPS.length} />
@@ -327,9 +329,9 @@ export default function NovoDiagnosticoPage() {
 
             {currentStep === 1 && (
               <div className="flex flex-col gap-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="space-y-2 text-center">
+                <div className="space-y-2 text-left">
                   <h2 className="text-3xl font-black text-slate-900 uppercase">Contexto Operacional</h2>
-                  <p className="text-slate-500 leading-relaxed max-w-2xl mx-auto">
+                  <p className="text-slate-500 leading-relaxed max-w-2xl">
                     Como seu negócio funciona no dia a dia?
                   </p>
                 </div>
@@ -391,9 +393,9 @@ export default function NovoDiagnosticoPage() {
 
             {currentStep === 2 && (
               <div className="flex flex-col gap-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="space-y-2 text-center">
+                <div className="space-y-2 text-left">
                   <h2 className="text-3xl font-black text-slate-900 uppercase">Riscos & Blindagem</h2>
-                  <p className="text-slate-500 leading-relaxed max-w-2xl mx-auto">
+                  <p className="text-slate-500 leading-relaxed max-w-2xl">
                     Mapeando os pontos de vulnerabilidade da sua execução.
                   </p>
                 </div>
@@ -462,9 +464,9 @@ export default function NovoDiagnosticoPage() {
 
             {currentStep === 3 && (
               <div className="flex flex-col gap-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="space-y-2 text-center">
+                <div className="space-y-2 text-left">
                   <h2 className="text-3xl font-black text-slate-900 uppercase">Visão de Crescimento</h2>
-                  <p className="text-slate-500 leading-relaxed max-w-2xl mx-auto">
+                  <p className="text-slate-500 leading-relaxed max-w-2xl">
                     Onde sua execução precisa chegar?
                   </p>
                 </div>
@@ -523,7 +525,7 @@ export default function NovoDiagnosticoPage() {
                 </div>
 
                 <div className="space-y-3">
-                  <h2 className="text-4xl font-black text-slate-900 uppercase">{isSubmitting ? "Processando..." : "Pronto para a Execução?"}</h2>
+                  <h2 className="text-2xl md:text-4xl font-black text-slate-900 uppercase">{isSubmitting ? "Processando..." : "Pronto para a Execução?"}</h2>
                   <p className="text-slate-500 max-w-md mx-auto leading-relaxed">
                     {isSubmitting ? "Aguarde enquanto nossa inteligência sistêmica mapeia sua rota de blindagem..." : "Nossa inteligência sistêmica analisará seus dados para gerar um plano estratégico completo em poucos segundos."}
                   </p>
@@ -533,9 +535,9 @@ export default function NovoDiagnosticoPage() {
                   <Button
                     size="lg"
                     onClick={handleSubmit}
-                    className="h-16 px-12 rounded-2xl shadow-2xl shadow-primary/40 bg-primary hover:bg-blue-700 font-bold text-xl group transition-all hover:scale-105 active:scale-95"
+                    className="w-full sm:w-auto h-16 px-6 sm:px-12 rounded-2xl shadow-2xl shadow-primary/40 bg-primary hover:bg-blue-700 font-bold text-lg sm:text-xl group transition-all hover:scale-105 active:scale-95 flex items-center justify-center"
                   >
-                    <Play className="w-6 h-6 mr-3 fill-white" /> Iniciar Processamento
+                    <Play className="w-5 h-5 sm:w-6 sm:h-6 mr-3 fill-white shrink-0" /> Iniciar Processamento
                   </Button>
                 )}
 
@@ -543,20 +545,19 @@ export default function NovoDiagnosticoPage() {
               </div>
             )}
 
-            {/* Navigation Buttons */}
             {currentStep < STEPS.length - 1 && (
-              <div className="flex items-center justify-between mt-12 pt-12 border-t border-slate-100 relative z-10">
+              <div className="flex flex-col sm:flex-row items-center justify-between mt-12 pt-12 border-t border-slate-100 relative z-10 gap-4">
                 <Button
                   variant="ghost"
                   onClick={prevStep}
                   disabled={currentStep === 0}
-                  className="font-bold text-slate-400 hover:text-slate-900"
+                  className="w-full sm:w-auto font-bold text-slate-400 hover:text-slate-900 order-2 sm:order-1"
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
                 </Button>
                 <Button
                   onClick={nextStep}
-                  className="bg-slate-900 hover:bg-black text-white px-8 font-bold h-12 rounded-xl shadow-xl shadow-black/10 transition-all hover:translate-x-1"
+                  className="w-full sm:w-auto flex items-center justify-center bg-slate-900 hover:bg-black text-white px-8 font-bold h-12 rounded-xl shadow-xl shadow-black/10 transition-all hover:translate-x-1 order-1 sm:order-2"
                 >
                   Continuar <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>

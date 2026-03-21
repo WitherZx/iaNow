@@ -164,40 +164,44 @@ export default function NovoJusticaPage() {
         <div className="max-w-4xl mx-auto flex flex-col gap-y-10 pb-20">
           
           {/* Timeline */}
-          <div className="relative flex justify-between items-center px-4 overflow-x-auto pb-4 [&::-webkit-scrollbar]:hidden">
-             <div className="absolute top-1/2 left-0 w-full h-0.5 bg-slate-100 -translate-y-1/2" />
-             {STEPS.map((step, idx) => (
-                <div key={step.id} className="relative z-10 flex flex-col items-center gap-2 bg-white px-2">
-                   <div className={cn(
-                     "w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 border-2",
-                     idx === currentStep ? "bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-110" :
-                     idx < currentStep ? "bg-emerald-500 text-white border-emerald-500" :
-                     "bg-white text-slate-300 border-slate-100 shadow-sm"
-                   )}>
-                     {idx < currentStep ? <CheckCircle2 size={24} /> : <step.icon size={22} />}
-                   </div>
-                   <span className={cn(
-                     "text-[9px] font-black uppercase tracking-widest",
-                     idx === currentStep ? "text-primary" : "text-slate-400"
-                   )}>
-                     {step.title}
-                   </span>
+          <div className="relative px-2 sm:px-0 mb-4">
+            <div className="absolute top-[20px] sm:top-[32px] left-0 w-full h-0.5 bg-slate-200 -translate-y-1/2" />
+            <div className="relative flex justify-between items-start">
+              {STEPS.map((step, idx) => (
+                <div key={step.id} className="flex flex-col items-center gap-y-1 sm:gap-y-3 relative z-10 w-[50px] sm:w-24 transition-all">
+                  <div className={cn(
+                    "w-10 h-10 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center transition-all duration-500 border-4 border-[#e2e8f0] sm:border-[6px] relative z-20 shrink-0",
+                    idx === currentStep
+                      ? "bg-primary text-white border-primary/20 shadow-lg shadow-primary/20 scale-110"
+                      : idx < currentStep
+                        ? "bg-emerald-500 text-white border-emerald-500/20"
+                        : "bg-white text-slate-300 border-white shadow-sm"
+                  )}>
+                    {idx < currentStep ? <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" /> : <step.icon className="w-5 h-5 sm:w-6 sm:h-6" />}
+                  </div>
+                  <span className={cn(
+                    "text-[8px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest transition-all text-center",
+                    idx === currentStep ? "text-primary scale-110 sm:scale-100" : "text-slate-400 hidden sm:block"
+                  )}>
+                    {step.title}
+                  </span>
                 </div>
-             ))}
+              ))}
+            </div>
           </div>
 
-          <Card className="min-h-[500px] p-8 md:p-12 rounded-[40px] border-slate-100 shadow-sm relative overflow-hidden bg-white">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -mr-32 -mt-32" />
+          <Card className="min-h-[500px] p-5 sm:p-8 md:p-12 rounded-[40px] border-slate-100 shadow-sm relative overflow-hidden bg-white">
+            <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-primary/5 rounded-full blur-2xl md:blur-3xl -mr-16 -mt-16 md:-mr-32 md:-mt-32 pointer-events-none" />
             
             {/* Step 0: Problema */}
             {currentStep === 0 && (
-              <div className="flex flex-col gap-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="space-y-2 text-center text-slate-900 border-b border-slate-100 pb-8">
+              <div className="flex flex-col gap-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                <div className="space-y-2 text-left text-slate-900 border-b border-slate-100 pb-5">
                    <h2 className="text-3xl font-black uppercase">O Problema</h2>
                    <p className="text-slate-500 font-medium">Selecione o tipo de reclamação para iniciarmos.</p>
                 </div>
 
-                <div className="grid grid-cols-1 gap-12 mt-4">
+                <div className="grid grid-cols-1 gap-12 mt-1">
                    <div className="flex flex-col gap-y-4">
                       <Label>Tipo de Problema</Label>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -259,24 +263,24 @@ export default function NovoJusticaPage() {
 
             {/* Step 1: Qualificação */}
             {currentStep === 1 && (
-              <div className="flex flex-col gap-y-10 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="space-y-2 text-center border-b border-slate-100 pb-8">
+              <div className="flex flex-col gap-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                <div className="space-y-2 text-left border-b border-slate-100 pb-5">
                    <h2 className="text-3xl font-black text-slate-900 uppercase">Qualificação das Partes</h2>
                    <p className="text-slate-500 font-medium">Estes dados são essenciais para que o documento saia pronto para o protocolo.</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 p-8 md:p-10 bg-slate-100 rounded-[40px] border-2 border-slate-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 p-4 sm:p-8 md:p-10 bg-slate-100 rounded-[24px] sm:rounded-[40px] border-2 border-slate-200 mt-1">
                   
                   {/* Requerente */}
-                  <div className="flex flex-col gap-y-6">
-                    <div className="flex items-center justify-between border-b border-slate-300 pb-4">
-                      <h4 className="font-black text-slate-900 flex items-center gap-3 text-sm">
-                        <div className="w-10 h-10 rounded-2xl bg-primary text-white flex items-center justify-center shadow-lg shadow-primary/20 transition-all"><Contact size={20} /></div> 
+                  <div className="flex flex-col gap-y-4 sm:gap-y-6">
+                    <div className="flex items-center justify-between border-b border-slate-300 pb-3 sm:pb-4">
+                      <h4 className="font-black text-slate-900 flex items-center gap-2 sm:gap-3 text-sm">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-primary text-white flex items-center justify-center shadow-lg shadow-primary/20 transition-all"><Contact className="w-4 h-4 sm:w-5 sm:h-5" /></div> 
                         Requerente (Você)
                       </h4>
                     </div>
                     
-                    <div className="space-y-6 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm">
+                    <div className="space-y-4 sm:space-y-6 bg-white p-4 sm:p-6 rounded-[24px] sm:rounded-[32px] border border-slate-200 shadow-sm">
                       <PartnerSelector 
                         label="Selecionar Seu Perfil"
                         onSelect={(p) => handleSelectPartner('author', p)}
@@ -299,15 +303,15 @@ export default function NovoJusticaPage() {
                   </div>
 
                   {/* Réu */}
-                  <div className="flex flex-col gap-y-6">
-                    <div className="flex items-center justify-between border-b border-slate-300 pb-4">
-                      <h4 className="font-black text-slate-900 flex items-center gap-3 text-sm">
-                        <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-200 transition-all"><Building size={20} /></div> 
+                  <div className="flex flex-col gap-y-4 sm:gap-y-6">
+                    <div className="flex items-center justify-between border-b border-slate-300 pb-3 sm:pb-4">
+                      <h4 className="font-black text-slate-900 flex items-center gap-2 sm:gap-3 text-sm">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-200 transition-all"><Building className="w-4 h-4 sm:w-5 sm:h-5" /></div> 
                         Réu (Empresa/Pessoa)
                       </h4>
                     </div>
                     
-                    <div className="space-y-6 bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm">
+                    <div className="space-y-4 sm:space-y-6 bg-white p-4 sm:p-6 rounded-[24px] sm:rounded-[32px] border border-slate-200 shadow-sm">
                       <PartnerSelector 
                         label="Selecionar Réu"
                         onSelect={(p) => handleSelectPartner('defendant', p)}
@@ -334,13 +338,13 @@ export default function NovoJusticaPage() {
 
             {/* Step 2: Fatos */}
             {currentStep === 2 && (
-              <div className="flex flex-col gap-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="space-y-2 text-center border-b border-slate-100 pb-8">
+              <div className="flex flex-col gap-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                <div className="space-y-2 text-left border-b border-slate-100 pb-5">
                    <h2 className="text-3xl font-black text-slate-900 uppercase">Relato do Ocorrido</h2>
-                   <p className="text-slate-500 font-medium font-medium">Conte o que aconteceu de forma clara e objetiva.</p>
+                   <p className="text-slate-500 font-medium">Conte o que aconteceu de forma clara e objetiva.</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-1">
                    <div className="flex flex-col gap-y-3 md:col-span-2 text-left">
                       <Label>O que houve? (Detalhes)</Label>
                       <textarea 
@@ -383,13 +387,13 @@ export default function NovoJusticaPage() {
 
             {/* Step 3: Valores */}
             {currentStep === 3 && (
-              <div className="flex flex-col gap-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="space-y-2 text-center border-b border-slate-100 pb-8">
+              <div className="flex flex-col gap-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                <div className="space-y-2 text-left border-b border-slate-100 pb-5">
                    <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Cálculo de Indenização</h2>
                    <p className="text-slate-500 font-medium">O limite para processar sozinho no JEC é de 20 salários mínimos.</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-1">
                    <div className="flex flex-col gap-y-3 text-left">
                       <Label>Dano Material (Prejuízo Real)</Label>
                       <input 
@@ -412,16 +416,16 @@ export default function NovoJusticaPage() {
                    </div>
 
                    <div className={cn(
-                     "md:col-span-2 p-8 rounded-[32px] border flex flex-col items-center justify-center gap-2 transition-all shadow-inner-sm",
+                     "md:col-span-2 p-5 sm:p-8 rounded-[24px] sm:rounded-[32px] border flex flex-col items-center justify-center gap-2 transition-all shadow-inner-sm text-center",
                      isAptoJEC ? "bg-emerald-50/50 border-emerald-100" : "bg-red-50/50 border-red-100"
                    )}>
-                        <span className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Total do Valor da Causa</span>
-                        <span className={cn("text-5xl font-black tracking-tighter transition-all", isAptoJEC ? "text-primary" : "text-red-500")}>
+                        <span className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-1 sm:mb-2">Total do Valor da Causa</span>
+                        <span className={cn("text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter transition-all break-all", isAptoJEC ? "text-primary" : "text-red-500")}>
                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorTotalCausa)}
                         </span>
                         {!isAptoJEC && (
-                          <div className="flex items-center gap-2 mt-4 px-4 py-2 bg-red-100 text-red-700 rounded-full text-[10px] font-black uppercase tracking-widest">
-                             <AlertCircle size={14} /> Excede limite do JEC (R$ {limiteJEC.toLocaleString()})
+                          <div className="flex items-center gap-2 mt-4 px-4 py-2 bg-red-100 text-red-700 rounded-full text-[10px] font-black uppercase tracking-widest text-center">
+                             <AlertCircle size={14} className="shrink-0" /> Excede limite do JEC (R$ {limiteJEC.toLocaleString()})
                           </div>
                         )}
                    </div>
@@ -437,8 +441,8 @@ export default function NovoJusticaPage() {
                 </div>
                 
                 <div className="space-y-3">
-                  <h3 className="text-4xl font-black text-slate-900 uppercase tracking-tight">Tudo Checado!</h3>
-                  <p className="text-slate-500 max-w-sm mx-auto leading-relaxed font-bold">
+                  <h3 className="text-2xl md:text-4xl font-black text-slate-900 uppercase tracking-tight">Tudo Checado!</h3>
+                  <p className="text-slate-500 max-w-sm leading-relaxed font-bold">
                     Ao prosseguir, nossa IA irá fundir as qualificações, fatos e leis para gerar sua petição no formato ideal para o Juizado Especial.
                   </p>
                 </div>
@@ -447,7 +451,7 @@ export default function NovoJusticaPage() {
                    <Button 
                      size="lg"
                      onClick={handleStartProcess}
-                     className="h-16 px-12 rounded-2xl shadow-xl shadow-primary/30 bg-primary hover:bg-blue-700 font-black text-xl hover:scale-105 active:scale-95 transition-all"
+                     className="w-full sm:w-auto h-16 px-6 sm:px-12 rounded-2xl shadow-xl shadow-primary/30 bg-primary hover:bg-blue-700 font-black text-lg sm:text-xl hover:scale-105 active:scale-95 transition-all text-center flex items-center justify-center"
                    >
                      Gerar Petição Inicial
                    </Button>
@@ -457,12 +461,12 @@ export default function NovoJusticaPage() {
 
             {/* Navigation buttons */}
             {currentStep < 4 && (
-              <div className="flex items-center justify-between mt-12 pt-8 border-t border-slate-100 relative z-10">
+              <div className="flex flex-col sm:flex-row items-center justify-between mt-12 pt-8 border-t border-slate-100 relative z-10 gap-4">
                 <Button
                   variant="ghost"
                   onClick={prevStep}
                   disabled={currentStep === 0}
-                  className="font-bold text-slate-400 hover:text-slate-900 rounded-xl px-8"
+                  className="w-full sm:w-auto font-bold text-slate-400 hover:text-slate-900 rounded-xl px-8 order-2 sm:order-1"
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
                 </Button>
@@ -474,7 +478,7 @@ export default function NovoJusticaPage() {
                     (currentStep === 2 && !formData.whatHappened) ||
                     (currentStep === 3 && (!formData.materialDamage || !isAptoJEC))
                   }
-                  className="bg-slate-900 hover:bg-black text-white px-10 h-14 rounded-xl font-black uppercase tracking-widest text-[11px] transition-all shadow-xl shadow-slate-200"
+                  className="w-full sm:w-auto flex justify-center items-center bg-slate-900 hover:bg-black text-white px-10 h-14 rounded-xl font-black uppercase tracking-widest text-[11px] transition-all shadow-xl shadow-slate-200 order-1 sm:order-2"
                 >
                   Continuar <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
