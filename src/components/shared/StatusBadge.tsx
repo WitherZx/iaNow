@@ -16,7 +16,7 @@ const STATUS_MAP: Record<string, { label: string; bg: string; color: string; bor
   failed:     { label: 'Falhou',       bg: 'bg-red-50', color: 'text-red-700', border: 'border-red-200' },
   draft:      { label: 'Rascunho',    bg: 'bg-slate-50', color: 'text-slate-600', border: 'border-slate-200' },
   canceled:   { label: 'Cancelado',   bg: 'bg-red-50', color: 'text-red-700', border: 'border-red-200' },
-  past_due:   { label: 'Em atraso',   bg: 'bg-orange-50', color: 'text-orange-700', border: 'border-orange-200' },
+  filed:      { label: 'Protocolado', bg: 'bg-primary/10', color: 'text-primary', border: 'border-primary/20' },
 }
 
 export function StatusBadge({ status, className }: { status: Status; className?: string }) {

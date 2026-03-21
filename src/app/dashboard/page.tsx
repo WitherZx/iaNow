@@ -10,7 +10,7 @@ import { Card } from '@/components/shared/Card'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/shared/Button'
 import { CTAButton } from '@/components/shared/CTAButton'
-import { Lightbulb, Scale, LineChart, PlayCircle, Eye, Loader2, Play, ShieldCheck, PlusCircle } from 'lucide-react'
+import { Lightbulb, Scale, Gavel, PlayCircle, Eye, Loader2, Play, ShieldCheck, PlusCircle } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
@@ -25,37 +25,31 @@ interface Metric {
   accent?: boolean
 }
 
-interface Strategy {
+interface DashboardItem {
   id: string
   title: string
   description: string
-  status: 'ready' | 'generating'
+  status: string
   date: string
-}
-
-interface Activity {
-  id: string
-  title: string
-  user: string
-  time: string
-  status: 'completed' | 'processing'
+  href: string
 }
 
 export default function DashboardPage() {
   const { session } = useAuth()
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
-  const [activitiesExpanded, setActivitiesExpanded] = useState(false)
   const userName = session?.user?.user_metadata?.full_name?.split(' ')[0] || 'Marcos'
 
   const [data, setData] = useState<{
     metrics: Metric[]
-    strategies: Strategy[]
-    activities: Activity[]
+    strategies: DashboardItem[]
+    legalDocs: DashboardItem[]
+    justiceDemands: DashboardItem[]
   }>({
     metrics: [],
     strategies: [],
-    activities: []
+    legalDocs: [],
+    justiceDemands: []
   })
 
   useEffect(() => {
@@ -81,33 +75,28 @@ export default function DashboardPage() {
         const [
           { count: activeStratsCount },
           { count: legalDocsCount },
-          { count: finAnalysisCount }
+          { count: jusPostulandiCount }
         ] = await Promise.all([
           supabase.from('strategies').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'active').is('deleted_at', null),
           supabase.from('generated_documents').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'ready').is('deleted_at', null),
-          supabase.from('financial_analysis').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'completed').is('deleted_at', null)
+          supabase.from('justice_demands').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).is('deleted_at', null)
         ])
 
-        const { data: strats } = await supabase
-          .from('strategies')
-          .select('*')
-          .eq('organization_id', orgId)
-          .is('deleted_at', null)
-          .order('created_at', { ascending: false })
-          .limit(3)
-
-        const { data: logs } = await supabase
-          .from('activity_logs')
-          .select('*')
-          .eq('organization_id', orgId)
-          .order('created_at', { ascending: false })
-          .limit(20)
+        const [
+          { data: strats },
+          { data: legalDocs },
+          { data: justiceDocs }
+        ] = await Promise.all([
+          supabase.from('strategies').select('*').eq('organization_id', orgId).is('deleted_at', null).order('created_at', { ascending: false }).limit(4),
+          supabase.from('generated_documents').select('*').eq('organization_id', orgId).is('deleted_at', null).order('created_at', { ascending: false }).limit(4),
+          supabase.from('justice_demands').select('*').eq('organization_id', orgId).is('deleted_at', null).order('created_at', { ascending: false }).limit(3)
+        ])
 
         setData({
           metrics: [
             { label: 'Estratégias Ativas', value: activeStratsCount || 0, icon: <Lightbulb size={22} />, change: undefined },
             { label: 'Documentos Jurídicos', value: legalDocsCount || 0, icon: <Scale size={22} />, change: undefined },
-            { label: 'Análises Financeiras', value: finAnalysisCount || 0, icon: <LineChart size={22} />, change: undefined },
+            { label: 'Jus Postulandi', value: jusPostulandiCount || 0, icon: <Gavel size={22} />, change: undefined },
           ],
 
           strategies: (strats || []).map((s: any) => ({
@@ -115,16 +104,25 @@ export default function DashboardPage() {
             title: s.title,
             description: s.description || '',
             status: s.status === 'active' ? 'ready' : 'generating',
-            date: new Date(s.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+            date: new Date(s.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
+            href: `/estrategia/${s.id}`
           })),
-          activities: (logs || []).map((l: any) => ({
-            id: l.id,
-            title: l.description || l.action,
-            user: userName,
-            time: new Date(l.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            status: 'completed'
+          legalDocs: (legalDocs || []).map((d: any) => ({
+            id: d.id,
+            title: d.title || 'Documento jurídico',
+            description: d.metadata?.description || 'Gerado via IA',
+            status: d.status,
+            date: new Date(d.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
+            href: `/juridico/${d.id}`
+          })),
+          justiceDemands: (justiceDocs || []).map((d: any) => ({
+            id: d.id,
+            title: d.tipo_acao || 'Ação não classificada',
+            description: `Valor: ${(d.valor_causa || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`,
+            status: d.status,
+            date: new Date(d.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
+            href: `/justica/${d.id}`
           }))
-
         })
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
@@ -146,8 +144,46 @@ export default function DashboardPage() {
     )
   }
 
-  const { metrics, strategies: recentStrategies, activities: recentActivities } = data
+  const { metrics, strategies: recentStrategies, legalDocs: recentDocs, justiceDemands: recentDemands } = data
 
+  const renderGhostCards = (count: number) => (
+    <>
+      {Array.from({ length: count }).map((_, i) => (
+        <Card key={i} className="bg-primary/5 border-primary/10 grayscale-0 pointer-events-none border-dashed shadow-sm">
+          <div className="flex flex-col gap-y-4">
+            <div className="flex items-center justify-between">
+              <div className="w-16 h-5 bg-primary/20 rounded animate-pulse" />
+              <div className="w-12 h-3 bg-primary/10 rounded" />
+            </div>
+            <div className="w-3/4 h-5 bg-primary/20 rounded animate-pulse" />
+            <div className="space-y-2">
+              <div className="w-full h-3 bg-primary/10 rounded" />
+              <div className="w-5/6 h-3 bg-primary/10 rounded" />
+            </div>
+          </div>
+        </Card>
+      ))}
+    </>
+  )
+
+  const renderItemCard = (item: DashboardItem) => (
+    <Link key={item.id} href={item.href}>
+      <Card padding="sm" className="hover:border-primary/30 hover:shadow-md cursor-pointer group transition-all h-full">
+        <div className="flex flex-col gap-y-3">
+          <div className="flex items-center justify-between">
+            <StatusBadge status={item.status} />
+            <span className="text-[10px] text-slate-400 font-bold">{item.date}</span>
+          </div>
+          <h4 className="font-bold text-sm text-slate-900 group-hover:text-primary transition-colors line-clamp-1">
+            {item.title}
+          </h4>
+          <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+            {item.description}
+          </p>
+        </div>
+      </Card>
+    </Link>
+  )
 
   return (
     <DashboardLayout>
@@ -237,138 +273,66 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-            {/* Recent Strategies */}
-            <div className="lg:col-span-2 flex flex-col space-y-6">
-              <SectionTitle
-                title="Estratégias Recentes"
-                subtitle="Os últimos planos gerados pela nossa IA"
-                action={
-                  <Link href="/estrategia">
-                    <Button variant="link" className="text-primary font-bold">
-                      Ver todas
-                    </Button>
-                  </Link>
-                }
-              />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {recentStrategies.length > 0 ? (
-                  recentStrategies.map((strategy, idx) => (
-                    <Link key={strategy.id} href={`/estrategia/${strategy.id}`}>
-                      <Card padding="sm" className="hover:border-primary/30 hover:shadow-md cursor-pointer group transition-all h-full">
-                        <div className="flex flex-col gap-y-3">
-                          <div className="flex items-center justify-between">
-                            <StatusBadge status={strategy.status} />
-                            <span className="text-[10px] text-slate-400 font-bold">{strategy.date}</span>
-                          </div>
-                          <h4 className="font-bold text-sm text-slate-900 group-hover:text-primary transition-colors line-clamp-1">
-                            {strategy.title}
-                          </h4>
-                          <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
-                            {strategy.description}
-                          </p>
-                        </div>
-                      </Card>
-                    </Link>
-                  ))
-                ) : (
-                  // Ghost Strategy Cards
-                  <>
-                    {[1, 2].map((i) => (
-                      <Card key={i} className="bg-primary/5 border-primary/10 grayscale-0 pointer-events-none border-dashed shadow-sm">
-                        <div className="flex flex-col gap-y-4">
-                          <div className="flex items-center justify-between">
-                            <div className="w-16 h-5 bg-primary/20 rounded animate-pulse" />
-                            <div className="w-12 h-3 bg-primary/10 rounded" />
-                          </div>
-                          <div className="w-3/4 h-5 bg-primary/20 rounded animate-pulse" />
-                          <div className="space-y-2">
-                            <div className="w-full h-3 bg-primary/10 rounded" />
-                            <div className="w-5/6 h-3 bg-primary/10 rounded" />
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
-                    <Card className="col-span-full bg-primary/5 border-primary/20 border-dashed text-center flex flex-col items-center justify-center py-10 space-y-3">
-                      <p className="text-primary font-bold text-lg">Pronto para começar?</p>
-                      <p className="text-sm text-slate-600 max-w-md">
-                        Crie seu primeiro diagnóstico para gerar estratégias personalizadas e transforme seu negócio hoje.
-                      </p>
-                      <Link href="/estrategia">
-                        <Button className="shadow-lg shadow-primary/20 font-bold px-10">
-                          Gerar Diagnóstico
-                        </Button>
-                      </Link>
+          <div className="w-full flex flex-col space-y-12">
+            
+            {/* Top Row: Estratégias and Documentos */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+              
+              {/* Estratégias */}
+              <div className="flex flex-col space-y-6">
+                <SectionTitle
+                  title="Estratégias Recentes"
+                  subtitle="Últimos planos gerados"
+                  action={<Link href="/estrategia"><Button variant="link" className="text-primary font-bold px-0">Ver todas</Button></Link>}
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {recentStrategies.length > 0 ? recentStrategies.map(renderItemCard) : renderGhostCards(4)}
+                  {recentStrategies.length === 0 && (
+                    <Card className="col-span-full py-6 text-center bg-primary/5 border-dashed border-primary/20">
+                      <p className="text-sm text-slate-600 mb-3">Pronto para começar?</p>
+                      <Link href="/estrategia"><Button size="sm" className="font-bold">Gerar Diagnóstico</Button></Link>
                     </Card>
-                  </>
-                )}
+                  )}
+                </div>
+              </div>
+
+              {/* Documentos */}
+              <div className="flex flex-col space-y-6">
+                <SectionTitle
+                  title="Documentos Jurídicos"
+                  subtitle="Contratos e ofícios recentes"
+                  action={<Link href="/juridico"><Button variant="link" className="text-primary font-bold px-0">Ver todos</Button></Link>}
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {recentDocs.length > 0 ? recentDocs.map(renderItemCard) : renderGhostCards(4)}
+                  {recentDocs.length === 0 && (
+                    <Card className="col-span-full py-6 text-center bg-primary/5 border-dashed border-primary/20">
+                      <p className="text-sm text-slate-600 mb-3">Nenhum documento gerado.</p>
+                      <Link href="/juridico/novo"><Button size="sm" className="font-bold">Criar Documento</Button></Link>
+                    </Card>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Activities */}
-            <div className="flex flex-col space-y-6">
-              <SectionTitle
-                title="Atividade Recente"
-                subtitle="Acompanhe as últimas ações na plataforma"
-              />
-              <Card padding="none" className="overflow-hidden flex-1 flex flex-col bg-white">
-                <div className="flex flex-col flex-1">
-                  {recentActivities.length > 0 ? (
-                    recentActivities.slice(0, activitiesExpanded ? 20 : 5).map((activity, idx) => (
-                      <div
-                        key={activity.id}
-                        className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
-                      >
-                        <div className="flex items-center gap-x-3">
-                          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                            <PlayCircle size={18} />
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="font-bold text-sm text-slate-900 truncate max-w-[150px]">{activity.title}</span>
-                            <span className="text-xs text-slate-500">{activity.time} • {activity.user}</span>
-                          </div>
-                        </div>
-                        <StatusBadge status={activity.status} />
-                      </div>
-                    ))
-                  ) : (
-                    // Ghost Activity Rows
-                    <div className="flex flex-col flex-1 divide-y divide-primary/5">
-                      {[1, 2, 3, 4, 5, 6].map((i) => (
-                        <div key={i} className="flex-1 flex items-center justify-between p-4 bg-primary/[0.02] grayscale-0">
-                          <div className="flex items-center gap-x-3">
-                            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                              <div className="w-4 h-4 bg-primary/20 rounded-full animate-pulse" />
-                            </div>
-                            <div className="flex flex-col gap-y-2">
-                              <div className="w-24 h-3 bg-primary/20 rounded animate-pulse" />
-                              <div className="w-16 h-2 bg-primary/10 rounded" />
-                            </div>
-                          </div>
-                          <div className="w-12 h-5 bg-primary/10 rounded" />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {recentActivities.length > 0 ? (
-                  <div className="p-4 bg-slate-50/50 text-center">
-                    <Button 
-                      onClick={() => setActivitiesExpanded(!activitiesExpanded)}
-                      variant="ghost" 
-                      size="sm" 
-                      className="w-full text-slate-500 hover:text-primary font-bold transition-all"
-                    >
-                      {activitiesExpanded ? 'Recolher histórico' : 'Ver histórico completo'}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="p-4 text-center text-[10px] text-primary/40 font-bold uppercase tracking-wider bg-white border-t border-slate-100">
-                    Aguardando interações...
-                  </div>
-                )}
-              </Card>
+            {/* Bottom Row: Jus Postulandi */}
+            <div className="flex flex-col space-y-6 pt-4 border-t border-slate-100">
+               <SectionTitle
+                  title="Jus Postulandi"
+                  subtitle="Demandas protocoladas recentes"
+                  action={<Link href="/justica"><Button variant="link" className="text-primary font-bold px-0">Ver todas</Button></Link>}
+               />
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                 {recentDemands.length > 0 ? recentDemands.map(renderItemCard) : renderGhostCards(3)}
+                 {recentDemands.length === 0 && (
+                   <Card className="col-span-full py-6 text-center bg-primary/5 border-dashed border-primary/20">
+                     <p className="text-sm text-slate-600 mb-3">Nenhuma demanda ativa no momento.</p>
+                     <Link href="/justica/novo"><Button size="sm" className="font-bold">Novo Protocolo</Button></Link>
+                   </Card>
+                 )}
+               </div>
             </div>
+
           </div>
         </div>
       </PageContainer>
