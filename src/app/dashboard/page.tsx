@@ -45,11 +45,13 @@ export default function DashboardPage() {
     strategies: DashboardItem[]
     legalDocs: DashboardItem[]
     justiceDemands: DashboardItem[]
+    insightsCount: number
   }>({
     metrics: [],
     strategies: [],
     legalDocs: [],
-    justiceDemands: []
+    justiceDemands: [],
+    insightsCount: 0
   })
 
   useEffect(() => {
@@ -85,12 +87,16 @@ export default function DashboardPage() {
         const [
           { data: strats },
           { data: legalDocs },
-          { data: justiceDocs }
+          { data: justiceDocs },
+          { data: allStrategiesForInsights }
         ] = await Promise.all([
           supabase.from('strategies').select('*').eq('organization_id', orgId).is('deleted_at', null).order('created_at', { ascending: false }).limit(4),
           supabase.from('generated_documents').select('*').eq('organization_id', orgId).is('deleted_at', null).order('created_at', { ascending: false }).limit(4),
-          supabase.from('justice_demands').select('*').eq('organization_id', orgId).is('deleted_at', null).order('created_at', { ascending: false }).limit(3)
+          supabase.from('justice_demands').select('*').eq('organization_id', orgId).is('deleted_at', null).order('created_at', { ascending: false }).limit(3),
+          supabase.from('strategies').select('content').eq('organization_id', orgId).is('deleted_at', null).eq('status', 'active')
         ])
+
+        const totalInsights = allStrategiesForInsights?.reduce((acc: number, curr: any) => acc + (curr.content?.aiInsights?.length || 0), 0) || 0
 
         setData({
           metrics: [
@@ -122,7 +128,8 @@ export default function DashboardPage() {
             status: d.status,
             date: new Date(d.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
             href: `/justica/${d.id}`
-          }))
+          })),
+          insightsCount: totalInsights
         })
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
@@ -228,7 +235,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex flex-col gap-y-0.5 text-center lg:text-left">
                   <span className="text-[10px] md:text-[11px] font-black text-slate-400 uppercase tracking-widest">IA & Estratégia</span>
-                  <span className="text-base md:text-lg font-bold text-slate-900">4 Insights Gerados</span>
+                  <span className="text-base md:text-lg font-bold text-slate-900">{data.insightsCount} {data.insightsCount === 1 ? 'Insight Gerado' : 'Insights Gerados'}</span>
                 </div>
               </div>
             </div>
