@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, Lightbulb, Scale, LineChart,
-  FileText, Users, LogOut, Gavel, PlayCircle, Share2, X
+  FileText, Users, LogOut, Gavel, PlayCircle, Share2, X, Lock, Landmark
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { supabase } from '@/lib/supabase/client'
@@ -14,9 +14,10 @@ const NAV_ITEMS = [
   { href: '/estrategia',       label: 'Estratégia',    icon: Lightbulb },
   { href: '/juridico',         label: 'Jurídico',      icon: Scale },
   { href: '/justica',          label: 'Jus Postulandi', icon: Gavel },
-  { href: '/financeiro',       label: 'Financeiro',    icon: LineChart },
-  { href: '/pessoas',          label: 'Gestão de Pessoas', icon: Users },
   { href: '/parceiros',        label: 'Partner Hub',   icon: PlayCircle },
+  { href: '/financeiro',       label: 'Financeiro',    icon: LineChart, locked: true },
+  { href: '/pessoas',          label: 'Gestão de Pessoas', icon: Users, locked: true },
+  { href: '/tributario',       label: 'Tributário',    icon: Landmark, locked: true },
 ] as const
 
 interface SidebarProps {
@@ -58,8 +59,27 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex flex-col flex-1 gap-y-[2px] px-3">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+        {NAV_ITEMS.map((item) => {
+          const { href, label, icon: Icon } = item;
+          const locked = 'locked' in item ? item.locked : false;
+          const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href));
+
+          if (locked) {
+            return (
+              <div 
+                key={href} 
+                className="flex items-center justify-between px-3 py-[10px] rounded-lg text-sm transition-all duration-150 font-montserrat opacity-60 cursor-not-allowed"
+                title="Módulo em breve"
+              >
+                <div className="flex items-center gap-x-3 text-white">
+                  <Icon size={18} strokeWidth={2.5} className="text-white" />
+                  <span className="font-bold">{label}</span>
+                </div>
+                <Lock size={14} className="text-white/70" strokeWidth={2.5} />
+              </div>
+            )
+          }
+
           return (
             <Link 
               key={href} 

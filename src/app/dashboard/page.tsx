@@ -197,7 +197,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center lg:items-start gap-4 md:gap-8 w-full">
+            <div className="flex flex-col sm:flex-row items-center gap-4 md:gap-8 w-full">
               <Link href="/estrategia" className="w-full sm:w-auto">
                 <Button size="lg" className="w-full sm:w-auto h-14 md:h-16 shadow-[0_20px_40px_-15px_rgba(37,99,235,0.4)] font-bold px-8 md:px-12 text-lg md:text-xl bg-primary hover:bg-blue-700 transition-all hover:scale-105 active:scale-95 group mx-auto">
                   <Play className="w-5 h-5 md:w-6 md:h-6 mr-3 fill-white group-hover:animate-pulse" /> Iniciar Execução
