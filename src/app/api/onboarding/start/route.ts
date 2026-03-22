@@ -21,16 +21,79 @@ export async function POST(req: Request) {
     const adminClient = createAdminClient() as any
 
     // 1. Get user's organization
-    const { data: membership } = await adminClient
+    let { data: membership } = await adminClient
       .from('memberships')
       .select('organization_id')
       .eq('user_id', user.id)
-      .single() as any
+      .limit(1)
+      .maybeSingle() as any
 
-    const orgId = membership?.organization_id
+    let orgId = membership?.organization_id
 
+    // IF NO ORGANIZATION FOUND: Create a default one to allow onboarding to start
     if (!orgId) {
-      return NextResponse.json({ error: 'Organization not found for user' }, { status: 404 })
+      console.log('User has no organization, creating default one for user:', user.id)
+      
+      const placeholderName = 'Minha Organização'
+      const slug = placeholderName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 50)
+      const uniqueSlug = `${slug}-${Date.now().toString(36)}`
+
+      // a. Create organization
+      const { data: newOrg, error: orgError } = await adminClient
+        .from('organizations')
+        .insert({ 
+          name: placeholderName, 
+          slug: uniqueSlug, 
+          email: user.email, 
+          status: 'trial' 
+        })
+        .select('id')
+        .single() as any
+
+      if (orgError) {
+        console.error('Error creating default organization:', orgError)
+        throw new Error(`Failed to create default organization: ${orgError.message}`)
+      }
+
+      orgId = newOrg.id
+
+      // b. Find admin role
+      const { data: adminRole } = await adminClient
+        .from('roles')
+        .select('id')
+        .eq('name', 'admin')
+        .is('organization_id', null)
+        .single() as any
+
+      if (!adminRole) {
+        console.error('Admin role not found in system')
+        throw new Error('System configuration error: Admin role not found')
+      }
+
+      // c. Create membership
+      const { error: memError } = await adminClient
+        .from('memberships')
+        .insert({
+          organization_id: orgId,
+          user_id: user.id,
+          role_id: adminRole.id,
+          status: 'active',
+          joined_at: new Date().toISOString()
+        })
+
+      if (memError) {
+        console.error('Error creating membership:', memError)
+        throw new Error(`Failed to create membership: ${memError.message}`)
+      }
+
+      // d. Update app_metadata for JWT
+      await adminClient.auth.admin.updateUserById(user.id, {
+        app_metadata: { organization_id: orgId }
+      })
     }
 
     // 2. Check for existing "in_progress" session

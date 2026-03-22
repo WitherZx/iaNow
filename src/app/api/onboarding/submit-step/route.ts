@@ -44,7 +44,29 @@ export async function POST(req: Request) {
 
     if (answerError) {
       // If conflicting or already exists we could just ignore or handle it (the schema allows multiple rows or we could update)
-      // Since there's no unique constraint on question_key alone, we'll just insert.
+    }
+
+    // 2.5 SPECIFIC LOGIC: Update organization name if this is the "company_info" step
+    if (stepKey === 'company_info' && answers.name) {
+      console.log('Update organization info:', step.organization_id)
+      const slug = answers.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 50)
+      const uniqueSlug = `${slug}-${Date.now().toString(36)}`
+
+      const { error: updateError } = await adminClient
+        .from('organizations')
+        .update({ 
+          name: answers.name,
+          slug: uniqueSlug
+        })
+        .eq('id', step.organization_id)
+
+      if (updateError) {
+        console.error('Error updating organization info:', updateError)
+      }
     }
 
     // 3. Mark step as completed
