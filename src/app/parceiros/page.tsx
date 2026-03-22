@@ -335,14 +335,14 @@ export default function PartnerHubPage() {
                   )}
 
                   <div className="p-5 md:p-8 space-y-6">
-                    <div className="flex items-start gap-4 md:gap-5">
+                    <div className="flex items-center gap-4 md:gap-5">
                       <div className={cn(
                         "w-14 h-14 md:w-16 md:h-16 rounded-[20px] md:rounded-[24px] flex items-center justify-center shadow-inner transition-transform group-hover:scale-110 duration-500 shrink-0",
                         partner.type === 'pj' ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"
                       )}>
                         {partner.type === 'pj' ? <Building2 size={24} className="md:size-[32px]" /> : <User size={24} className="md:size-[32px]" />}
                       </div>
-                      <div className="space-y-1.5 pt-1 flex-1">
+                      <div className="space-y-1.5 flex-1">
                         <div className="flex flex-col md:flex-row md:items-center gap-2">
                           <h3 className="font-black text-slate-900 text-lg leading-tight group-hover:text-primary transition-colors line-clamp-1">{partner.name}</h3>
                           {partner.isDefault && (
