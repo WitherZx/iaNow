@@ -50,25 +50,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // FORÇAR ONBOARDING: Se estiver autenticado e acessando uma rota restrita (não pública, não root e não onboarding/api)
-  if (user && !isPublicRoute && !isRootLanding && !request.nextUrl.pathname.startsWith('/onboarding') && !request.nextUrl.pathname.startsWith('/api')) {
-    // Checa se usuário já concluiu o onboarding no db
-    const { data: onboarding } = await supabase
-      .from('onboarding_sessions')
-      .select('status')
-      .eq('user_id', user.id)
-      .eq('status', 'completed')
-      .limit(1)
-      .single()
-
-    // Se ele não tem um onboarding completo associado ao user id, redireciona para lá
-    if (!onboarding) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/onboarding'
-      return NextResponse.redirect(url)
-    }
-  }
-
   return supabaseResponse
 }
 

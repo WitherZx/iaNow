@@ -1,7 +1,18 @@
+'use client'
+
 import { OnboardingWizard } from '@/features/onboarding/components/OnboardingWizard'
 import { BrainCircuit } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function OnboardingPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectPath = searchParams.get('redirect') || '/dashboard'
+
+  const handleComplete = () => {
+    router.push(redirectPath)
+  }
+
   return (
     <div className="min-h-screen w-full flex bg-background overflow-hidden font-montserrat">
       {/* Lado Esquerdo - Ilustrativo */}
@@ -15,10 +26,10 @@ export default function OnboardingPage() {
           
           <div className="space-y-4">
             <h2 className="text-4xl font-extrabold text-white leading-tight animate-in fade-in slide-in-from-right duration-700">
-              Inicializando sua Instância Estratégica
+              Seu Perfil Estratégico
             </h2>
             <p className="text-slate-400 text-lg leading-relaxed animate-in fade-in slide-in-from-right duration-1000 delay-200">
-              Configure seu ambiente corporativo. Respostas precisas geram inteligência altamente agressiva para o seu negócio.
+              Configure seu ambiente para que nossa inteligência sistêmica possa acelerar seus resultados.
             </p>
           </div>
         </div>
@@ -30,7 +41,7 @@ export default function OnboardingPage() {
       {/* Lado Direito - Formulário (Wizard) */}
       <div className="w-full lg:w-1/2 z-10 bg-white h-screen overflow-y-auto flex">
         <div className="w-full max-w-xl m-auto py-16 px-8 lg:px-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <OnboardingWizard />
+          <OnboardingWizard onComplete={handleComplete} />
         </div>
       </div>
     </div>

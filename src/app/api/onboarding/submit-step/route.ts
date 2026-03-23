@@ -46,26 +46,60 @@ export async function POST(req: Request) {
       // If conflicting or already exists we could just ignore or handle it (the schema allows multiple rows or we could update)
     }
 
-    // 2.5 SPECIFIC LOGIC: Update organization name if this is the "company_info" step
-    if (stepKey === 'company_info' && answers.name) {
-      console.log('Update organization info:', step.organization_id)
-      const slug = answers.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '')
-        .slice(0, 50)
-      const uniqueSlug = `${slug}-${Date.now().toString(36)}`
+    // 2.5 SPECIFIC LOGIC: Update organization info based on step
+    if (stepKey === 'company_info' || stepKey === 'company_legal') {
+      console.log(`Syncing ${stepKey} to organization ${step.organization_id}`)
+      
+      const { data: org } = await adminClient
+        .from('organizations')
+        .select('metadata')
+        .eq('id', step.organization_id)
+        .single() as any
+
+      const existingMetadata = org?.metadata || {}
+      let updatePayload: any = {}
+
+      if (stepKey === 'company_info') {
+        const slug = answers.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 50)
+        const uniqueSlug = `${slug}-${Date.now().toString(36)}`
+
+        updatePayload = {
+          name: answers.name,
+          slug: uniqueSlug,
+          document: answers.document,
+          email: answers.email,
+          phone: answers.phone,
+          website: answers.website,
+          metadata: {
+            ...existingMetadata,
+            tipo: answers.type,
+            documento: answers.document,
+            email: answers.email,
+            telefone: answers.phone,
+            website: answers.website
+          }
+        }
+      } else if (stepKey === 'company_legal') {
+        updatePayload = {
+          metadata: {
+            ...existingMetadata,
+            endereco: answers.address,
+            representante_legal: answers.representative
+          }
+        }
+      }
 
       const { error: updateError } = await adminClient
         .from('organizations')
-        .update({ 
-          name: answers.name,
-          slug: uniqueSlug
-        })
+        .update(updatePayload)
         .eq('id', step.organization_id)
 
       if (updateError) {
-        console.error('Error updating organization info:', updateError)
+        console.error(`Error updating organization info for ${stepKey}:`, updateError)
       }
     }
 

@@ -40,31 +40,53 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
         const { data: { session } } = await supabase.auth.getSession()
         if (!session) return
 
-        // 1. Fetch Organization (Perfil Matriz)
+        // 1. Fetch Membership
         const { data: membership } = await supabase
           .from('memberships')
-          .select('organization_id, organizations(*)')
+          .select('organization_id')
           .eq('user_id', session.user.id)
-          .single()
+          .limit(1)
+          .maybeSingle() as any
 
-        const org = (membership as any)?.organizations
-        const matriz: Partner | null = org ? {
-          id: org.id,
-          name: org.name,
-          type: (org.metadata as any)?.tipo || 'pj',
-          document: (org.metadata as any)?.documento || '',
-          email: (org.metadata as any)?.email || session.user.email || '',
-          phone: (org.metadata as any)?.telefone || '',
-          address: (org.metadata as any)?.endereco || '',
+        if (!membership) {
+          setLoading(false)
+          return
+        }
+
+        const orgId = membership.organization_id
+
+        // 2. Fetch Organization Info (Profile Matriz)
+        const { data: orgInfo } = await supabase
+          .from('organizations')
+          .select('*')
+          .eq('id', orgId)
+          .single() as any
+
+        if (!orgInfo) {
+          throw new Error('Organization not found')
+        }
+
+        // Profile Matriz (The organization itself)
+        const matriz: Partner = {
+          id: orgInfo.id,
+          name: orgInfo.name,
+          type: (orgInfo.metadata as any)?.tipo || 'pj',
+          document: (orgInfo.metadata as any)?.documento || orgInfo.document || '',
+          email: (orgInfo.metadata as any)?.email || orgInfo.email || session.user.email || '',
+          phone: (orgInfo.metadata as any)?.telefone || orgInfo.phone || '',
+          address: (orgInfo.metadata as any)?.endereco || orgInfo.address || '',
           isDefault: true,
-          metadata: org.metadata
-        } : null
+          metadata: orgInfo.metadata
+        }
 
-        // 2. Fetch Partners
-        const { data: partnersData } = await supabase
+        // 2. Fetch Partners (Filtered by Organization)
+        const { data: partnersData, error: partnersError } = await supabase
           .from('partners')
           .select('*')
+          .eq('organization_id', orgId)
           .order('name')
+
+        if (partnersError) throw partnersError
 
         const mappedPartners: Partner[] = (partnersData || []).map((p: any) => ({
           id: p.id,
@@ -77,7 +99,8 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
           metadata: p.metadata
         }))
 
-        setPartners(matriz ? [matriz, ...mappedPartners] : mappedPartners)
+        // Combined list: Matriz + Partners
+        setPartners([matriz, ...mappedPartners])
       } catch (err) {
         console.error('Error loading partners for selector:', err)
       } finally {
@@ -134,7 +157,7 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
                 autoFocus
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Pesquisar parceiro..."
+                placeholder="Pesquisar contato..."
                 className="w-full h-11 pl-11 pr-4 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all placeholder:text-slate-300"
               />
             </div>
@@ -142,7 +165,7 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
 
           <div className="max-h-[280px] overflow-y-auto custom-scrollbar p-2">
             {loading ? (
-              <div className="p-8 text-center text-slate-400 font-bold text-xs uppercase tracking-widest animate-pulse">Buscando parceiros...</div>
+              <div className="p-8 text-center text-slate-400 font-bold text-xs uppercase tracking-widest animate-pulse">Buscando contatos...</div>
             ) : filteredPartners.length > 0 ? (
               <div className="space-y-1">
                 {filteredPartners.map(partner => (
@@ -184,9 +207,9 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
               </div>
             ) : (
               <div className="p-10 text-center space-y-3">
-                <p className="text-slate-400 font-bold text-sm">Nenhum parceiro encontrado.</p>
+                <p className="text-slate-400 font-bold text-sm">Nenhum contato encontrado.</p>
                 <a href="/parceiros" className="inline-flex items-center gap-2 text-primary text-xs font-black uppercase hover:underline">
-                  <UserPlus size={14} /> Cadastrar Novo Parceiro
+                  <UserPlus size={14} /> Cadastrar Novo Contato
                 </a>
               </div>
             )}

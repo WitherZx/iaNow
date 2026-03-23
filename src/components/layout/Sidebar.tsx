@@ -12,11 +12,11 @@ import { supabase } from '@/lib/supabase/client'
 const NAV_ITEMS = [
   { href: '/dashboard',        label: 'Dashboard',     icon: LayoutDashboard },
   { href: '/estrategia',       label: 'Estratégia',    icon: Lightbulb },
-  { href: '/juridico',         label: 'Jurídico',      icon: Scale },
-  { href: '/justica',          label: 'Jus Postulandi', icon: Gavel },
-  { href: '/parceiros',        label: 'Partner Hub',   icon: PlayCircle },
+  { href: '/juridico',         label: 'Contratos',      icon: FileText },
+  { href: '/justica',          label: 'Processos',     icon: Gavel },
+  { href: '/parceiros',        label: 'Hub de Contatos', icon: Users },
   { href: '/financeiro',       label: 'Financeiro',    icon: LineChart, locked: true },
-  { href: '/pessoas',          label: 'Gestão de Pessoas', icon: Users, locked: true },
+  { href: '/pessoas',          label: 'Gestão de Pessoas', icon: Share2, locked: true },
   { href: '/tributario',       label: 'Tributário',    icon: Landmark, locked: true },
 ] as const
 

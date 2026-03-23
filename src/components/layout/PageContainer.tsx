@@ -44,7 +44,7 @@ export function PageContainer({
             )}
           </div>
           {!centered && action && (
-            <div className="w-full lg:w-auto shrink-0 flex items-center">
+            <div className="w-full lg:w-auto shrink-0 flex items-center justify-center lg:justify-start">
               {action}
             </div>
           )}

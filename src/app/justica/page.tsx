@@ -21,6 +21,8 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { CTAButton } from '@/components/shared/CTAButton'
 import { DocumentCard } from '@/components/shared/DocumentCard'
 import { Card } from '@/components/shared/Card'
+import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
+import { useRouter } from 'next/navigation'
 
 interface Demand {
   id: string
@@ -31,9 +33,20 @@ interface Demand {
 }
 
 export default function JusticaPage() {
+  const router = useRouter()
   const supabase = createClient()
   const [demands, setDemands] = useState<Demand[]>([])
   const [loading, setLoading] = useState(true)
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const { needsOnboarding } = useOnboardingGuard()
+
+  const handleNewProtocol = () => {
+    if (needsOnboarding) {
+      router.push('/onboarding?redirect=/justica/novo')
+    } else {
+      router.push('/justica/novo')
+    }
+  }
 
   useEffect(() => {
     async function loadDemands() {
@@ -85,14 +98,12 @@ export default function JusticaPage() {
   return (
     <DashboardLayout>
       <PageContainer 
-        title="JUS POSTULANDI" 
-        subtitle="Democratização do acesso à justiça para demandas de até 20 salários mínimos."
+        title="PROCESSOS JUDICIAIS" 
+        subtitle="Democratização do acesso à justiça para demandas de até 20 salários mínimos via JEC."
         action={
-          <Link href="/justica/novo" className="w-full lg:w-auto">
-            <CTAButton icon={PlusCircle}>
-              Novo Protocolo
-            </CTAButton>
-          </Link>
+          <CTAButton icon={PlusCircle} onClick={handleNewProtocol} className="w-full lg:w-auto">
+            Novo Processo
+          </CTAButton>
         }
       >
         
@@ -107,7 +118,7 @@ export default function JusticaPage() {
               title="Nenhuma demanda ativa"
               description="Você ainda não iniciou nenhum protocolo via Jus Postulandi. Comece agora para resolver pequenos conflitos sem advogado."
               actionText="Iniciar Primeiro Caso"
-              actionHref="/justica/novo"
+              onClick={handleNewProtocol}
               className="mt-8"
             />
           </div>

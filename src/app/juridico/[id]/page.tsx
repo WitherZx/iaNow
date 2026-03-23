@@ -50,6 +50,7 @@ export default function ViewDocumentPage() {
   const [refining, setRefining] = useState(false)
   const [refinePrompt, setRefinePrompt] = useState('')
   const [resolvedSuggestions, setResolvedSuggestions] = useState<string[]>([])
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null
@@ -324,7 +325,7 @@ export default function ViewDocumentPage() {
               </Button>
             </Card>
           )}
-          {/* SUGESTÕES */}
+        {/* SUGESTÕES */}
           {audit?.suggestions?.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 px-1 text-[10px] font-black uppercase text-slate-400 tracking-widest">
@@ -342,6 +343,88 @@ export default function ViewDocumentPage() {
                     variant="primary"
                   />
                 ))}
+            </div>
+          )}
+
+          {/* CAMPOS DINÂMICOS */}
+          {!isGenerating && !isEditing && (
+            <div className="space-y-4 pt-6 border-t border-slate-100">
+              <div className="flex items-center gap-2 px-1 text-[11px] font-black text-slate-400">
+                <Pencil className="w-3.5 h-3.5" /> Preencher Variáveis
+              </div>
+              
+              <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-4">
+                {(() => {
+                  const tokens = Array.from(new Set(doc.content?.match(/\[(.*?)\]/g) || [])) as string[]
+                  if (tokens.length === 0) return <p className="text-[10px] text-slate-400 text-center py-2 font-bold uppercase tracking-wider">Nenhum campo variável detectado</p>
+                  
+                  return (
+                    <>
+                      <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                        {tokens.map((token: string) => {
+                          const rawLabel = token.slice(1, -1)
+                          // Mapeamento de labels comuns para serem mais amigáveis e evitar confusão
+                          const labelMap: Record<string, string> = {
+                            'DATA': 'Data de assinatura',
+                            'LOCAL': 'Cidade/UF',
+                            'VALOR': 'Valor do contrato',
+                            'FORO': 'Comarca de eleição',
+                            'INSERIR DADOS BANCÁRIOS': 'Dados bancários para pagamento',
+                            'ESPECIFICAR FORMA DE PAGAMENTO': 'Forma de pagamento (Pix, Transferência...)',
+                            'OPERADOR/CONTROLADOR': 'Papel na LGPD (Ex: Controlador ou Operador)'
+                          }
+                          const label = labelMap[rawLabel.toUpperCase()] || rawLabel
+
+                          const isDate = rawLabel.toUpperCase() === 'DATA'
+
+                          const handleInputChange = (val: string) => {
+                            let formatted = val
+                            if (isDate) {
+                              const digits = val.replace(/\D/g, '').substring(0, 8)
+                              if (digits.length <= 2) formatted = digits
+                              else if (digits.length <= 4) formatted = `${digits.substring(0, 2)}/${digits.substring(2)}`
+                              else formatted = `${digits.substring(0, 2)}/${digits.substring(2, 4)}/${digits.substring(4)}`
+                            }
+                            setFieldValues((prev: Record<string, string>) => ({ ...prev, [token]: formatted }))
+                          }
+
+                          return (
+                            <div key={token} className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-slate-500 ml-1">{label}</label>
+                              <input
+                                type="text"
+                                placeholder={isDate ? new Date().toLocaleDateString('pt-BR') : `...`}
+                                value={fieldValues[token] || ''}
+                                onChange={(e) => handleInputChange(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 h-10 text-[12px] font-medium focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all text-slate-700 placeholder:text-slate-300"
+                              />
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <Button
+                        onClick={async () => {
+                          const filledData = Object.entries(fieldValues)
+                            .filter(([_, v]) => v.trim())
+                            .map(([k, v]) => `${k}: ${v}`)
+                            .join('\n')
+                          
+                          if (!filledData) return
+
+                          const aiPrompt = `Por favor, preencha as variáveis abaixo no contrato de forma contextualizada. Integre as informações no texto removendo os colchetes e garantindo que o fluxo jurídico e a gramática estejam perfeitos:\n\n${filledData}\n\nLembre-se: Remova também qualquer bloco de assinatura ou data ao final do documento, conforme as novas diretrizes de assinatura digital.`
+                          
+                          await handleRefine(aiPrompt)
+                          setFieldValues({})
+                        }}
+                        disabled={Object.values(fieldValues).filter(v => v.trim()).length === 0 || refining || saving}
+                        className="w-full rounded-xl bg-slate-900 text-white font-black text-[11px] h-11 hover:bg-black transition-all shadow-lg shadow-slate-200"
+                      >
+                        {refining ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Aplicar Alterações'}
+                      </Button>
+                    </>
+                  )
+                })()}
+              </div>
             </div>
           )}
         </>

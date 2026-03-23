@@ -14,16 +14,22 @@ export async function POST(req: Request) {
 
     const adminClient = createAdminClient()
     
-    // Buscar a organização do usuário
-    let { data: membership } = await adminClient
+    // Buscar a organização do usuário (mais robusto)
+    const { data: membership, error: memberError } = await adminClient
       .from('memberships')
       .select('organization_id')
       .eq('user_id', user.id)
-      .single() as any
+      .limit(1)
+      .maybeSingle() as any
 
-    let orgId = membership?.organization_id
+    if (memberError) {
+      console.error('Membership Fetch Error:', memberError)
+      return NextResponse.json({ error: 'Erro ao buscar organização do usuário' }, { status: 500 })
+    }
+
+    const orgId = membership?.organization_id
     if (!orgId) {
-       return NextResponse.json({ error: 'Organization not found' }, { status: 400 })
+       return NextResponse.json({ error: 'Sua conta não possui uma organização vinculada. Complete o onboarding.' }, { status: 400 })
     }
 
     const body = await req.json()
@@ -47,6 +53,7 @@ export async function POST(req: Request) {
         1. Mantanha o tom formal e a validade jurídica brasileira.
         2. Retorne o contrato COMPLETO com as alterações aplicadas.
         3. ${skipAudit ? 'Não se preocupe com uma nova auditoria detalhada agora.' : 'Forneça uma nova auditoria de risco baseada no texto alterado.'}
+        4. PROIBIDO fornecer qualquer bloco de assinatura ao final do documento. Não inclua linhas para assinatura, nomes das partes para rubricar ou campos como "[Local], [Data]". O documento deve encerrar na última cláusula, pois a assinatura será feita via plataforma digital externa.
         
         FORMATO DE SAÍDA (JSON):
         {
@@ -136,6 +143,7 @@ Siga rigorosamente as instruções abaixo:
   * Confidencialidade (quando relevante)
   * Proteção de dados (LGPD, se houver dados pessoais)
   * Foro
+* PROIBIDO incluir blocos de assinatura ao final do documento. Não coloque linhas pontilhadas, campos de data (ex: "[Local], [Data]") ou espaços para nomes dos contratantes assinarem. O contrato deve terminar logo após a última cláusula, pois a assinatura ocorrerá em plataforma digital externa separada.
 * Sempre que houver risco jurídico relevante:
   * Inclua cláusulas de proteção adicionais automaticamente
 * Nunca invente informações não fornecidas se forem cruciais.
@@ -168,16 +176,16 @@ Siga rigorosamente as instruções abaixo:
 * Use escape de aspas e quebras de linha corretas para o JSON no campo 'contract'.`
 
     const partesStr = `PARTE A (${partyA?.role || 'Polo Ativo'}):
-Nome/Razão Social: ${partyA?.name}
-Documento: ${partyA?.document} | RG/IE: ${partyA?.rg}
-Ficha: ${partyA?.nationality}, ${partyA?.maritalStatus}, ${partyA?.profession}, Nasc: ${partyA?.birthDate}
-Endereço: ${partyA?.address}
+Nome/Razão Social: ${partyA?.name || 'Não informado'}
+Documento: ${partyA?.document || 'Não informado'} ${partyA?.rg ? `| RG/IE: ${partyA.rg}` : ''}
+Ficha: ${[partyA?.nationality, partyA?.maritalStatus, partyA?.profession].filter(Boolean).join(', ') || 'Informações básicas não detalhadas'} ${partyA?.birthDate ? `| Nasc: ${partyA.birthDate}` : ''}
+Endereço: ${partyA?.address || 'Não informado'}
 
 PARTE B (${partyB?.role || 'Polo Passivo'}):
-Nome/Razão Social: ${partyB?.name}
-Documento: ${partyB?.document} | RG/IE: ${partyB?.rg}
-Ficha: ${partyB?.nationality}, ${partyB?.maritalStatus}, ${partyB?.profession}, Nasc: ${partyB?.birthDate}
-Endereço: ${partyB?.address}`
+Nome/Razão Social: ${partyB?.name || 'Não informado'}
+Documento: ${partyB?.document || 'Não informado'} ${partyB?.rg ? `| RG/IE: ${partyB.rg}` : ''}
+Ficha: ${[partyB?.nationality, partyB?.maritalStatus, partyB?.profession].filter(Boolean).join(', ') || 'Informações básicas não detalhadas'} ${partyB?.birthDate ? `| Nasc: ${partyB.birthDate}` : ''}
+Endereço: ${partyB?.address || 'Não informado'}`
 
     const aiPrompt = `POR FAVOR, GERE O DOCUMENTO ABAIXO COM BASE NOS DADOS INJETADOS NO SEU PADRÃO:
 

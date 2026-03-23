@@ -38,16 +38,30 @@ import { useEffect } from 'react'
 import { cn } from '@/utils/cn'
 import { Label } from '@/components/shared/Label'
 import { toast } from 'sonner'
+import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
+import { useRouter } from 'next/navigation'
 
 export default function PartnerHubPage() {
   const { session } = useAuth()
+  const router = useRouter()
+  const { needsOnboarding, isLoading: guardLoading } = useOnboardingGuard()
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'all' | 'pf' | 'pj'>('all')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [partners, setPartners] = useState<any[]>([])
   const [orgInfo, setOrgInfo] = useState<any>(null)
+  const [counts, setCounts] = useState<{contracts: Record<string, number>, cases: Record<string, number>}>({
+    contracts: {},
+    cases: {}
+  })
   const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    if (needsOnboarding === true) {
+      router.push('/onboarding?redirect=/parceiros')
+    }
+  }, [needsOnboarding, router])
 
   // Form State
   const [newPartner, setNewPartner] = useState({
@@ -75,23 +89,51 @@ export default function PartnerHubPage() {
           .limit(1)
           .maybeSingle() as any
           
-        if (membership?.organization_id) {
-          const { data: orgData } = await supabase
-            .from('organizations')
-            .select('*')
-            .eq('id', membership.organization_id)
-            .single() as any
-          
-          if (orgData) setOrgInfo(orgData)
-        }
+        const orgId = membership?.organization_id
 
-        // 2. Fetch Partners
-        const { data: partnersData } = await supabase
-          .from('partners')
-          .select('*')
-          .order('created_at', { ascending: false })
+        if (orgId) {
+          // 2. Fetch data in parallel for better performance
+          const res = await Promise.all([
+            supabase.from('organizations').select('*').eq('id', orgId).single(),
+            supabase.from('partners').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }),
+            supabase.from('generated_documents').select('metadata').eq('organization_id', orgId).is('deleted_at', null),
+            supabase.from('justice_demands').select('metadata').eq('organization_id', orgId).is('deleted_at', null)
+          ]) as any[]
           
-        setPartners(partnersData || [])
+          const [orgRes, partnersRes, contractsRes, demandsRes] = res
+          
+          if (orgRes.data) setOrgInfo(orgRes.data)
+
+          // 3. Process Counts
+          const contractMap: Record<string, number> = {}
+          const caseMap: Record<string, number> = {}
+
+          contractsRes.data?.forEach((doc: any) => {
+            const pA = doc.metadata?.requestPayload?.partyA?.id
+            const pB = doc.metadata?.requestPayload?.partyB?.id
+            if (pA) contractMap[pA] = (contractMap[pA] || 0) + 1
+            if (pB) contractMap[pB] = (contractMap[pB] || 0) + 1
+          })
+
+          demandsRes.data?.forEach((dem: any) => {
+            const authId = dem.metadata?.authorId
+            const defId = dem.metadata?.defendantId
+            if (authId) caseMap[authId] = (caseMap[authId] || 0) + 1
+            if (defId) caseMap[defId] = (caseMap[defId] || 0) + 1
+          })
+
+          setCounts({ contracts: contractMap, cases: caseMap })
+
+          const processedPartners = (partnersRes.data || []).map((p: any) => ({
+            ...p,
+            contractsCount: contractMap[p.id] || 0,
+            casesCount: caseMap[p.id] || 0
+          }))
+            
+          setPartners(processedPartners)
+        } else {
+          setPartners([])
+        }
       } catch (err) {
         console.error('Error loading partners:', err)
       } finally {
@@ -107,7 +149,7 @@ export default function PartnerHubPage() {
   const allPartners = [
     ...(orgInfo ? [{
       id: orgInfo.id,
-      type: (orgInfo.metadata as any)?.tipo || 'pj',
+      type: (orgInfo.metadata as any)?.type || (orgInfo.metadata as any)?.tipo || 'pj',
       name: orgInfo.name,
       document: (orgInfo.metadata as any)?.documento || (orgInfo as any).category || '',
       email: (orgInfo.metadata as any)?.email || session?.user?.email || '',
@@ -118,8 +160,8 @@ export default function PartnerHubPage() {
       representative_cpf: (orgInfo.metadata as any)?.representante_legal?.cpf || '',
       isDefault: true,
       metadata: orgInfo.metadata,
-      contractsCount: 0,
-      casesCount: 0
+      contractsCount: counts.contracts[orgInfo.id] || 0,
+      casesCount: counts.cases[orgInfo.id] || 0
     }] : []),
     ...partners.map(p => ({
       ...p,
@@ -134,8 +176,8 @@ export default function PartnerHubPage() {
       representative: (p.metadata as any)?.representante_legal?.nome || '',
       representative_cpf: (p.metadata as any)?.representante_legal?.cpf || '',
       isDefault: false,
-      contractsCount: 0,
-      casesCount: 0
+      contractsCount: p.contractsCount || 0,
+      casesCount: p.casesCount || 0
     }))
   ]
 
@@ -217,6 +259,7 @@ export default function PartnerHubPage() {
       } else {
         // Insert Partner
         const { error } = await (supabase.from('partners') as any).insert({
+          organization_id: orgInfo?.id,
           name: newPartner.name,
           slug: newPartner.name.toLowerCase().replace(/ /g, '-') + '-' + Math.random().toString(36).substring(7),
           contact_email: newPartner.email,
@@ -251,6 +294,19 @@ export default function PartnerHubPage() {
     return p.type === activeTab
   })
 
+  if (loading || guardLoading || needsOnboarding === true) {
+    return (
+      <DashboardLayout>
+        <PageContainer>
+          <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-slate-500 font-medium">Carregando Hub de Parceiros...</p>
+          </div>
+        </PageContainer>
+      </DashboardLayout>
+    )
+  }
+
   return (
     <DashboardLayout>
       <PageContainer>
@@ -258,14 +314,14 @@ export default function PartnerHubPage() {
           
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-y-8 text-center lg:text-left">
             <div className="space-y-2">
-              <h1 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tight">Hub de Parceiros & CRM</h1>
-              <p className="text-slate-500 text-sm md:text-base font-medium max-w-xl mx-auto lg:mx-0">Gerencie seus clientes e fornecedores integrados à inteligência sistêmica.</p>
+              <h1 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tight">Hub de Contatos & CRM</h1>
+              <p className="text-slate-500 text-sm md:text-base font-medium max-w-xl mx-auto lg:mx-0">Gerencie as relações da sua empresa integradas à inteligência sistêmica.</p>
             </div>
             <Button 
               onClick={() => setIsModalOpen(true)}
               className="h-12 px-8 rounded-2xl bg-primary text-white font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all w-full lg:w-auto"
             >
-              <Plus className="w-5 h-5 mr-2" /> Novo Parceiro
+              <Plus className="w-5 h-5 mr-2" /> Novo Contato
             </Button>
           </div>
 
@@ -414,9 +470,9 @@ export default function PartnerHubPage() {
                     >
                       Editar
                     </Button>
-                    <Link href={partner.type === 'pj' ? `/juridico/novo?partnerId=${partner.id}` : '#'} className="flex-1">
+                    <Link href={`/parceiros/${partner.id}`} className="flex-1">
                       <Button variant="outline" size="sm" className="w-full h-10 text-[9px] md:text-[10px] font-black uppercase tracking-widest border-slate-200 hover:bg-white active:scale-95 transition-all">
-                        Documento <Plus size={12} className="ml-1" />
+                        Ver itens vinculados
                       </Button>
                     </Link>
                     {!partner.isDefault && (
@@ -515,7 +571,25 @@ export default function PartnerHubPage() {
                         <Label>{newPartner.type === 'pj' ? 'CNPJ' : 'CPF'}</Label>
                         <input 
                           value={newPartner.document}
-                          onChange={e => setNewPartner({...newPartner, document: e.target.value})}
+                          onChange={e => {
+                            const val = e.target.value.replace(/\D/g, '')
+                            let formatted = val
+                            if (newPartner.type === 'pf') {
+                              formatted = val
+                                .replace(/(\d{3})(\d)/, '$1.$2')
+                                .replace(/(\d{3})(\d)/, '$1.$2')
+                                .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+                                .slice(0, 14)
+                            } else {
+                              formatted = val
+                                .replace(/(\d{2})(\d)/, '$1.$2')
+                                .replace(/(\d{3})(\d)/, '$1.$2')
+                                .replace(/(\d{3})(\d)/, '$1/$2')
+                                .replace(/(\d{4})(\d{1,2})/, '$1-$2')
+                                .slice(0, 18)
+                            }
+                            setNewPartner({...newPartner, document: formatted})
+                          }}
                           placeholder={newPartner.type === 'pj' ? '00.000.000/0001-00' : '000.000.000-00'} 
                           className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 font-bold text-slate-900 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all outline-none placeholder:text-slate-400 shadow-sm" 
                         />
@@ -524,8 +598,19 @@ export default function PartnerHubPage() {
                         <Label>Telefone</Label>
                         <input 
                           value={newPartner.phone}
-                          onChange={e => setNewPartner({...newPartner, phone: e.target.value})}
-                          placeholder="+55 (11) 99999-9999" 
+                          onChange={e => {
+                            const val = e.target.value.replace(/\D/g, '')
+                            let formatted = val
+                            if (val.length > 10) {
+                              formatted = val.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
+                            } else if (val.length > 5) {
+                              formatted = val.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3')
+                            } else if (val.length > 2) {
+                              formatted = val.replace(/(\d{2})(\d{0,5})/, '($1) $2')
+                            }
+                            setNewPartner({...newPartner, phone: formatted.slice(0, 15)})
+                          }}
+                          placeholder="(11) 99999-9999" 
                           className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 font-bold text-slate-900 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all outline-none placeholder:text-slate-400 shadow-sm" 
                         />
                       </div>
@@ -542,10 +627,10 @@ export default function PartnerHubPage() {
                       <div className="space-y-3 col-span-full">
                         <Label>Site / URL (Opcional)</Label>
                         <input 
-                          type="url"
+                          type="text"
                           value={newPartner.website}
                           onChange={e => setNewPartner({...newPartner, website: e.target.value})}
-                          placeholder="https://www.empresa.com" 
+                          placeholder="exemplo.com.br" 
                           className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 font-bold text-slate-900 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all outline-none placeholder:text-slate-400 shadow-sm" 
                         />
                       </div>
@@ -580,7 +665,15 @@ export default function PartnerHubPage() {
                             <input 
                               placeholder="..." 
                               value={newPartner.representative.cpf}
-                              onChange={e => setNewPartner({...newPartner, representative: {...newPartner.representative, cpf: e.target.value}})}
+                              onChange={e => {
+                                const val = e.target.value.replace(/\D/g, '')
+                                const formatted = val
+                                  .replace(/(\d{3})(\d)/, '$1.$2')
+                                  .replace(/(\d{3})(\d)/, '$1.$2')
+                                  .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+                                  .slice(0, 14)
+                                setNewPartner({...newPartner, representative: {...newPartner.representative, cpf: formatted}})
+                              }}
                               className="w-full bg-white border border-slate-200 rounded-xl h-14 px-5 text-sm font-bold shadow-inner outline-none placeholder:text-slate-400 focus:border-primary transition-all text-slate-900" 
                             />
                           </div>

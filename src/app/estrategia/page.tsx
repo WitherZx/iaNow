@@ -25,6 +25,8 @@ import Link from 'next/link'
 import { cn } from '@/utils/cn'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { CTAButton } from '@/components/shared/CTAButton'
+import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
+import { useRouter } from 'next/navigation'
 
 interface Strategy {
   id: string
@@ -37,11 +39,22 @@ interface Strategy {
 }
 
 export default function EstrategiaPage() {
+  const router = useRouter()
   const { session } = useAuth()
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [filter, setFilter] = useState<'all' | 'ready' | 'generating'>('all')
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const { needsOnboarding, isLoading: isLoadingOnboarding } = useOnboardingGuard()
+
+  const handleNewStrategy = () => {
+    if (needsOnboarding) {
+      router.push('/onboarding?redirect=/estrategia/novo')
+    } else {
+      router.push('/estrategia/novo')
+    }
+  }
 
   useEffect(() => {
     async function fetchStrategies() {
@@ -102,11 +115,9 @@ export default function EstrategiaPage() {
         title="CENTRAL DE ESTRATÉGIA" 
         subtitle="Gerencie seus planos de ação e diretrizes geradas por inteligência sistêmica."
         action={
-          <Link href="/estrategia/novo" className="w-full lg:w-auto">
-            <CTAButton icon={PlusCircle}>
-              Novo Diagnóstico
-            </CTAButton>
-          </Link>
+          <CTAButton icon={PlusCircle} onClick={handleNewStrategy} className="w-full lg:w-auto">
+            Novo Diagnóstico
+          </CTAButton>
         }
       >
         <div className="flex flex-col gap-y-8">
@@ -306,7 +317,7 @@ export default function EstrategiaPage() {
                 title="Nenhuma estratégia gerada"
                 description="Sua inteligência sistêmica ainda não possui dados suficientes para traçar um plano de ação. Comece seu primeiro diagnóstico agora."
                 actionText="Gerar Primeiro Diagnóstico"
-                actionHref="/estrategia/novo"
+                onClick={handleNewStrategy}
               />
             )}
           </div>

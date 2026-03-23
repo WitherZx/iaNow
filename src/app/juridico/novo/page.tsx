@@ -10,6 +10,7 @@ import { StepBadge } from '@/components/shared/StepBadge'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { PartnerSelector } from '@/components/shared/PartnerSelector'
+import { toast } from 'sonner'
 
 const COMPLEXITY_LEVELS = [
   { id: 'básico', title: 'Básico', desc: 'Direto e simplificado, focado no essencial ágil.', icon: Zap },
@@ -68,12 +69,16 @@ export default function NewDocumentPage() {
         })
       })
 
-      if (!res.ok) throw new Error('Falha ao gerar o contrato')
-
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Falha ao processar a geração do contrato')
+      }
+ 
       const data = await res.json()
       window.location.href = `/juridico/${data.documentId}`
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
+      toast.error(e.message || 'Erro inesperado!')
       setIsSubmitting(false)
     }
   }
@@ -121,7 +126,7 @@ export default function NewDocumentPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {/* Tipo de Contrato */}
                   <div className="flex flex-col gap-y-3">
-                    <Label required>Tipo de Documento</Label>
+                    <Label required tooltip="Informe o tipo contratual. Ex: Prestarão de Serviços, NDA, Acordo de Sócios, Contrato de Locação, Termo de Parceria.">Tipo de Documento</Label>
                     <input 
                       type="text" value={tipoContrato} onChange={(e) => setTipoContrato(e.target.value)}
                       placeholder="Ex: Prestação de Serviços, Acordo de Sócios, NDA"
@@ -131,7 +136,7 @@ export default function NewDocumentPage() {
                   
                   {/* Perfil das Partes */}
                   <div className="flex flex-col gap-y-3">
-                    <Label required>Perfil das Partes</Label>
+                    <Label required tooltip="Descreva quem são os envolvidos (Pessoa Física ou Jurídica) e a natureza da relação. Ex: Empresa fornecedora de software (B2B) vs. cliente empresa de varejo.">Perfil das Partes</Label>
                     <input 
                       type="text" value={perfilPartes} onChange={(e) => setPerfilPartes(e.target.value)}
                       placeholder="Ex: Empresa de Software (B2B) vs Cliente Corporativo"
@@ -143,7 +148,7 @@ export default function NewDocumentPage() {
                 {/* Objetivo Principal e Foro */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                   <div className="flex flex-col gap-y-3 md:col-span-2">
-                    <Label required>Objetivo Financeiro / Legal do Documento</Label>
+                    <Label required tooltip="Explique o que este documento deve garantir juridicamente: valores acordados, prazo de vigência, obrigações principais. Ex: Regular prestação de serviços mensais de R$ 10.000,00 por 12 meses.">Objetivo Financeiro / Legal do Documento</Label>
                     <textarea 
                       value={objetivo} onChange={(e) => setObjetivo(e.target.value)}
                       placeholder="Ex: Regular a prestação de serviços continuados sob o framework ágil no valor mensal de R$ 10.000,00."
@@ -151,7 +156,7 @@ export default function NewDocumentPage() {
                     />
                   </div>
                   <div className="flex flex-col gap-y-3">
-                    <Label required>Foro / Comarca</Label>
+                    <Label required tooltip="Local (cidade e estado) onde eventuais disputas judiciais serão julgadas. Geralmente é a cidade-sede de uma das partes. Ex: Comarca de Curitiba/PR.">Foro / Comarca</Label>
                     <textarea 
                       value={foro} onChange={(e) => setForo(e.target.value)}
                       placeholder="Ex: Comarca de São Paulo/SP"
@@ -162,7 +167,7 @@ export default function NewDocumentPage() {
                 
                 {/* Nível de Complexidade */}
                 <div className="flex flex-col gap-y-5 pt-4">
-                  <Label>Nível de Blindagem e Complexidade</Label>
+                  <Label tooltip="Básico = simples e ágil, ideal para acordos rápidos. Intermediário = cláusulas de proteção balanceadas. Avançado = máxima proteção, ideal para contratos de alto valor ou risco elevado.">Nível de Blindagem e Complexidade</Label>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {COMPLEXITY_LEVELS.map(lvl => {
                       const isActive = nivel === lvl.id
@@ -241,10 +246,10 @@ export default function NewDocumentPage() {
                       </div>
 
                       <PartnerSelector 
-                        label="Selecionar Parceiro Registrado"
+                        label="Selecionar Contato Registrado"
                         onSelect={(p) => handleSelectPartner('A', p)}
                         selectedId={partyA.id}
-                        placeholder="Buscar no Partner Hub..."
+                        placeholder="Buscar no Hub de Contatos..."
                       />
 
                       {partyA.id && (
@@ -283,10 +288,10 @@ export default function NewDocumentPage() {
                       </div>
 
                       <PartnerSelector 
-                        label="Selecionar Parceiro Registrado"
+                        label="Selecionar Contato Registrado"
                         onSelect={(p) => handleSelectPartner('B', p)}
                         selectedId={partyB.id}
-                        placeholder="Buscar no Partner Hub..."
+                        placeholder="Buscar no Hub de Contatos..."
                       />
 
                       {partyB.id && (

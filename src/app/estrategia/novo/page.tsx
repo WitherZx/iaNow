@@ -39,19 +39,21 @@ function CustomSelect({
   value,
   onChange,
   options,
-  label
+  label,
+  tooltip
 }: {
   value: string,
   onChange: (val: string) => void,
   options: string[],
-  label: string
+  label: string,
+  tooltip?: string
 }) {
   const [isOpen, setIsOpen] = useState(false)
 
   return (
     <div className="relative">
       <div className="flex flex-col gap-y-4">
-        <Label>{label}</Label>
+        <Label tooltip={tooltip}>{label}</Label>
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
@@ -65,7 +67,7 @@ function CustomSelect({
       {isOpen && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setIsOpen(false)} />
-          <div className="absolute top-[calc(100%+8px)] left-0 w-full bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 z-[70] animate-in fade-in zoom-in-95 duration-200">
+          <div className="absolute top-[calc(100%+8px)] left-0 w-full bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 z-[70] animate-in fade-in zoom-in-95 duration-200 max-h-[300px] overflow-y-auto">
             {options.map((option) => (
               <button
                 key={option}
@@ -159,37 +161,9 @@ export default function NovoDiagnosticoPage() {
       <PageContainer centered>
         <div className="max-w-5xl mx-auto flex flex-col gap-y-12 pb-20">
 
-          {/* Progress Bar Container */}
-          <div className="relative px-2 sm:px-0">
-            {/* Progress Line */}
-            <div className="absolute top-[20px] sm:top-[32px] left-0 w-full h-0.5 bg-slate-200 -translate-y-1/2" />
-            
-            <div className="relative flex justify-between items-start">
-              {STEPS.map((step, idx) => (
-                <div key={step.id} className="flex flex-col items-center gap-y-1 sm:gap-y-3 relative z-10 w-16 sm:w-24 transition-all">
-                  <div className={cn(
-                    "w-10 h-10 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center transition-all duration-500 border-4 border-[#e2e8f0] sm:border-[6px] relative z-20",
-                    idx === currentStep
-                      ? "bg-primary text-white border-primary/20 shadow-lg shadow-primary/20 scale-110"
-                      : idx < currentStep
-                        ? "bg-emerald-500 text-white border-emerald-500/20"
-                        : "bg-white text-slate-300 border-white shadow-sm"
-                  )}>
-                    {idx < currentStep ? <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" /> : <step.icon className="w-5 h-5 sm:w-6 sm:h-6" />}
-                  </div>
-                  <span className={cn(
-                    "text-[8px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest transition-all text-center",
-                    idx === currentStep ? "text-primary scale-110 sm:scale-100" : "text-slate-400 hidden sm:block"
-                  )}>
-                    {step.title}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
 
           {/* Form Content */}
-          <Card className="min-h-[400px] p-5 sm:p-8 md:p-12 border-slate-100 shadow-sm relative group overflow-hidden">
+          <Card className="min-h-[400px] p-5 sm:p-8 md:p-12 border-slate-100 shadow-sm relative group overflow-visible">
             <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-primary/5 rounded-full blur-2xl md:blur-3xl -mr-16 -mt-16 md:-mr-32 md:-mt-32 pointer-events-none" />
             
             <div className="absolute top-0 right-0 p-8 hidden md:block">
@@ -205,10 +179,9 @@ export default function NovoDiagnosticoPage() {
                   </p>
                 </div>
 
-                {/* Seletor do Partner Hub */}
                 <div className="pt-4 pb-8 border-b border-slate-100">
                   <PartnerSelector 
-                    label="Puxar Dados do Partner Hub"
+                    label="Puxar Dados do Hub de Contatos"
                     onSelect={handleSelectPartner}
                     placeholder="Buscar histórico ou empresa matriz..."
                   />
@@ -219,7 +192,7 @@ export default function NovoDiagnosticoPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
                   <div className="flex flex-col gap-y-4">
-                    <Label>Nome da Organização</Label>
+                    <Label tooltip="Razão social ou nome fantasia da sua organização. Será o identificador principal no dashboard.">Nome da Organização</Label>
                     <input
                       type="text"
                       value={formData.companyName}
@@ -229,9 +202,9 @@ export default function NovoDiagnosticoPage() {
                     />
                   </div>
                   <div className="flex flex-col gap-y-4">
-                    <Label>Site da Empresa (Opcional)</Label>
+                    <Label tooltip="Endereço eletrônico oficial. Opcional, mas ajuda no enriquecimento de dados setoriais.">Site da Empresa (Opcional)</Label>
                     <input
-                      type="url"
+                      type="text"
                       value={formData.website}
                       onChange={(e) => setFormData({ ...formData, website: e.target.value })}
                       placeholder="Ex: www.ianow.com.br"
@@ -239,7 +212,7 @@ export default function NovoDiagnosticoPage() {
                     />
                   </div>
                   <div className="flex flex-col gap-y-4">
-                    <Label>Qual solução você oferece hoje?</Label>
+                    <Label tooltip="Descreva brevemente seu produto ou serviço core. Ex: 'Consultoria financeira B2B' ou 'SaaS de gestão de estoque'.">Qual solução você oferece hoje?</Label>
                     <input
                       type="text"
                       value={formData.offeredSolution}
@@ -251,6 +224,7 @@ export default function NovoDiagnosticoPage() {
                   <div className="space-y-4">
                     <CustomSelect
                       label="Setor de Atuação"
+                      tooltip="Mercado principal onde sua empresa gera receita. Isso calibra o perfil de risco da análise."
                       value={isCustomSector ? 'Personalizado' : formData.sector}
                       onChange={(val) => {
                         if (val === 'Outro...') {
@@ -294,7 +268,7 @@ export default function NovoDiagnosticoPage() {
                     )}
                   </div>
                   <div className="flex flex-col gap-y-4">
-                    <Label>Tamanho da Equipe</Label>
+                    <Label tooltip="Número total de colaboradores, incluindo sócios e prestadores fixos. Define o porte operacional.">Tamanho da Equipe</Label>
                     <div className="grid grid-cols-3 gap-3">
                       {['1-10', '11-50', '50+'].map(val => (
                         <button
@@ -313,6 +287,7 @@ export default function NovoDiagnosticoPage() {
                   <div className="space-y-0">
                     <CustomSelect
                       label="Faturamento Médio Mensal"
+                      tooltip="Faixa de receita bruta mensal recorrente. Usado para sugerir níveis de blindagem adequados ao ticket."
                       value={formData.revenue}
                       onChange={(val) => setFormData({ ...formData, revenue: val })}
                       options={[
@@ -338,7 +313,7 @@ export default function NovoDiagnosticoPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
                   <div className="flex flex-col gap-y-4">
-                    <Label>Modelo de Negócio</Label>
+                    <Label tooltip="Natureza da sua venda principal. B2B (empresas), B2C (consumidor final), Híbrido ou SaaS (assinaturas).">Modelo de Negócio</Label>
                     <div className="grid grid-cols-2 gap-3">
                       {['B2B', 'B2C', 'Híbrido', 'SaaS'].map(val => (
                         <button
@@ -356,7 +331,7 @@ export default function NovoDiagnosticoPage() {
                   </div>
 
                   <div className="flex flex-col gap-y-4">
-                    <Label>Nível de Digitalização (1-5)</Label>
+                    <Label tooltip="1 = Processos manuais/papel. 5 = Fluxos totalmente digitais, automações e sistemas integrados.">Nível de Digitalização (1-5)</Label>
                     <div className="flex items-center gap-3">
                       {[1, 2, 3, 4, 5].map(val => (
                         <button
@@ -379,7 +354,7 @@ export default function NovoDiagnosticoPage() {
                   </div>
 
                   <div className="md:col-span-2 flex flex-col gap-y-4">
-                    <Label>Qual o seu maior "Incêndio" hoje?</Label>
+                    <Label tooltip="O problema operacional ou estratégico que mais consome sua energia ou do seu time agora.">Qual o seu maior "Incêndio" hoje?</Label>
                     <textarea
                       value={formData.mainPainPoint}
                       onChange={(e) => setFormData({ ...formData, mainPainPoint: e.target.value })}
@@ -404,6 +379,7 @@ export default function NovoDiagnosticoPage() {
                   <div className="space-y-0">
                     <CustomSelect
                       label="Status Jurídico"
+                      tooltip="Sua percepção atual sobre a segurança legal do negócio. Ajuda a priorizar recomendações de compliance."
                       value={formData.legalStatus}
                       onChange={(val) => setFormData({ ...formData, legalStatus: val })}
                       options={[
@@ -418,6 +394,7 @@ export default function NovoDiagnosticoPage() {
                   <div className="space-y-0">
                     <CustomSelect
                       label="Gestão Financeira"
+                      tooltip="Como o dinheiro é controlado. Essencial para verificar a maturidade administrativa."
                       value={formData.financialControl}
                       onChange={(val) => setFormData({ ...formData, financialControl: val })}
                       options={[
@@ -430,7 +407,7 @@ export default function NovoDiagnosticoPage() {
                   </div>
 
                   <div className="md:col-span-2 flex flex-col gap-y-4">
-                    <Label>Selecione Desafios Adicionais</Label>
+                    <Label tooltip="Selecione as áreas que impedem o negócio de fluir com mais agilidade.">Selecione Desafios Adicionais</Label>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {[
                         "Documentação",
@@ -473,7 +450,7 @@ export default function NovoDiagnosticoPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
                   <div className="md:col-span-2 flex flex-col gap-y-4">
-                    <Label>Objetivos Principais</Label>
+                    <Label tooltip="O que o iaNow deve priorizar para você nos próximos meses.">Objetivos Principais</Label>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {[
                         "Reduzir Custos",
@@ -503,7 +480,7 @@ export default function NovoDiagnosticoPage() {
                   </div>
 
                   <div className="md:col-span-2 flex flex-col gap-y-4">
-                    <Label>O que impede você de dobrar de tamanho hoje?</Label>
+                    <Label tooltip="Identifique o maior gargalo (capital, equipe, processos, tecnologia) que impede o crescimento acelerado.">O que impede você de dobrar de tamanho hoje?</Label>
                     <textarea
                       value={formData.growthObstacle}
                       onChange={(e) => setFormData({ ...formData, growthObstacle: e.target.value })}

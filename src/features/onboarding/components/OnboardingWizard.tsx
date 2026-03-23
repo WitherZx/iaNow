@@ -3,24 +3,18 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useOnboarding } from '../hooks/useOnboarding'
-import { Stepper } from '@/components/shared/Stepper'
 import { CheckCircle2, Loader2, ArrowRight } from 'lucide-react'
+import { StepBadge } from '@/components/shared/StepBadge'
 
 import { CompanyInfoForm } from './steps/CompanyInfoForm'
-import { SectorForm } from './steps/SectorForm'
-import { ChallengesForm } from './steps/ChallengesForm'
-import { GoalsForm } from './steps/GoalsForm'
+import { CompanyLegalForm } from './steps/CompanyLegalForm'
 
 function getStepComponent(stepKey: string) {
   switch (stepKey) {
     case 'company_info':
       return CompanyInfoForm
-    case 'sector':
-      return SectorForm
-    case 'challenges':
-      return ChallengesForm
-    case 'goals':
-      return GoalsForm
+    case 'company_legal':
+      return CompanyLegalForm
     default:
       // Fallback
       return () => <div className="p-4 text-gray-500">Componente não encontrado para este passo.</div>
@@ -28,7 +22,7 @@ function getStepComponent(stepKey: string) {
 }
 
 
-export function OnboardingWizard() {
+export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
   const router = useRouter()
   const { session, steps, loading, error, startOnboarding, submitStep } = useOnboarding()
   const [localSaving, setLocalSaving] = useState(false)
@@ -74,8 +68,8 @@ export function OnboardingWizard() {
         </div>
 
         <h2 className="text-4xl md:text-5xl font-black text-slate-900 mb-6 tracking-tight leading-tight">
-          Matriz Operacional <br/>
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-600">Pronta</span>
+          Ambiente Estratégico <br/>
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-600">Configurado</span>
         </h2>
         
         <p className="text-slate-500 text-lg md:text-xl max-w-md mb-12 leading-relaxed font-medium">
@@ -83,11 +77,17 @@ export function OnboardingWizard() {
         </p>
         
         <button
-          onClick={() => router.push('/dashboard')}
+          onClick={() => {
+            if (onComplete) {
+              onComplete()
+            } else {
+              router.push('/dashboard')
+            }
+          }}
           className="relative overflow-hidden group/btn bg-primary hover:bg-blue-700 text-white font-black text-lg py-5 px-12 rounded-2xl shadow-[0_20px_40px_-15px_rgba(37,99,235,0.5)] transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center gap-3"
         >
           <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/btn:translate-x-full duration-1000 ease-in-out transition-transform" />
-          <span className="relative z-10">Iniciar Dashboard</span>
+          <span className="relative z-10">{onComplete ? 'Continuar para o Módulo' : 'Iniciar Dashboard'}</span>
           <ArrowRight className="w-6 h-6 relative z-10 group-hover/btn:translate-x-1 transition-transform" />
         </button>
       </div>
@@ -112,13 +112,12 @@ export function OnboardingWizard() {
   }
 
   return (
-    <div className="w-full flex flex-col relative z-20 space-y-12">
-      {/* Top Stepper Area */}
-      <div className="w-full">
-         {/* @ts-ignore */}
-        <Stepper steps={steps} currentStepIndex={currentStepIndex} />
+    <div className="w-full flex flex-col relative z-20">
+      {/* Badge de Etapa - Centralizado verticalmente com o ícone do formulário */}
+      <div className="absolute top-[10px] right-0">
+        <StepBadge current={currentStepIndex + 1} total={steps.length} />
       </div>
-
+      
       {/* Main Content Area */}
       <div className="w-full min-h-[500px]">
         {activeStepObj ? (

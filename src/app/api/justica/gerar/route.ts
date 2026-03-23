@@ -14,16 +14,21 @@ export async function POST(req: Request) {
 
     const adminClient = createAdminClient()
     
-    // Buscar a organização do usuário
-    let { data: membership } = await adminClient
+    // Buscar a organização do usuário (mais robusto)
+    const { data: membership, error: memberError } = await adminClient
       .from('memberships')
       .select('organization_id')
       .eq('user_id', user.id)
-      .single() as any
+      .limit(1)
+      .maybeSingle() as any
 
-    let orgId = membership?.organization_id
+    if (memberError) {
+      console.error('Membership Fetch Error:', memberError)
+    }
+
+    const orgId = membership?.organization_id
     if (!orgId) {
-       return NextResponse.json({ error: 'Organization not found' }, { status: 400 })
+       return NextResponse.json({ error: 'Sua conta não possui uma organização vinculada. Complete o onboarding.' }, { status: 400 })
     }
 
     const body = await req.json()
@@ -51,6 +56,9 @@ ESTRUTURA DA PETIÇÃO:
 3. Dos Fatos (Narrativa cronológica).
 4. Do Direito (Fundamentação jurídica com CDC, CC, etc.).
 5. Dos Pedidos e Valor da Causa.
+
+ORIENTAÇÃO LEGAL ADICIONAL:
+- Se for fornecida uma 'Jurisprudência de Referência', utilize-a como BASE LEGAL PRINCIPAL para fundamentar o pedido, citando-a ou explicando por que o caso do autor se assemelha àquela decisão.
 
 O RESULTADO DEVE SER UM JSON VÁLIDO:
 {
@@ -83,11 +91,13 @@ ${diagnosticData.refinePrompt}
 Ajuste a petição e atualize a auditoria se necessário.`
       : `DADOS PARA GERAR PETIÇÃO:
 - Tipo: ${diagnosticData.problemType}
+- Comarca: ${diagnosticData.comarca || 'Deixar para o usuário preencher'}
 - Autor: ${diagnosticData.authorName}, CPF: ${diagnosticData.authorDocument}, Endereço: ${diagnosticData.authorAddress}
 - Réu: ${diagnosticData.defendantName}, CPF: ${diagnosticData.defendantDocument}, Endereço: ${diagnosticData.defendantAddress}
 - Fatos: ${diagnosticData.whatHappened} no dia ${diagnosticData.whenHappened}
 - Danos: R$ ${diagnosticData.materialDamage} (Material), R$ ${diagnosticData.moralDamage} (Moral)
 - Total: R$ ${diagnosticData.estimatedValue}
+${diagnosticData.jurisprudence ? `\n- JURISPRUDÊNCIA DE REFERÊNCIA (USE COMO BASE): ${diagnosticData.jurisprudence}` : ''}
 
 Gere o JSON completo.`
 
@@ -154,6 +164,6 @@ Gere o JSON completo.`
 
   } catch (error: any) {
     console.error('API Error Justice:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message || JSON.stringify(error) || 'Erro desconhecido' }, { status: 500 })
   }
 }

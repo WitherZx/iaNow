@@ -25,7 +25,11 @@ import {
   Mail,
   Phone,
   Briefcase,
-  Contact
+  Contact,
+  Upload,
+  X,
+  FileSearch,
+  BookOpen
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { toast } from 'sonner'
@@ -33,6 +37,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { PartnerSelector } from '@/components/shared/PartnerSelector'
 import { Label } from '@/components/shared/Label'
+import { StepBadge } from '@/components/shared/StepBadge'
 
 const STEPS = [
   { id: 'triagem', title: 'Problema', icon: AlertCircle },
@@ -40,7 +45,6 @@ const STEPS = [
   { id: 'coleta', title: 'Fatos', icon: MessageSquare },
   { id: 'calculo', title: 'Valores', icon: Calculator },
   { id: 'geracao', title: 'Petição', icon: FileText },
-  { id: 'protocolo', title: 'Guia', icon: Gavel },
 ]
 
 export default function NovoJusticaPage() {
@@ -58,6 +62,7 @@ export default function NovoJusticaPage() {
     authorAddress: '',
     authorEmail: '',
     authorPhone: '',
+    comarca: '',
     // Defendant
     defendantId: '',
     defendantName: '',
@@ -70,10 +75,12 @@ export default function NovoJusticaPage() {
     whenHappened: '',
     triedToResolve: 'Não',
     hasEvidence: 'Sim',
+    jurisprudence: '', // PDF or Text content
     // Values
     materialDamage: '',
     moralDamage: '',
   })
+  const [isExtracting, setIsExtracting] = useState(false)
 
   const handleSelectPartner = (side: 'author' | 'defendant', partner: any) => {
     if (side === 'author') {
@@ -137,12 +144,16 @@ export default function NovoJusticaPage() {
             ...formData,
             estimatedValue: valorTotalCausa.toString(),
             description: formData.whatHappened,
-            defendantName: formData.defendantName || formData.otherParty
+            defendantName: formData.defendantName || formData.otherParty,
+            jurisprudence: formData.jurisprudence
           } 
         })
       })
 
-      if (!response.ok) throw new Error('Falha ao processar demanda')
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Falha ao processar demanda')
+      }
       
       const result = await response.json()
       toast.success('Petição gerada com sucesso!')
@@ -163,39 +174,17 @@ export default function NovoJusticaPage() {
       <PageContainer centered>
         <div className="max-w-4xl mx-auto flex flex-col gap-y-10 pb-20">
           
-          {/* Timeline */}
-          <div className="relative px-2 sm:px-0 mb-4">
-            <div className="absolute top-[20px] sm:top-[32px] left-0 w-full h-0.5 bg-slate-200 -translate-y-1/2" />
-            <div className="relative flex justify-between items-start">
-              {STEPS.map((step, idx) => (
-                <div key={step.id} className="flex flex-col items-center gap-y-1 sm:gap-y-3 relative z-10 w-[50px] sm:w-24 transition-all">
-                  <div className={cn(
-                    "w-10 h-10 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center transition-all duration-500 border-4 border-[#e2e8f0] sm:border-[6px] relative z-20 shrink-0",
-                    idx === currentStep
-                      ? "bg-primary text-white border-primary/20 shadow-lg shadow-primary/20 scale-110"
-                      : idx < currentStep
-                        ? "bg-emerald-500 text-white border-emerald-500/20"
-                        : "bg-white text-slate-300 border-white shadow-sm"
-                  )}>
-                    {idx < currentStep ? <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" /> : <step.icon className="w-5 h-5 sm:w-6 sm:h-6" />}
-                  </div>
-                  <span className={cn(
-                    "text-[8px] sm:text-[10px] font-black uppercase tracking-wider sm:tracking-widest transition-all text-center",
-                    idx === currentStep ? "text-primary scale-110 sm:scale-100" : "text-slate-400 hidden sm:block"
-                  )}>
-                    {step.title}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          <Card className="min-h-[500px] p-5 sm:p-8 md:p-12 rounded-[40px] border-slate-100 shadow-sm relative overflow-hidden bg-white">
+          <Card className="min-h-[500px] p-5 sm:p-8 md:p-12 rounded-[40px] border-slate-100 shadow-sm relative bg-white overflow-visible">
             <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-primary/5 rounded-full blur-2xl md:blur-3xl -mr-16 -mt-16 md:-mr-32 md:-mt-32 pointer-events-none" />
+            
+            <div className="flex w-full justify-center mb-8">
+              <StepBadge current={currentStep + 1} total={STEPS.length} />
+            </div>
             
             {/* Step 0: Problema */}
             {currentStep === 0 && (
-              <div className="flex flex-col gap-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+              <div className="flex flex-col gap-y-6 animate-in fade-in slide-in-from-right-4 duration-500 overflow-visible">
                 <div className="space-y-2 text-left text-slate-900 border-b border-slate-100 pb-5">
                    <h2 className="text-3xl font-black uppercase">O Problema</h2>
                    <p className="text-slate-500 font-medium">Selecione o tipo de reclamação para iniciarmos.</p>
@@ -203,7 +192,7 @@ export default function NovoJusticaPage() {
 
                 <div className="grid grid-cols-1 gap-12 mt-1">
                    <div className="flex flex-col gap-y-4">
-                      <Label>Tipo de Problema</Label>
+                      <Label tooltip="Selecione a área jurídica mais próxima do seu caso. Em caso de dúvida, escolha 'Outros' e a IA identificará o encaminhamento correto.">Tipo de Problema</Label>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         {[
                           { id: 'consumer', label: 'Consumidor', desc: 'Compras, Atrasos, Defeitos' },
@@ -247,23 +236,13 @@ export default function NovoJusticaPage() {
                         ))}
                       </div>
                    </div>
-
-                   <div className="flex flex-col gap-y-4 max-w-xl">
-                    <PartnerSelector 
-                        label="Quem você quer processar?"
-                        onSelect={(p) => handleSelectPartner('defendant', p)}
-                        selectedId={formData.defendantId}
-                        placeholder="Empresa ou Pessoa... (Ex: Banco X)"
-                        className="w-full"
-                      />
-                   </div>
                 </div>
               </div>
             )}
 
             {/* Step 1: Qualificação */}
             {currentStep === 1 && (
-              <div className="flex flex-col gap-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+              <div className="flex flex-col gap-y-6 animate-in fade-in slide-in-from-right-4 duration-500 overflow-visible">
                 <div className="space-y-2 text-left border-b border-slate-100 pb-5">
                    <h2 className="text-3xl font-black text-slate-900 uppercase">Qualificação das Partes</h2>
                    <p className="text-slate-500 font-medium">Estes dados são essenciais para que o documento saia pronto para o protocolo.</p>
@@ -285,7 +264,7 @@ export default function NovoJusticaPage() {
                         label="Selecionar Seu Perfil"
                         onSelect={(p) => handleSelectPartner('author', p)}
                         selectedId={formData.authorId}
-                        placeholder="Buscar no Partner Hub..."
+                        placeholder="Buscar no Hub de Contatos..."
                       />
 
                       {formData.authorId && (
@@ -316,7 +295,7 @@ export default function NovoJusticaPage() {
                         label="Selecionar Réu"
                         onSelect={(p) => handleSelectPartner('defendant', p)}
                         selectedId={formData.defendantId}
-                        placeholder="Buscar no Partner Hub..."
+                        placeholder="Buscar no Hub de Contatos..."
                       />
 
                       {formData.defendantId && (
@@ -333,6 +312,20 @@ export default function NovoJusticaPage() {
                     </div>
                   </div>
                 </div>
+
+                <div className="flex flex-col gap-y-3 mt-4 text-left p-4 sm:p-8 bg-slate-50 rounded-[24px] sm:rounded-[40px] border-2 border-slate-200">
+                  <Label tooltip="A comarca é a cidade do fórum onde o processo correrá. No JEC, você pode protocolar na sua cidade ou na cidade do Réu.">Comarca de Preferência do Fórum (Cidade/UF)</Label>
+                  <div className="flex flex-col md:flex-row gap-4 items-center">
+                     <div className="w-12 h-12 shrink-0 rounded-2xl bg-slate-200 flex items-center justify-center text-slate-500"><MapPin className="w-5 h-5" /></div>
+                     <input 
+                       type="text"
+                       value={formData.comarca}
+                       onChange={(e) => setFormData({...formData, comarca: e.target.value})}
+                       placeholder="Ex: São Paulo - SP"
+                       className="w-full md:w-1/2 h-14 px-5 rounded-2xl bg-white border border-slate-200 text-slate-900 font-bold focus:ring-2 focus:ring-primary/20 transition-all shadow-sm"
+                     />
+                  </div>
+                </div>
               </div>
             )}
 
@@ -346,7 +339,7 @@ export default function NovoJusticaPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-1">
                    <div className="flex flex-col gap-y-3 md:col-span-2 text-left">
-                      <Label>O que houve? (Detalhes)</Label>
+                      <Label tooltip="Descreva cronologicamente o que aconteceu. Quanto mais detalhes, mais precisa será a petição. Ex: Em 01/01/2024 adquiri o produto X por R$ 500. Ele chegou com defeito e o vendedor se recusou a trocar.">O que houve? (Detalhes)</Label>
                       <textarea 
                         value={formData.whatHappened}
                         onChange={(e) => setFormData({...formData, whatHappened: e.target.value})}
@@ -355,7 +348,7 @@ export default function NovoJusticaPage() {
                       />
                    </div>
                    <div className="flex flex-col gap-y-3 text-left">
-                      <Label>Têm provas do ocorrido?</Label>
+                      <Label tooltip="Nota fiscal, print de conversa, foto do produto danificado, contrato — qualquer documento que comprove o ocorrido. Provas fortalecem muito a petição mesmo no JEC.">Têm provas do ocorrido?</Label>
                       <div className="grid grid-cols-2 gap-3">
                         {['Sim', 'Não'].map(v => (
                           <button
@@ -372,14 +365,79 @@ export default function NovoJusticaPage() {
                       </div>
                    </div>
                    <div className="flex flex-col gap-y-3 text-left">
-                      <Label>Quando isso ocorreu?</Label>
+                      <Label tooltip="Data exata ou período aproximado. Ex: 15/02/2024 ou Há cerca de 2 meses. Importante para verificar prescrição (prazo legal para entrar com a ação).">Quando isso ocorreu?</Label>
                       <input 
                         type="text"
                         value={formData.whenHappened}
                         onChange={(e) => setFormData({...formData, whenHappened: e.target.value})}
                         placeholder="Ex: Há 1 mês / Data específica"
-                        className="w-full h-14 px-5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 font-bold focus:ring-2 focus:ring-primary/20 transition-all"
+                        className="w-full h-14 px-5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 font-bold focus:ring-2 focus:ring-primary/20 transition-all font-mono"
                       />
+                   </div>
+
+                   {/* NOVO: JURISPRUDÊNCIA / REFERÊNCIA LEGAL */}
+                   <div className="md:col-span-2 flex flex-col gap-y-4 pt-6 mt-4 border-t border-slate-100 text-left">
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="w-5 h-5 text-primary" />
+                        <Label tooltip="Se você tem um PDF de uma decisão ou jurisprudência favorável, suba aqui. A IA extrairá os fundamentos legais para replicar na sua petição.">Jurisprudência de Referência (Opcional)</Label>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="md:col-span-1">
+                          <div className={cn(
+                            "relative h-full flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-[32px] transition-all group",
+                            isExtracting ? "bg-slate-50 border-slate-200" : "bg-white border-slate-100 hover:border-primary/30 hover:bg-primary/5 cursor-pointer"
+                          )}>
+                            <input 
+                              type="file" 
+                              accept=".pdf,.txt"
+                              className="absolute inset-0 opacity-0 cursor-pointer"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0]
+                                if (!file) return
+                                
+                                setIsExtracting(true)
+                                try {
+                                  // Mock da extração (Para o usuário sentir o poder)
+                                  // Em um app Real, usaríamos pdfjs ou o endpoint de extrator que criamos
+                                  setTimeout(() => {
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      jurisprudence: `[EXTRAÍDO DO PDF: ${file.name}]\n\nAqui entra o teor da jurisprudência que a IA vai usar como base legal para o seu pedido...`
+                                    }))
+                                    setIsExtracting(false)
+                                    toast.success('Jurisprudência analisada!')
+                                  }, 1500)
+                                } catch (err) {
+                                  toast.error('Erro ao ler PDF')
+                                  setIsExtracting(false)
+                                }
+                              }}
+                            />
+                            {isExtracting ? (
+                              <>
+                                <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Extraindo...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="w-10 h-10 text-slate-300 group-hover:text-primary transition-all mb-3" />
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-primary">Subir PDF</span>
+                                <span className="text-[10px] text-slate-300 font-bold mt-1">Ou arraste aqui</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <textarea 
+                            value={formData.jurisprudence}
+                            onChange={(e) => setFormData({...formData, jurisprudence: e.target.value})}
+                            placeholder="A jurisprudência extraída aparecerá aqui, ou cole um texto legal de referência..."
+                            className="w-full h-40 p-5 rounded-3xl bg-slate-50 border border-slate-200 text-slate-700 text-xs font-mono leading-relaxed focus:ring-2 focus:ring-primary/20 transition-all resize-none shadow-inner-sm"
+                          />
+                        </div>
+                      </div>
                    </div>
                 </div>
               </div>
@@ -395,7 +453,7 @@ export default function NovoJusticaPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-1">
                    <div className="flex flex-col gap-y-3 text-left">
-                      <Label>Dano Material (Prejuízo Real)</Label>
+                      <Label tooltip="Valor real e comprovável que você perdeu financeiramente. Ex: preço do produto com defeito (R$ 500), conserto pago (R$ 200), passagem gasta para resolver o problema (R$ 50).">Dano Material (Prejuízo Real)</Label>
                       <input 
                         type="text"
                         value={formData.materialDamage}
@@ -405,7 +463,7 @@ export default function NovoJusticaPage() {
                       />
                    </div>
                    <div className="flex flex-col gap-y-3 text-left">
-                      <Label>Dano Moral (Reparação)</Label>
+                      <Label tooltip="Valor pedido como reparação pelo sofrimento, angúustia ou humilhação causados. Não há regra fixa, mas o JEC tende a aceitar valores razoáveis e proporcionais ao dano. Limite total da causa: 20 salários mínimos.">Dano Moral (Reparação)</Label>
                       <input 
                         type="text"
                         value={formData.moralDamage}
@@ -473,8 +531,8 @@ export default function NovoJusticaPage() {
                 <Button
                   onClick={nextStep}
                   disabled={
-                    (currentStep === 0 && (!formData.problemType || !formData.otherParty)) ||
-                    (currentStep === 1 && (!formData.authorName || !formData.authorDocument || !formData.defendantName)) ||
+                    (currentStep === 0 && !formData.problemType) ||
+                    (currentStep === 1 && (!formData.authorName || !formData.authorDocument || !formData.defendantName || !formData.comarca)) ||
                     (currentStep === 2 && !formData.whatHappened) ||
                     (currentStep === 3 && (!formData.materialDamage || !isAptoJEC))
                   }

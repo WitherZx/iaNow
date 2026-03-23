@@ -16,6 +16,8 @@ import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/utils/cn'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { CTAButton } from '@/components/shared/CTAButton'
+import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
+import { useRouter } from 'next/navigation'
 
 interface LegalDocument {
   id: string
@@ -26,10 +28,21 @@ interface LegalDocument {
 }
 
 export default function JuridicoPage() {
+  const router = useRouter()
   const { session } = useAuth()
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [documents, setDocuments] = useState<LegalDocument[]>([])
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const { needsOnboarding } = useOnboardingGuard()
+
+  const handleNewDocument = () => {
+    if (needsOnboarding) {
+      router.push('/onboarding?redirect=/juridico/novo')
+    } else {
+      router.push('/juridico/novo')
+    }
+  }
   
   const [metrics, setMetrics] = useState({
     total: 0,
@@ -38,18 +51,22 @@ export default function JuridicoPage() {
   })
 
   useEffect(() => {
+    let interval: NodeJS.Timeout
+
     async function loadData() {
       if (!session?.user?.id) return
 
       try {
-        const { data: membership } = await supabase
+        const { data: membership, error: memberError } = await supabase
           .from('memberships')
           .select('organization_id')
           .eq('user_id', session.user.id)
           .eq('status', 'active')
-          .single() as any
+          .limit(1)
+          .maybeSingle() as any
 
-        if (!membership) {
+        if (memberError || !membership) {
+          console.error('Membership error:', memberError)
           setLoading(false)
           return
         }
@@ -83,6 +100,15 @@ export default function JuridicoPage() {
           complianceStatus
         })
 
+        // Se houver documentos gerando, ativa o polling
+        if (parsedDocs.some(d => d.status === 'generating')) {
+          if (!interval) {
+            interval = setInterval(loadData, 5000)
+          }
+        } else {
+          if (interval) clearInterval(interval)
+        }
+
       } catch (err) {
         console.error('Erro ao buscar documentos:', err)
       } finally {
@@ -91,6 +117,9 @@ export default function JuridicoPage() {
     }
 
     loadData()
+    return () => {
+      if (interval) clearInterval(interval)
+    }
   }, [session, supabase])
 
   if (loading) {
@@ -106,14 +135,12 @@ export default function JuridicoPage() {
   return (
     <DashboardLayout>
       <PageContainer
-        title="Central Jurídica"
+        title="Central de Contratos"
         subtitle="Geração de contratos inteligentes, procurações automáticas e blindagem legal."
         action={
-          <Link href="/juridico/novo" className="w-full lg:w-auto">
-            <CTAButton icon={PlusCircle}>
-               Novo Documento
-            </CTAButton>
-          </Link>
+          <CTAButton icon={PlusCircle} onClick={handleNewDocument} className="w-full lg:w-auto">
+             Novo Documento
+          </CTAButton>
         }
       >
         <div className="flex flex-col gap-y-12 pb-20">
@@ -126,7 +153,7 @@ export default function JuridicoPage() {
               </div>
               <div className="flex flex-col gap-y-1">
                 <span className="text-3xl font-black text-slate-900">{metrics.total}</span>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Documentos Gerados</span>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Contratos Gerados</span>
               </div>
             </Card>
             
@@ -158,7 +185,7 @@ export default function JuridicoPage() {
           <div className="flex flex-col space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <SectionTitle 
-                title="Repositório Ativo" 
+                title="Meus Contratos" 
                 subtitle="Todos os seus documentos blindados e contratos gerados."
               />
               <div className="relative group w-full md:w-72">
@@ -216,7 +243,7 @@ export default function JuridicoPage() {
                   title="Nenhum documento gerado"
                   description="Seu repositório jurídico está em branco. Comece a blindar seu negócio gerando o primeiro contrato padrão ou análise."
                   actionText="Criar Primeiro Documento"
-                  actionHref="/juridico/novo"
+                  onClick={handleNewDocument}
                 />
               )}
             </div>

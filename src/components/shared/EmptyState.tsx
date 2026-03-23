@@ -15,6 +15,7 @@ interface EmptyStateProps {
   description: string
   actionText?: string
   actionHref?: string
+  onClick?: () => void
   className?: string
 }
 
@@ -24,6 +25,7 @@ export function EmptyState({
   description, 
   actionText, 
   actionHref,
+  onClick,
   className 
 }: EmptyStateProps) {
   return (
@@ -43,12 +45,18 @@ export function EmptyState({
         {description}
       </p>
 
-      {actionText && actionHref && (
-        <Link href={actionHref} className="w-full flex justify-center sm:w-auto">
-          <CTAButton icon={PlusCircle} className="w-full sm:w-auto">
+      {actionText && (onClick || actionHref) && (
+        onClick ? (
+          <CTAButton icon={PlusCircle} onClick={onClick} className="w-full sm:w-auto">
             {actionText}
           </CTAButton>
-        </Link>
+        ) : (
+          <Link href={actionHref!} className="w-full flex justify-center sm:w-auto">
+            <CTAButton icon={PlusCircle} className="w-full sm:w-auto">
+              {actionText}
+            </CTAButton>
+          </Link>
+        )
       )}
     </Card>
   )

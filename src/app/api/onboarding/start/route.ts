@@ -3,10 +3,8 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const DEFAULT_ONBOARDING_STEPS = [
-  { step_number: 1, step_key: 'company_info', title: 'Informações da Empresa' },
-  { step_number: 2, step_key: 'sector', title: 'Setor e Mercado' },
-  { step_number: 3, step_key: 'challenges', title: 'Desafios Principais' },
-  { step_number: 4, step_key: 'goals', title: 'Metas e Objetivos' },
+  { step_number: 1, step_key: 'company_info', title: 'Dados da Empresa' },
+  { step_number: 2, step_key: 'company_legal', title: 'Representação Legal' },
 ]
 
 export async function POST(req: Request) {
@@ -105,11 +103,32 @@ export async function POST(req: Request) {
       .single() as any
 
     if (existingSession && !sessionError) {
-      return NextResponse.json({ 
-        success: true, 
-        session: existingSession,
-        steps: existingSession.onboarding_steps.sort((a: any, b: any) => a.step_number - b.step_number)
-      })
+      // VALIDATION: Check if existing steps match current DEFAULT_ONBOARDING_STEPS
+      const existingStepKeys = existingSession.onboarding_steps
+        .sort((a: any, b: any) => a.step_number - b.step_number)
+        .map((s: any) => s.step_key)
+      
+      const defaultStepKeys = DEFAULT_ONBOARDING_STEPS.map(s => s.step_key)
+      
+      const isMismatch = existingStepKeys.length !== defaultStepKeys.length || 
+                         !existingStepKeys.every((key: string, i: number) => key === defaultStepKeys[i])
+
+      if (isMismatch) {
+        console.log('Onboarding steps mismatch, resetting session for organization:', orgId)
+        // Delete old session and steps (Cascade delete will handle answers and steps)
+        await adminClient
+          .from('onboarding_sessions')
+          .delete()
+          .eq('id', existingSession.id)
+        
+        // Let it fall through to create a new session below
+      } else {
+        return NextResponse.json({ 
+          success: true, 
+          session: existingSession,
+          steps: existingSession.onboarding_steps.sort((a: any, b: any) => a.step_number - b.step_number)
+        })
+      }
     }
 
     // 3. Create a new onboarding session
