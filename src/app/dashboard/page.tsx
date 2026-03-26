@@ -173,24 +173,32 @@ export default function DashboardPage() {
     </>
   )
 
-  const renderItemCard = (item: DashboardItem) => (
-    <Link key={item.id} href={item.href}>
-      <Card padding="sm" className="hover:border-primary/30 hover:shadow-md cursor-pointer group transition-all h-full">
-        <div className="flex flex-col gap-y-3">
-          <div className="flex items-center justify-between">
-            <StatusBadge status={item.status} />
-            <span className="text-[10px] text-slate-400 font-bold">{item.date}</span>
+  const renderItemCard = (item: DashboardItem, index: number, total: number) => {
+    // Lógica de span dinâmico
+    let spanClass = "col-span-1"
+    if (total === 1) spanClass = "col-span-1 md:col-span-2"
+    if (total === 3 && index === 2) spanClass = "col-span-1 md:col-span-2"
+    // Para a seção de Jus Postulandi que tem 3 colunas base no desktop (opcional, vamos padronizar em 2 colunas para consistência do pedido)
+
+    return (
+      <Link key={item.id} href={item.href} className={spanClass}>
+        <Card padding="sm" className="hover:border-primary/30 hover:shadow-md cursor-pointer group transition-all h-full">
+          <div className="flex flex-col gap-y-3">
+            <div className="flex items-center justify-between">
+              <StatusBadge status={item.status} />
+              <span className="text-[10px] text-slate-400 font-bold">{item.date}</span>
+            </div>
+            <h4 className="font-bold text-sm text-slate-900 group-hover:text-primary transition-colors line-clamp-1">
+              {item.title}
+            </h4>
+            <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+              {item.description}
+            </p>
           </div>
-          <h4 className="font-bold text-sm text-slate-900 group-hover:text-primary transition-colors line-clamp-1">
-            {item.title}
-          </h4>
-          <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
-            {item.description}
-          </p>
-        </div>
-      </Card>
-    </Link>
-  )
+        </Card>
+      </Link>
+    )
+  }
 
   return (
     <DashboardLayout>
@@ -293,7 +301,7 @@ export default function DashboardPage() {
                   action={<Link href="/estrategia"><Button variant="link" className="text-primary font-bold px-0">Ver todas</Button></Link>}
                 />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {recentStrategies.length > 0 ? recentStrategies.map(renderItemCard) : renderGhostCards(4)}
+                  {recentStrategies.length > 0 ? recentStrategies.map((item, idx) => renderItemCard(item, idx, recentStrategies.length)) : renderGhostCards(4)}
                   {recentStrategies.length === 0 && (
                     <Card className="col-span-full py-6 text-center bg-primary/5 border-dashed border-primary/20">
                       <p className="text-sm text-slate-600 mb-3">Pronto para começar?</p>
@@ -311,7 +319,7 @@ export default function DashboardPage() {
                   action={<Link href="/juridico"><Button variant="link" className="text-primary font-bold px-0">Ver todos</Button></Link>}
                 />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {recentDocs.length > 0 ? recentDocs.map(renderItemCard) : renderGhostCards(4)}
+                  {recentDocs.length > 0 ? recentDocs.map((item, idx) => renderItemCard(item, idx, recentDocs.length)) : renderGhostCards(4)}
                   {recentDocs.length === 0 && (
                     <Card className="col-span-full py-6 text-center bg-primary/5 border-dashed border-primary/20">
                       <p className="text-sm text-slate-600 mb-3">Nenhum documento gerado.</p>
@@ -329,8 +337,8 @@ export default function DashboardPage() {
                   subtitle="Demandas protocoladas recentes"
                   action={<Link href="/justica"><Button variant="link" className="text-primary font-bold px-0">Ver todas</Button></Link>}
                />
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                 {recentDemands.length > 0 ? recentDemands.map(renderItemCard) : renderGhostCards(3)}
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 {recentDemands.length > 0 ? recentDemands.map((item, idx) => renderItemCard(item, idx, recentDemands.length)) : renderGhostCards(3)}
                  {recentDemands.length === 0 && (
                    <Card className="col-span-full py-6 text-center bg-primary/5 border-dashed border-primary/20">
                      <p className="text-sm text-slate-600 mb-3">Nenhuma demanda ativa no momento.</p>
