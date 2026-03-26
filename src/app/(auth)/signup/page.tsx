@@ -6,8 +6,13 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/shared/Button'
 import { Input } from '@/components/shared/Input'
-import { User, Mail, Lock, UserPlus, Sparkles, Eye, EyeOff } from 'lucide-react'
+import { User, Mail, Lock, UserPlus, Sparkles, Eye, EyeOff, Check, X } from 'lucide-react'
 import { toast } from 'sonner'
+
+interface PasswordRequirement {
+  label: string
+  met: boolean
+}
 
 export default function SignupPage() {
   const router = useRouter()
@@ -18,9 +23,42 @@ export default function SignupPage() {
     email: '',
     password: '',
   })
+  const [passwordRequirements, setPasswordRequirements] = useState<PasswordRequirement[]>([
+    { label: 'Pelo menos 8 caracteres', met: false },
+    { label: 'Uma letra maiúscula', met: false },
+    { label: 'Uma letra minúscula', met: false },
+    { label: 'Um número', met: false },
+    { label: 'Um caractere especial', met: false },
+  ])
+
+  const validatePassword = (password: string) => {
+    const requirements = [
+      { label: 'Pelo menos 8 caracteres', met: password.length >= 8 },
+      { label: 'Uma letra maiúscula', met: /[A-Z]/.test(password) },
+      { label: 'Uma letra minúscula', met: /[a-z]/.test(password) },
+      { label: 'Um número', met: /[0-9]/.test(password) },
+      { label: 'Um caractere especial', met: /[^A-Za-z0-9]/.test(password) },
+    ]
+    setPasswordRequirements(requirements)
+    return requirements.every(req => req.met)
+  }
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newPassword = e.target.value
+    setFormData({ ...formData, password: newPassword })
+    validatePassword(newPassword)
+  }
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!validatePassword(formData.password)) {
+      toast.error('Senha muito fraca', {
+        description: 'Por favor, atenda a todos os requisitos de segurança da senha.'
+      })
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -107,10 +145,10 @@ export default function SignupPage() {
             />
             <Input
               label="Senha"
-              placeholder="No mínimo 6 caracteres"
+              placeholder="Crie uma senha forte"
               type={showPassword ? "text" : "password"}
               value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              onChange={handlePasswordChange}
               leftIcon={<Lock className="w-4 h-4" />}
               rightIcon={
                 <button 
@@ -123,6 +161,30 @@ export default function SignupPage() {
               }
               required
             />
+            
+            {formData.password && (
+              <div className="space-y-2 p-4 bg-slate-50 rounded-2xl border border-slate-100 animate-in fade-in slide-in-from-top-2 duration-500">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Requisitos de Segurança</p>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {passwordRequirements.map((req, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                       {req.met ? (
+                         <div className="w-3.5 h-3.5 rounded-full bg-emerald-500 flex items-center justify-center text-white">
+                           <Check className="w-2.5 h-2.5" />
+                         </div>
+                       ) : (
+                         <div className="w-3.5 h-3.5 rounded-full bg-slate-200 flex items-center justify-center text-slate-400">
+                           <X className="w-2.5 h-2.5" />
+                         </div>
+                       )}
+                       <span className={`text-[11px] font-medium transition-colors ${req.met ? 'text-emerald-600' : 'text-slate-500'}`}>
+                         {req.label}
+                       </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             
             <Button
               type="submit"
