@@ -204,22 +204,8 @@ ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
 
     const aiModel = 'gemini-2.0-flash'
 
-    const { data: document, error: docError } = await adminClient
-      .from('generated_documents')
-      .insert({
-        organization_id: orgId,
-        created_by: user.id,
-        title: `${tipoContrato}`,
-        document_type: 'custom',
-        ai_model: aiModel,
-        status: 'generating',
-        metadata: { requestPayload: body }
-      } as any)
-      .select().single() as any
-
-    if (docError) throw docError
-
-    askAI(aiPrompt, systemPrompt).then(async (aiResponse) => {
+    try {
+      const aiResponse = await askAI(aiPrompt, systemPrompt)
       let rawResponse = aiResponse.content.trim()
       if (rawResponse.includes('```json')) rawResponse = rawResponse.split('```json')[1].split('```')[0].trim()
       else if (rawResponse.startsWith('```')) rawResponse = rawResponse.replace(/^```/, '').replace(/```$/, '').trim()
@@ -234,16 +220,27 @@ ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
         }
       }
 
-      const adminApi = adminClient as any
-      await adminApi.from('generated_documents').update({
-        content: parsedData.contract.trim(),
-        status: 'ready',
-        metadata: {
-          ...body,
-          audit: parsedData.audit
-        }
-      }).eq('id', document.id)
+      const { data: document, error: docError } = await adminClient
+        .from('generated_documents')
+        .insert({
+          organization_id: orgId,
+          created_by: user.id,
+          title: `${tipoContrato}`,
+          document_type: 'custom',
+          ai_model: aiModel,
+          status: 'ready',
+          content: parsedData.contract.trim(),
+          metadata: { 
+            ...body,
+            audit: parsedData.audit,
+            generated_at: new Date().toISOString()
+          }
+        } as any)
+        .select().single() as any
 
+      if (docError) throw docError
+
+      const adminApi = adminClient as any
       await adminApi.from('activity_logs').insert({
         organization_id: orgId,
         user_id: user.id,
@@ -253,19 +250,15 @@ ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
         description: `Gerou documento jurídico: ${tipoContrato}`
       })
 
-    }).catch(async (e) => {
-      const adminApi = adminClient as any
-      await adminApi.from('generated_documents').update({
-        status: 'failed',
-        content: 'Falha na geração do documento pelo nosso motor IA.'
-      }).eq('id', document.id)
-    })
-    
-    return NextResponse.json({ 
-      success: true, 
-      documentId: document.id,
-      status: 'processing'
-    })
+      return NextResponse.json({ 
+        success: true, 
+        documentId: document.id,
+        status: 'ready'
+      })
+    } catch (e) {
+      console.error('AI Generation Error:', e)
+      return NextResponse.json({ error: 'Falha na geração do documento pelo motor IA.' }, { status: 500 })
+    }
 
   } catch (error: any) {
     console.error('API Error Juridico:', error)

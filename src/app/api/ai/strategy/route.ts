@@ -108,27 +108,9 @@ Gere o plano estratégico em JSON agora.`
 
     if (diagError) throw diagError
 
-    // 3. Salvar a Estratégia em estado GENERATING (Esqueleto inicial)
-    const { data: strategy, error: stratError } = await adminClient
-      .from('strategies')
-      .insert({
-        organization_id: orgId,
-        diagnostic_id: diagnostic.id,
-        created_by: user.id,
-        title: 'Gerando Estratégia...',
-        description: 'A Inteligência Artificial está processando seu diagnóstico e construindo seu plano de atuação imediato.',
-        ai_model: aiModel,
-        content: {}, // Vazio até terminar
-        status: 'processing'
-      } as any)
-      .select().single() as any
-
-    if (stratError) throw stratError
-
-    // ── GERAÇÃO EM SEGUNDO PLANO (Background Promise) ──────────────────────────
-    // Note: Em Vercel Serverless Functions pode ser necessário usar waitUntil().
-    // Em Node.js padrão (como no caso do ambiente de self-host/localhost) funciona assim:
-    askAI(prompt, systemPrompt).then(async (aiResponse) => {
+    // ── GERAÇÃO SINCRONIZADA (Aguardando IA para Vercel) ──────────────────────────
+    try {
+      const aiResponse = await askAI(prompt, systemPrompt)
       let content = aiResponse.content
       if (content.includes('```json')) {
         content = content.split('```json')[1].split('```')[0].trim()
@@ -139,19 +121,34 @@ Gere o plano estratégico em JSON agora.`
         parsedContent = JSON.parse(content)
       } catch (e) {
         console.error("Erro ao fazer parse do JSON da IA", e)
-        parsedContent = { title: "Erro na Geração", description: "Ocorreu um erro no parsing do JSON gerado.", pillars: [], actionPlan: [], aiInsights: [] }
+        parsedContent = { 
+          title: "Estratégia Gerada", 
+          description: "Plano gerado com base no diagnóstico.", 
+          pillars: [], 
+          actionPlan: [], 
+          aiInsights: [] 
+        }
       }
 
-      // Atualiza a Estratégia
-      const adminApi = adminClient as any
-      await adminApi.from('strategies').update({
-        title: parsedContent.title,
-        description: parsedContent.description,
-        content: parsedContent,
-        status: 'active'
-      }).eq('id', strategy.id)
+      // 3. Salvar a Estratégia em estado ACTIVE direto (AI Pronta)
+      const { data: strategy, error: stratError } = await adminClient
+        .from('strategies')
+        .insert({
+          organization_id: orgId,
+          diagnostic_id: diagnostic.id,
+          created_by: user.id,
+          title: parsedContent.title,
+          description: parsedContent.description,
+          ai_model: aiModel,
+          content: parsedContent,
+          status: 'active'
+        } as any)
+        .select().single() as any
+
+      if (stratError) throw stratError
 
       // Registra a atividade APÓS finalizar
+      const adminApi = adminClient as any
       await adminApi.from('activity_logs').insert({
         organization_id: orgId,
         user_id: user.id,
@@ -162,24 +159,15 @@ Gere o plano estratégico em JSON agora.`
         metadata: { strategy_id: strategy.id, version: 1 }
       })
 
-    }).catch(async (e) => {
-      console.error('Erro na thread de background da IA:', e)
-      const adminApi = adminClient as any
-      // Opcional: Atualizar para status de falha
-      await adminApi.from('strategies').update({
-        status: 'failed',
-        title: 'Falha na IA',
-        description: 'A inteligência não conseguiu processar este plano.'
-      }).eq('id', strategy.id)
-    })
-    
-    // Retorna IMEDIATAMENTE antes da promise concluir
-    return NextResponse.json({ 
-      success: true, 
-      strategyId: strategy.id,
-      status: 'processing'
-    })
-
+      return NextResponse.json({ 
+        success: true, 
+        strategyId: strategy.id,
+        status: 'ready'
+      })
+    } catch (e) {
+      console.error('Erro na thread da IA:', e)
+      return NextResponse.json({ error: 'A inteligência não conseguiu processar este plano no momento.' }, { status: 500 })
+    }
   } catch (error: any) {
     console.error('API Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

@@ -323,6 +323,29 @@ export default function EstrategiaPage() {
           </div>
 
         </div>
+
+        {/* Linha 5: Cards Informativos - Padrão iaNow */}
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+           <Card className="bg-primary/5 border-primary/10 p-6 rounded-3xl">
+              <h4 className="text-primary font-black text-xs uppercase tracking-widest mb-2">Execução Imediata</h4>
+              <p className="text-slate-600 text-sm leading-relaxed font-medium">
+                Cada diagnóstico é acompanhado de um plano de ação tático projetado para implementação instantânea no seu negócio.
+              </p>
+           </Card>
+           <Card className="bg-blue-50/50 border-blue-100 p-6 rounded-3xl">
+              <h4 className="text-blue-800 font-black text-xs uppercase tracking-widest mb-2">Inteligência Sistêmica</h4>
+              <p className="text-blue-700/80 text-sm leading-relaxed font-medium">
+                Nossas análises cruzam dados de múltiplas fontes para identificar riscos invisíveis e oportunidades de crescimento.
+              </p>
+           </Card>
+           <Card className="bg-amber-50/50 border-amber-100 p-6 rounded-3xl">
+              <h4 className="text-amber-800 font-black text-xs uppercase tracking-widest mb-2">Refinamento Contínuo</h4>
+              <p className="text-amber-700/80 text-sm leading-relaxed font-medium">
+                As estratégias evoluem conforme você escala. Recomendamos um novo diagnóstico a cada mudança significativa de cenário.
+              </p>
+           </Card>
+        </div>
+
       </PageContainer>
     </DashboardLayout>
   )

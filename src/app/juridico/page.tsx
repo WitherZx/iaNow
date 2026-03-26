@@ -33,6 +33,8 @@ export default function JuridicoPage() {
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [documents, setDocuments] = useState<LegalDocument[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filter, setFilter] = useState<'all' | 'ready' | 'generating'>('all')
   const [showOnboarding, setShowOnboarding] = useState(false)
   const { needsOnboarding } = useOnboardingGuard()
 
@@ -122,6 +124,13 @@ export default function JuridicoPage() {
     }
   }, [session, supabase])
 
+  const filteredDocuments = documents.filter(doc => {
+    const matchesSearch = doc.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          doc.document_type.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesFilter = filter === 'all' || doc.status === filter
+    return matchesSearch && matchesFilter
+  })
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -143,7 +152,7 @@ export default function JuridicoPage() {
           </CTAButton>
         }
       >
-        <div className="flex flex-col gap-y-12 pb-20">
+        <div className="flex flex-col gap-y-8">
           
           {/* Métricas */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -181,26 +190,42 @@ export default function JuridicoPage() {
             </Card>
           </div>
 
-          {/* Listagem de Documentos */}
           <div className="flex flex-col space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <SectionTitle 
-                title="Meus Contratos" 
-                subtitle="Todos os seus documentos blindados e contratos gerados."
-              />
-              <div className="relative group w-full md:w-72">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-primary transition-colors" />
-                <input 
-                  type="text" 
-                  placeholder="Pesquisar documento..." 
-                  className="w-full h-12 pl-11 pr-4 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all shadow-sm"
-                />
+            <div className="flex flex-col space-y-8">
+              
+              {/* Filters and Search - Padrão iaNow */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/30 p-2 rounded-[22px] border border-slate-100 shadow-inner-sm">
+                <div className="relative flex items-center p-1 bg-slate-100/50 rounded-2xl w-full sm:w-auto">
+                  <div 
+                    className={cn(
+                      "absolute h-[34px] transition-all duration-300 ease-out bg-white rounded-xl shadow-sm border border-slate-200/50",
+                      filter === 'all' && "w-[calc(33.33%-4px)] left-1 sm:w-[80px] sm:left-1",
+                      filter === 'ready' && "w-[calc(33.33%-4px)] left-[33.33%] sm:w-[94px] sm:left-[88px]",
+                      filter === 'generating' && "w-[calc(33.33%-4px)] left-[calc(66.66%+2px)] sm:w-[94px] sm:left-[186px]"
+                    )}
+                  />
+                  
+                  <button onClick={() => setFilter('all')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[80px]", filter === 'all' ? 'text-primary' : 'text-slate-400 hover:text-slate-600')}>Todas</button>
+                  <button onClick={() => setFilter('ready')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[94px]", filter === 'ready' ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600')}>Prontas</button>
+                  <button onClick={() => setFilter('generating')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[94px]", filter === 'generating' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600')}>Em Fila</button>
+                </div>
+
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                  <input 
+                    type="text" 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Buscar contrato..."
+                    className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-semibold text-slate-700 placeholder:text-slate-400"
+                  />
+                </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4">
-              {documents.length > 0 ? (
-                documents.map((doc) => {
+              {filteredDocuments.length > 0 ? (
+                filteredDocuments.map((doc) => {
                   const isGenerating = doc.status === 'generating'
                   const isReady = doc.status === 'ready'
                   
@@ -246,8 +271,31 @@ export default function JuridicoPage() {
                   onClick={handleNewDocument}
                 />
               )}
-            </div>
           </div>
+        </div>
+
+        {/* Linha 5: Cards Informativos - Padrão iaNow */}
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+           <Card className="bg-primary/5 border-primary/10 p-6 rounded-3xl">
+              <h4 className="text-primary font-black text-xs uppercase tracking-widest mb-2">Validade Jurídica</h4>
+              <p className="text-slate-600 text-sm leading-relaxed font-medium">
+                Todos os documentos seguem os padrões do Código Civil e MP 2.200-2/01, garantindo plena validade para assinaturas digitais.
+              </p>
+           </Card>
+           <Card className="bg-amber-50/50 border-amber-100 p-6 rounded-3xl">
+              <h4 className="text-amber-800 font-black text-xs uppercase tracking-widest mb-2">Segurança de Dados</h4>
+              <p className="text-amber-700/80 text-sm leading-relaxed font-medium">
+                Nossas minutas são projetadas com cláusulas de conformidade LGPD para proteger a privacidade de todas as partes envolvidas.
+              </p>
+           </Card>
+           <Card className="bg-emerald-50/50 border-emerald-100 p-6 rounded-3xl">
+              <h4 className="text-emerald-800 font-black text-xs uppercase tracking-widest mb-2">Blindagem Ativa</h4>
+              <p className="text-emerald-700/80 text-sm leading-relaxed font-medium">
+                Mantenha seus contratos atualizados de acordo com as novas resoluções para garantir a máxima proteção patrimonial.
+              </p>
+           </Card>
+        </div>
+
         </div>
       </PageContainer>
     </DashboardLayout>

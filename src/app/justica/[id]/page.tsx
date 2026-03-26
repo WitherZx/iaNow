@@ -55,6 +55,7 @@ export default function DemandDetailPage() {
   const [saving, setSaving] = useState(false)
   const [refining, setRefining] = useState(false)
   const [refinePrompt, setRefinePrompt] = useState('')
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
 
   useEffect(() => {
     async function loadDemand() {
@@ -128,18 +129,29 @@ export default function DemandDetailPage() {
     }
   }
 
-  const handleRefine = async () => {
-    if (!refinePrompt.trim() || refining) return
+  const handleRefine = async (customPrompt?: string) => {
+    const promptToSend = customPrompt || refinePrompt
+    if (!promptToSend.trim() || refining) return
     setRefining(true)
     const toastId = toast.loading('IA redigindo ajustes...')
     try {
       const response = await fetch('/api/justica/gerar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ demandId: id, diagnosticData: { ...demand.metadata, refinePrompt, isRefining: true } })
+        body: JSON.stringify({ 
+          demandId: id, 
+          diagnosticData: { 
+            ...demand.metadata, 
+            refinePrompt: promptToSend, 
+            isRefining: true 
+          } 
+        })
       })
       if (!response.ok) throw new Error('Erro ao refinar')
       toast.success('Petição ajustada!', { id: toastId })
+      
+      // Update local state instead of reload if possible, but the API returns success:true only.
+      // To be safe and consistent with the existing codebase:
       window.location.reload()
     } catch (err) {
       toast.error('Erro ao ajustar.', { id: toastId })
@@ -196,12 +208,86 @@ export default function DemandDetailPage() {
                 />
                 <Button
                   size="icon"
-                  onClick={handleRefine}
+                  onClick={() => handleRefine()}
                   disabled={!refinePrompt.trim() || refining}
                   className="absolute bottom-3 right-3 rounded-xl shadow-lg shadow-primary/20 h-10 w-10 bg-primary hover:bg-blue-700 flex items-center justify-center p-0"
                 >
                   {refining ? <Loader2 size={18} className="animate-spin text-white" /> : <Send size={16} className="text-white" />}
                 </Button>
+              </div>
+            </div>
+          )}
+
+          {/* PREENCHER VARIÁVEIS - Padrão iaNow */}
+          {!isEditing && (
+            <div className="space-y-4 pt-6 border-t border-slate-100">
+              <div className="flex items-center gap-2 px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                <Pencil className="w-3.5 h-3.5" /> Preencher Variáveis
+              </div>
+              
+              <div className="bg-white border border-slate-100 rounded-[24px] p-5 shadow-sm space-y-4">
+                {(() => {
+                  const content = demand.metadata?.petition_content || ''
+                  const tokens = Array.from(new Set(content.match(/\[(.*?)\]/g) || [])) as string[]
+                  
+                  if (tokens.length === 0) {
+                    return <p className="text-[10px] text-slate-400 text-center py-2 font-bold uppercase tracking-wider">Nenhum campo variável detectado</p>
+                  }
+                  
+                  return (
+                    <>
+                      <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                        {tokens.map((token: string) => {
+                          const rawLabel = token.slice(1, -1)
+                          const labelMap: Record<string, string> = {
+                            'DATA': 'Data da ocorrência',
+                            'LOCAL': 'Cidade/UF',
+                            'VALOR': 'Valor da causa',
+                            'NOME_AUTOR': 'Nome do Autor',
+                            'NOME_REU': 'Nome do Réu',
+                            'CPF_AUTOR': 'CPF do Autor',
+                            'CPF_REU': 'CPF do Réu',
+                            'ENDERECO_AUTOR': 'Endereço do Autor',
+                            'ENDERECO_REU': 'Endereço do Réu'
+                          }
+                          const label = labelMap[rawLabel.toUpperCase()] || rawLabel
+
+                          return (
+                            <div key={token} className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-slate-500 ml-1">{label}</label>
+                              <input
+                                type="text"
+                                placeholder="..."
+                                value={fieldValues[token] || ''}
+                                onChange={(e) => setFieldValues(prev => ({ ...prev, [token]: e.target.value }))}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 h-10 text-[12px] font-medium focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all text-slate-700 placeholder:text-slate-300"
+                              />
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <Button
+                        onClick={async () => {
+                          const filledData = Object.entries(fieldValues)
+                            .filter(([_, v]) => v.trim())
+                            .map(([k, v]) => `${k}: ${v}`)
+                            .join('\n')
+                          
+                          if (!filledData) return
+
+                          const aiPrompt = `Por favor, preencha as variáveis abaixo na petição de forma contextualizada. Integre as informações no texto removendo os colchetes e garantindo a coesão jurídica:\n\n${filledData}`
+                          
+                          await handleRefine(aiPrompt)
+                          setFieldValues({})
+                        }}
+                        disabled={Object.values(fieldValues).filter(v => v.trim()).length === 0 || refining || saving}
+                        className="w-full rounded-xl bg-slate-900 text-white font-black text-[11px] h-11 hover:bg-black transition-all shadow-lg shadow-slate-200"
+                      >
+                        {refining ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Aplicar Alterações'}
+                      </Button>
+                    </>
+                  )
+                })()}
               </div>
             </div>
           )}
