@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
 import { ExecutionShield } from '@/components/dashboard/ExecutionShield'
+import { cn } from '@/utils/cn'
 
 // Tipagens para o Dashboard
 interface Metric {
@@ -31,6 +32,7 @@ interface DashboardItem {
   description: string
   status: string
   date: string
+  rawDate: string
   href: string
 }
 
@@ -111,6 +113,7 @@ export default function DashboardPage() {
             description: s.description || '',
             status: s.status === 'active' ? 'ready' : 'generating',
             date: new Date(s.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
+            rawDate: s.created_at,
             href: `/estrategia/${s.id}`
           })),
           legalDocs: (legalDocs || []).map((d: any) => ({
@@ -119,6 +122,7 @@ export default function DashboardPage() {
             description: d.metadata?.description || 'Gerado via IA',
             status: d.status,
             date: new Date(d.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
+            rawDate: d.created_at,
             href: `/juridico/${d.id}`
           })),
           justiceDemands: (justiceDocs || []).map((d: any) => ({
@@ -127,6 +131,7 @@ export default function DashboardPage() {
             description: `Valor: ${(d.valor_causa || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`,
             status: d.status,
             date: new Date(d.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
+            rawDate: d.created_at,
             href: `/justica/${d.id}`
           })),
           insightsCount: totalInsights
@@ -174,26 +179,34 @@ export default function DashboardPage() {
   )
 
   const renderItemCard = (item: DashboardItem, index: number, total: number) => {
+    const isGenerating = item.status === 'generating' || item.status === 'processing'
+    const isStale = isGenerating && (new Date().getTime() - new Date(item.rawDate).getTime() > 180000)
+    const displayStatus = isStale ? 'timeout' : item.status
+    
     // Lógica de span dinâmico
     let spanClass = "col-span-1"
     if (total === 1) spanClass = "col-span-1 md:col-span-2"
     if (total === 3 && index === 2) spanClass = "col-span-1 md:col-span-2"
-    // Para a seção de Jus Postulandi que tem 3 colunas base no desktop (opcional, vamos padronizar em 2 colunas para consistência do pedido)
 
     return (
-      <Link key={item.id} href={item.href} className={spanClass}>
-        <Card padding="sm" className="hover:border-primary/30 hover:shadow-md cursor-pointer group transition-all h-full">
-          <div className="flex flex-col gap-y-3">
+      <Link key={item.id} href={item.href} className={cn(spanClass, "flex flex-col h-full")}>
+        <Card padding="sm" className={cn("hover:border-primary/30 hover:shadow-md cursor-pointer group transition-all h-full min-h-[160px]", isGenerating && !isStale && "opacity-80")}>
+          <div className="flex flex-col gap-y-3 h-full">
             <div className="flex items-center justify-between">
-              <StatusBadge status={item.status} />
-              <span className="text-[10px] text-slate-400 font-bold">{item.date}</span>
+              <StatusBadge status={displayStatus as any} />
+              <div className="flex items-center gap-1.5 overflow-hidden">
+                {isGenerating && !isStale && <Loader2 className="w-2.5 h-2.5 text-primary animate-spin shrink-0" />}
+                <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">{item.date}</span>
+              </div>
             </div>
             <h4 className="font-bold text-sm text-slate-900 group-hover:text-primary transition-colors line-clamp-1">
               {item.title}
             </h4>
-            <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
-              {item.description}
-            </p>
+            <div className="flex-1 flex flex-col justify-between">
+              <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                {item.description}
+              </p>
+            </div>
           </div>
         </Card>
       </Link>

@@ -17,7 +17,8 @@ import {
   Sparkles,
   Search,
   Filter,
-  ChevronRight
+  ChevronRight,
+  AlertCircle
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
@@ -25,6 +26,7 @@ import Link from 'next/link'
 import { cn } from '@/utils/cn'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { CTAButton } from '@/components/shared/CTAButton'
+import { DocumentCard } from '@/components/shared/DocumentCard'
 import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
 import { useRouter } from 'next/navigation'
 
@@ -32,8 +34,9 @@ interface Strategy {
   id: string
   title: string
   description: string
-  status: 'ready' | 'generating' | 'draft' | 'archived'
+  status: 'ready' | 'generating' | 'draft' | 'archived' | 'timeout'
   created_at: string
+  raw_created_at: string
   version: number
   ai_model: string
 }
@@ -89,6 +92,7 @@ export default function EstrategiaPage() {
                 month: 'short',
                 year: 'numeric'
               }),
+              raw_created_at: s.created_at,
               version: s.version || 1,
               ai_model: s.ai_model || 'gemini-2.0-flash'
             })))
@@ -216,99 +220,44 @@ export default function EstrategiaPage() {
             ) : filteredStrategies.length > 0 ? (
               filteredStrategies.map((strategy) => {
                 const isGenerating = strategy.status === 'generating'
+                const isStale = isGenerating && (new Date().getTime() - new Date(strategy.raw_created_at).getTime() > 180000)
+                const isReady = strategy.status === 'ready'
                 
-                             return (
-                  <Card key={strategy.id} className={cn("transition-all border-slate-200 p-0 overflow-hidden group relative", isGenerating ? "opacity-90 bg-slate-50/50" : "hover:shadow-lg")}>
-                    <div className="flex flex-col md:flex-row md:items-stretch min-h-[220px] md:min-h-0">
-                      {/* Icon Area - Compact and hidden on mobile, or move it inside */}
-                      <div className="hidden md:flex p-6 md:w-32 items-center justify-center bg-slate-50/50 border-r border-slate-200 shrink-0">
-                        <div className={cn("w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center border border-slate-200 transition-all duration-500", isGenerating ? "text-blue-500 shadow-blue-500/10" : "text-primary group-hover:scale-110 group-hover:shadow-md")}>
-                          {isGenerating ? <Clock size={28} className="animate-pulse" /> : <Lightbulb size={28} />}
-                        </div>
-                      </div>
-
-                      {/* Content Area */}
-                      <div className="flex-1 p-5 md:p-8 flex flex-col justify-center gap-y-4">
-                        {/* Top Header Row */}
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-2 md:gap-3">
-                            {/* Mobile Icon */}
-                            <div className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary">
-                              {isGenerating ? <Clock size={16} className="animate-spin" /> : <Lightbulb size={16} />}
-                            </div>
-                            <StatusBadge status={strategy.status} />
-                            {!isGenerating && (
-                              <span className="hidden sm:inline-block text-[10px] font-bold text-slate-400 uppercase">
-                                <span className="w-1 h-1 rounded-full bg-slate-400 inline-block mr-1" /> {strategy.ai_model}
-                              </span>
-                            )}
-                          </div>
-                          <span className="flex items-center gap-1.5 text-[10px] md:text-xs font-bold text-slate-500 text-right whitespace-nowrap">
-                            <Calendar size={12} className="text-slate-400" />
-                            {strategy.created_at}
-                          </span>
-                        </div>
-
-                        {/* Title and Description */}
-                        <div className="space-y-2">
-                          <h3 className={cn("text-base md:text-xl font-black transition-colors leading-tight pr-8 md:pr-0", isGenerating ? "text-slate-800" : "text-slate-900 group-hover:text-primary")}>
-                            {strategy.title}
-                          </h3>
-                          <p className="text-slate-500 text-[13px] md:text-sm leading-relaxed line-clamp-2 max-w-4xl">
-                            {strategy.description}
-                          </p>
-                        </div>
-
-                        {/* Footer Info Area */}
-                        {!isGenerating && (
-                          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mt-1 pt-4 border-t border-slate-100">
-                            <div className="flex items-center gap-2">
-                               <div className="flex -space-x-1.5">
-                                  {[1, 2, 3].map(i => (
-                                    <div key={i} className="w-5 h-5 md:w-6 md:h-6 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center">
-                                       <Sparkles size={8} className="text-primary" />
-                                    </div>
-                                  ))}
-                               </div>
-                               <span className="text-[10px] md:text-[11px] font-bold text-slate-500 uppercase">AI Intelligence</span>
-                            </div>
-                            
-                            <div className="flex items-center gap-2 text-[10px] md:text-[11px] font-bold text-slate-600 uppercase">
-                              <Zap size={11} className="text-amber-500 fill-amber-500" />
-                              Execução Imediata
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Mobile Action Chevron - Positioned Absolutely */}
-                        {!isGenerating && (
-                          <div className="md:hidden absolute top-1/2 -translate-y-1/2 right-4 text-slate-300">
-                             <ChevronRight size={20} />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Desktop Right Action Area */}
-                      <div className="hidden md:flex p-6 md:w-32 items-center justify-center bg-slate-50/50 border-l border-slate-200">
-                        {isGenerating ? (
-                          <div className="w-12 h-12 rounded-full bg-slate-200 border border-slate-200 flex items-center justify-center text-slate-400">
-                            <Clock size={20} className="animate-spin" />
-                          </div>
-                        ) : (
-                          <Link href={`/estrategia/${strategy.id}`}>
-                            <div className="w-12 h-12 rounded-full bg-white border border-slate-200 flex items-center justify-center text-primary shadow-sm group-hover:bg-primary group-hover:border-primary group-hover:text-white group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-primary/20 transition-all duration-300">
-                              <ChevronRight size={24} />
-                            </div>
-                          </Link>
-                        )}
-                      </div>
-                      
-                      {/* Mobile Catch-all Link */}
-                      {!isGenerating && (
-                        <Link href={`/estrategia/${strategy.id}`} className="md:hidden absolute inset-0 z-10" />
-                      )}
-                    </div>
-                  </Card>
+                return (
+                  <DocumentCard
+                    key={strategy.id}
+                    id={strategy.id}
+                    href={`/estrategia/${strategy.id}`}
+                    title={strategy.title}
+                    subtitle={strategy.description}
+                    date={strategy.created_at}
+                    isGenerating={isGenerating}
+                    isTimeout={isStale}
+                    icon={<Lightbulb size={22} />}
+                    generatingIcon={<Clock size={16} className="animate-spin" />}
+                    timeoutIcon={<AlertCircle size={22} />}
+                    moduleLabel="Inteligência Estratégica"
+                    badge={{
+                      label: isStale ? 'Timeout' : isGenerating ? 'Gerando' : isReady ? 'Pronto' : 'Falhou',
+                      className: isStale
+                        ? 'bg-amber-100 text-amber-800 border-amber-200'
+                        : isGenerating
+                        ? 'bg-blue-100 text-blue-700 border-blue-200'
+                        : isReady
+                        ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                        : 'bg-red-100 text-red-700 border-red-200'
+                    }}
+                    footerTags={[
+                      {
+                        icon: <div className="flex -space-x-1.5 mr-1">{[1,2,3].map(i => <div key={i} className="w-5 h-5 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center"><Sparkles size={8} className="text-primary" /></div>)}</div>,
+                        label: 'AI Intelligence'
+                      },
+                      {
+                        icon: <Zap size={11} className="text-amber-500 fill-amber-500" />,
+                        label: 'Execução Imediata'
+                      }
+                    ]}
+                  />
                 )
               })
             ) : (

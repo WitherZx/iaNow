@@ -22,7 +22,8 @@ import {
   Send,
   RefreshCcw,
   Clock,
-  Trash2
+  Trash2,
+  ExternalLink
 } from 'lucide-react'
 import { Button } from '@/components/shared/Button'
 import { Card } from '@/components/shared/Card'
@@ -51,6 +52,52 @@ export default function ViewDocumentPage() {
   const [refinePrompt, setRefinePrompt] = useState('')
   const [resolvedSuggestions, setResolvedSuggestions] = useState<string[]>([])
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
+  const [activeToken, setActiveToken] = useState<string | null>(null)
+
+  const scrollToToken = (token: string) => {
+    setActiveToken(token)
+    setTimeout(() => {
+      const id = `token-${token.replace(/[\[\]]/g, '')}`
+      const el = document.getElementById(id)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.add('animate-pulse', 'ring-4', 'ring-primary/40', 'bg-primary/20')
+        setTimeout(() => {
+          el.classList.remove('animate-pulse', 'ring-4', 'ring-primary/40', 'bg-primary/20')
+          setActiveToken(null)
+        }, 3000)
+      } else {
+        setActiveToken(null)
+      }
+    }, 100)
+  }
+
+  const renderTextWithHighlights = (text: string) => {
+    if (!text) return null
+    const parts = text.split(/(\[.*?\])/g)
+    return parts.map((part, i) => {
+      if (part.startsWith('[') && part.endsWith(']')) {
+        const tokenCleanup = part.replace(/[\[\]]/g, '')
+        const isActive = activeToken === part
+        return (
+          <span 
+            key={i} 
+            id={`token-${tokenCleanup}`}
+            className={cn(
+              "transition-all duration-500 rounded px-1.5 py-0.5 font-bold cursor-help border",
+              isActive 
+                ? "bg-primary text-white border-primary shadow-lg scale-110 z-10" 
+                : "bg-primary/5 text-primary border-primary/20 hover:bg-primary/10"
+            )}
+            title={`Variável: ${tokenCleanup}`}
+          >
+            {part}
+          </span>
+        )
+      }
+      return part
+    })
+  }
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null
@@ -389,8 +436,14 @@ export default function ViewDocumentPage() {
                           }
 
                           return (
-                            <div key={token} className="space-y-1.5">
-                              <label className="text-[10px] font-bold text-slate-500 ml-1">{label}</label>
+                            <div key={token} className="space-y-1.5 group/var">
+                              <button 
+                                onClick={() => scrollToToken(token)}
+                                className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 ml-1 hover:text-primary transition-colors text-left"
+                              >
+                                {label}
+                                <ExternalLink size={10} className="opacity-0 group-hover/var:opacity-100 transition-opacity" />
+                              </button>
                               <input
                                 type="text"
                                 placeholder={isDate ? new Date().toLocaleDateString('pt-BR') : `...`}
@@ -446,9 +499,30 @@ export default function ViewDocumentPage() {
               <div className="flex-1 p-4 md:p-8 print:p-0 prose prose-slate max-w-none whitespace-normal break-words prose-headings:font-black prose-h1:text-2xl md:prose-h1:text-3xl prose-h2:text-xl md:prose-h2:text-2xl prose-p:text-slate-600 prose-p:leading-relaxed prose-li:text-slate-600 text-sm sm:text-base md:text-lg overflow-hidden">
                 <ReactMarkdown
                   components={{
-                    li: ({node, ...props}) => <li className="break-words whitespace-normal" {...props} />,
-                    p: ({node, ...props}) => <p className="break-words whitespace-normal" {...props} />,
-                    blockquote: ({node, ...props}) => <blockquote className="break-words whitespace-normal" {...props} />
+                    li: ({node, children, ...props}) => (
+                      <li className="break-words whitespace-normal" {...props}>
+                        {Array.isArray(children) 
+                          ? children.map((c, i) => typeof c === 'string' ? <React.Fragment key={i}>{renderTextWithHighlights(c)}</React.Fragment> : c)
+                          : typeof children === 'string' ? renderTextWithHighlights(children) : children
+                        }
+                      </li>
+                    ),
+                    p: ({node, children, ...props}) => (
+                      <p className="break-words whitespace-normal" {...props}>
+                        {Array.isArray(children) 
+                          ? children.map((c, i) => typeof c === 'string' ? <React.Fragment key={i}>{renderTextWithHighlights(c)}</React.Fragment> : c)
+                          : typeof children === 'string' ? renderTextWithHighlights(children) : children
+                        }
+                      </p>
+                    ),
+                    blockquote: ({node, children, ...props}) => (
+                      <blockquote className="break-words whitespace-normal" {...props}>
+                        {Array.isArray(children) 
+                          ? children.map((c, i) => typeof c === 'string' ? <React.Fragment key={i}>{renderTextWithHighlights(c)}</React.Fragment> : c)
+                          : typeof children === 'string' ? renderTextWithHighlights(children) : children
+                        }
+                      </blockquote>
+                    )
                   }}
                 >
                   {doc.content?.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '') || ''}

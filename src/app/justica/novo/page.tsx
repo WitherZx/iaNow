@@ -79,6 +79,8 @@ export default function NovoJusticaPage() {
     // Values
     materialDamage: '',
     moralDamage: '',
+    // Evidence
+    evidenceFiles: [] as { name: string, size: number, type: string }[]
   })
   const [isExtracting, setIsExtracting] = useState(false)
 
@@ -178,7 +180,7 @@ export default function NovoJusticaPage() {
           <Card className="min-h-[500px] p-5 sm:p-8 md:p-12 rounded-[40px] border-slate-100 shadow-sm relative bg-white overflow-visible">
             <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-primary/5 rounded-full blur-2xl md:blur-3xl -mr-16 -mt-16 md:-mr-32 md:-mt-32 pointer-events-none" />
             
-            <div className="flex w-full justify-center mb-8">
+            <div className="flex w-full justify-start mb-10">
               <StepBadge current={currentStep + 1} total={STEPS.length} />
             </div>
             
@@ -322,7 +324,7 @@ export default function NovoJusticaPage() {
                        value={formData.comarca}
                        onChange={(e) => setFormData({...formData, comarca: e.target.value})}
                        placeholder="Ex: São Paulo - SP"
-                       className="w-full md:w-1/2 h-14 px-5 rounded-2xl bg-white border border-slate-200 text-slate-900 font-bold focus:ring-2 focus:ring-primary/20 transition-all shadow-sm"
+                       className="w-full h-14 px-5 rounded-2xl bg-white border border-slate-200 text-slate-900 font-bold focus:ring-2 focus:ring-primary/20 transition-all shadow-sm"
                      />
                   </div>
                 </div>
@@ -364,14 +366,73 @@ export default function NovoJusticaPage() {
                         ))}
                       </div>
                    </div>
-                   <div className="flex flex-col gap-y-3 text-left">
+
+                   {/* Upload de Provas - Condicional */}
+                   {formData.hasEvidence === 'Sim' && (
+                     <div className="md:col-span-2 flex flex-col gap-y-4 pt-6 mt-4 border-t border-slate-100 text-left animate-in fade-in slide-in-from-top-4 duration-500">
+                        <div className="flex items-center gap-2">
+                           <Upload className="w-5 h-5 text-primary" />
+                           <Label tooltip="Anexe fotos, PDFs de contratos, prints de conversas ou qualquer documento que comprove o seu relato. Estes arquivos serão anexados ao kit de protocolo.">Anexar Provas (Imagens/PDF)</Label>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                           <div className="relative group p-8 border-2 border-dashed border-slate-200 hover:border-primary/50 hover:bg-primary/5 rounded-[32px] transition-all flex flex-col items-center justify-center cursor-pointer text-center">
+                              <input 
+                                type="file" 
+                                multiple
+                                accept="image/*,.pdf"
+                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                onChange={(e) => {
+                                  const files = Array.from(e.target.files || [])
+                                  const newFiles = files.map(f => ({ name: f.name, size: f.size, type: f.type }))
+                                  setFormData(prev => ({ ...prev, evidenceFiles: [...prev.evidenceFiles, ...newFiles] }))
+                                  toast.success(`${files.length} arquivo(s) adicionado(s)`)
+                                }}
+                              />
+                              <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-primary group-hover:text-white transition-all mb-3 shadow-sm">
+                                <Upload size={24} />
+                              </div>
+                              <span className="text-xs font-black uppercase text-slate-400 group-hover:text-primary">Clique para subir</span>
+                              <span className="text-[10px] text-slate-300 font-bold mt-1">Imagens ou PDF</span>
+                           </div>
+
+                           <div className="space-y-2 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
+                              {formData.evidenceFiles.length > 0 ? formData.evidenceFiles.map((file, i) => (
+                                <div key={i} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-2xl shadow-sm group hover:border-primary/20 transition-all">
+                                  <div className="flex items-center gap-3 overflow-hidden">
+                                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 shrink-0">
+                                      {file.type.includes('image') ? <Upload size={14} /> : <FileText size={14} />}
+                                    </div>
+                                    <div className="flex flex-col overflow-hidden">
+                                      <span className="text-[11px] font-black text-slate-700 truncate max-w-[140px]">{file.name}</span>
+                                      <span className="text-[9px] text-slate-400 font-bold">{(file.size / 1024).toFixed(0)} KB</span>
+                                    </div>
+                                  </div>
+                                  <button 
+                                    onClick={() => setFormData(prev => ({ ...prev, evidenceFiles: prev.evidenceFiles.filter((_, idx) => idx !== i) }))}
+                                    className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              )) : (
+                                <div className="h-full flex flex-col items-center justify-center border border-slate-100 rounded-[32px] bg-slate-50/50 p-6 text-center">
+                                  <AlertCircle size={20} className="text-slate-200 mb-2" />
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider uppercase">Nenhum arquivo anexado</p>
+                                </div>
+                              )}
+                           </div>
+                        </div>
+                     </div>
+                   )}
+                   <div className="flex flex-col gap-y-3 text-left md:col-span-2">
                       <Label tooltip="Data exata ou período aproximado. Ex: 15/02/2024 ou Há cerca de 2 meses. Importante para verificar prescrição (prazo legal para entrar com a ação).">Quando isso ocorreu?</Label>
                       <input 
                         type="text"
                         value={formData.whenHappened}
                         onChange={(e) => setFormData({...formData, whenHappened: e.target.value})}
                         placeholder="Ex: Há 1 mês / Data específica"
-                        className="w-full h-14 px-5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 font-bold focus:ring-2 focus:ring-primary/20 transition-all font-mono"
+                        className="w-full h-14 px-5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 font-bold focus:ring-2 focus:ring-primary/20 transition-all font-mono shadow-sm"
                       />
                    </div>
 
@@ -493,26 +554,96 @@ export default function NovoJusticaPage() {
 
             {/* Passo Final: Geração */}
             {currentStep === 4 && (
-              <div className="flex flex-col items-center justify-center text-center py-12 gap-y-10">
-                <div className="w-32 h-32 rounded-full border-4 border-slate-100 flex items-center justify-center bg-slate-50 shadow-inner">
-                  {loading ? <Loader2 size={48} className="text-primary animate-spin" /> : <ShieldCheck size={48} className="text-emerald-500 animate-pulse" />}
-                </div>
-                
-                <div className="space-y-3">
-                  <h3 className="text-2xl md:text-4xl font-black text-slate-900 uppercase tracking-tight">Tudo Checado!</h3>
-                  <p className="text-slate-500 max-w-sm leading-relaxed font-bold">
-                    Ao prosseguir, nossa IA irá fundir as qualificações, fatos e leis para gerar sua petição no formato ideal para o Juizado Especial.
-                  </p>
+              <div className="flex flex-col items-start text-left py-6 gap-y-10 animate-in fade-in slide-in-from-right-4 duration-500">
+                <div className="flex flex-col md:flex-row items-center md:items-start gap-6 border-b border-slate-100 pb-10 w-full">
+                  <div className="w-24 h-24 rounded-[32px] border-4 border-emerald-50 flex items-center justify-center bg-emerald-500 text-white shadow-xl shadow-emerald-500/20 shrink-0">
+                    <ShieldCheck size={40} className="animate-pulse" />
+                  </div>
+                  <div className="space-y-3">
+                    <h3 className="text-3xl md:text-5xl font-black text-slate-900 uppercase tracking-tight">Tudo Checado!</h3>
+                    <p className="text-slate-500 max-w-2xl leading-relaxed font-bold">
+                      Sua petição de JEC está pronta para ser redigida pela nossa IA. 
+                      Confira abaixo o resumo dos dados que serão utilizados no protocolo.
+                    </p>
+                  </div>
                 </div>
 
-                {!loading && (
-                   <Button 
-                     size="lg"
-                     onClick={handleStartProcess}
-                     className="w-full sm:w-auto h-16 px-6 sm:px-12 rounded-2xl shadow-xl shadow-primary/30 bg-primary hover:bg-blue-700 font-black text-lg sm:text-xl hover:scale-105 active:scale-95 transition-all text-center flex items-center justify-center"
-                   >
-                     Gerar Petição Inicial
-                   </Button>
+                {/* Card de Resumo do Protocolo */}
+                <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="p-8 bg-slate-50 border border-slate-100 rounded-[32px] space-y-6 shadow-inner-sm relative overflow-hidden group hover:border-primary/20 transition-all">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+                    
+                    <div className="flex items-center gap-3 px-1 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                      <FileSearch className="w-4 h-4" /> Resumo do Caso
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-primary shadow-sm shrink-0"><User size={18} /></div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black uppercase text-slate-400">Requerente</span>
+                          <span className="text-sm font-bold text-slate-900">{formData.authorName || 'Não informado'}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-amber-500 shadow-sm shrink-0"><Building size={18} /></div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black uppercase text-slate-400">Réu</span>
+                          <span className="text-sm font-bold text-slate-900">{formData.defendantName || formData.otherParty || 'Não informado'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-8 bg-slate-50 border border-slate-100 rounded-[32px] space-y-6 shadow-inner-sm relative overflow-hidden group hover:border-primary/20 transition-all">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+                    
+                    <div className="flex items-center gap-3 px-1 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                      <Calculator className="w-4 h-4" /> Valores e Juízo
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-emerald-500 shadow-sm shrink-0"><TrendingUp size={18} /></div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black uppercase text-slate-400">Valor da Causa</span>
+                          <span className="text-sm font-bold text-slate-900">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorTotalCausa)}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-400 shadow-sm shrink-0"><MapPin size={18} /></div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black uppercase text-slate-400">Comarca</span>
+                          <span className="text-sm font-bold text-slate-900">{formData.comarca || 'Não informado'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {!loading ? (
+                   <div className="flex flex-col gap-y-4 w-full">
+                     <Button 
+                       size="lg"
+                       onClick={handleStartProcess}
+                       className="w-full h-16 md:h-20 px-12 rounded-[24px] shadow-2xl shadow-primary/30 bg-primary hover:bg-blue-700 font-black text-lg md:text-2xl hover:scale-[1.02] active:scale-95 transition-all text-center flex items-center justify-center relative overflow-hidden group"
+                     >
+                       <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-500" />
+                       <FileText className="w-6 h-6 mr-3" /> Gerar Petição Inicial
+                       <ArrowRight className="w-6 h-6 ml-3 opacity-0 -translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
+                     </Button>
+                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center md:text-left px-2">A geração pode levar até 40 segundos. Não feche esta aba.</p>
+                   </div>
+                ) : (
+                  <div className="w-full p-10 bg-primary/5 rounded-[32px] border border-primary/20 flex flex-col items-center justify-center gap-y-6">
+                    <Loader2 size={48} className="text-primary animate-spin" />
+                    <div className="text-center">
+                      <p className="text-primary font-black uppercase tracking-widest text-sm">Redigindo sua Petição...</p>
+                      <p className="text-primary/60 font-bold text-xs mt-1">Nossa IA está unificando o relato com os fundamentos legais.</p>
+                    </div>
+                  </div>
                 )}
               </div>
             )}

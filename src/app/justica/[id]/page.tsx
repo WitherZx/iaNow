@@ -24,9 +24,10 @@ import {
   Pencil,
   Save,
   X,
+  ExternalLink,
+  Upload,
   FileText,
   CheckSquare,
-  ExternalLink,
   MapPin,
   List,
   CheckCircle2,
@@ -56,6 +57,54 @@ export default function DemandDetailPage() {
   const [refining, setRefining] = useState(false)
   const [refinePrompt, setRefinePrompt] = useState('')
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
+  const [activeToken, setActiveToken] = useState<string | null>(null)
+
+  const scrollToToken = (token: string) => {
+    setActiveToken(token)
+    // Pequeno delay para garantir que o elemento existe se o Markdown renderizar algo novo
+    setTimeout(() => {
+      const id = `token-${token.replace(/[\[\]]/g, '')}`
+      const el = document.getElementById(id)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        // Adiciona uma classe temporária de destaque pulsante
+        el.classList.add('animate-pulse', 'ring-4', 'ring-primary/40', 'bg-primary/20')
+        setTimeout(() => {
+          el.classList.remove('animate-pulse', 'ring-4', 'ring-primary/40', 'bg-primary/20')
+          setActiveToken(null)
+        }, 3000)
+      } else {
+        setActiveToken(null)
+      }
+    }, 100)
+  }
+
+  const renderTextWithHighlights = (text: string) => {
+    if (!text) return null
+    const parts = text.split(/(\[.*?\])/g)
+    return parts.map((part, i) => {
+      if (part.startsWith('[') && part.endsWith(']')) {
+        const tokenCleanup = part.replace(/[\[\]]/g, '')
+        const isActive = activeToken === part
+        return (
+          <span 
+            key={i} 
+            id={`token-${tokenCleanup}`}
+            className={cn(
+              "transition-all duration-500 rounded px-1.5 py-0.5 font-bold cursor-help border",
+              isActive 
+                ? "bg-primary text-white border-primary shadow-lg scale-110 z-10" 
+                : "bg-primary/5 text-primary border-primary/20 hover:bg-primary/10"
+            )}
+            title={`Variável: ${tokenCleanup}`}
+          >
+            {part}
+          </span>
+        )
+      }
+      return part
+    })
+  }
 
   useEffect(() => {
     async function loadDemand() {
@@ -253,8 +302,14 @@ export default function DemandDetailPage() {
                           const label = labelMap[rawLabel.toUpperCase()] || rawLabel
 
                           return (
-                            <div key={token} className="space-y-1.5">
-                              <label className="text-[10px] font-bold text-slate-500 ml-1">{label}</label>
+                            <div key={token} className="space-y-1.5 group/var">
+                              <button 
+                                onClick={() => scrollToToken(token)}
+                                className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 ml-1 hover:text-primary transition-colors text-left"
+                              >
+                                {label}
+                                <ExternalLink size={10} className="opacity-0 group-hover/var:opacity-100 transition-opacity" />
+                              </button>
                               <input
                                 type="text"
                                 placeholder="..."
@@ -291,6 +346,29 @@ export default function DemandDetailPage() {
               </div>
             </div>
           )}
+
+          {/* PROVAS ANEXADAS - Novo */}
+          {demand.metadata?.evidenceFiles?.length > 0 && (
+            <div className="space-y-4 pt-6 border-t border-slate-100">
+              <div className="flex items-center gap-2 px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                <Upload className="w-3.5 h-3.5" /> Provas Anexadas
+              </div>
+              <div className="space-y-2">
+                {demand.metadata.evidenceFiles.map((file: any, i: number) => (
+                  <div key={i} className="flex items-center gap-3 p-3 bg-white border border-slate-100 rounded-2xl shadow-sm group hover:border-primary/20 transition-all">
+                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 shrink-0">
+                      {file.type?.includes('image') ? <Upload size={14} /> : <FileText size={14} />}
+                    </div>
+                    <div className="flex flex-col overflow-hidden">
+                      <span className="text-[11px] font-black text-slate-700 truncate">{file.name}</span>
+                      <span className="text-[9px] text-slate-400 font-bold">{(file.size / 1024).toFixed(0)} KB • Armazenado</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
 
           {/* GUIA DE PROTOCOLO */}
           <Card className="rounded-[32px] border-slate-100 shadow-xl shadow-slate-100/50 bg-white overflow-hidden border">
@@ -419,9 +497,21 @@ export default function DemandDetailPage() {
             <div className="prose prose-slate max-w-none break-words whitespace-normal prose-headings:font-black prose-p:text-slate-700 text-sm sm:text-base md:text-lg leading-relaxed selection:bg-primary/20 overflow-hidden">
               <ReactMarkdown
                 components={{
-                  li: ({node, ...props}) => <li className="break-words whitespace-normal" {...props} />,
-                  p: ({node, ...props}) => <p className="break-words whitespace-normal" {...props} />,
-                  blockquote: ({node, ...props}) => <blockquote className="break-words whitespace-normal" {...props} />
+                  li: ({node, children, ...props}) => (
+                    <li className="break-words whitespace-normal" {...props}>
+                      {typeof children === 'string' ? renderTextWithHighlights(children) : children}
+                    </li>
+                  ),
+                  p: ({node, children, ...props}) => (
+                    <p className="break-words whitespace-normal" {...props}>
+                      {typeof children === 'string' ? renderTextWithHighlights(children) : children}
+                    </p>
+                  ),
+                  blockquote: ({node, children, ...props}) => (
+                    <blockquote className="break-words whitespace-normal" {...props}>
+                      {typeof children === 'string' ? renderTextWithHighlights(children) : children}
+                    </blockquote>
+                  )
                 }}
               >
                 {demand.metadata?.petition_content || ''}

@@ -31,7 +31,7 @@ import { cn } from '@/utils/cn'
 interface Demand {
   id: string
   tipo_acao: string | null
-  status: 'draft' | 'ready' | 'filed'
+  status: 'draft' | 'ready' | 'filed' | 'timeout'
   valor_causa: number
   created_at: string
 }
@@ -41,7 +41,7 @@ export default function JusticaPage() {
   const supabase = createClient()
   const [demands, setDemands] = useState<Demand[]>([])
   const [searchTerm, setSearchTerm] = useState('')
-  const [filter, setFilter] = useState<'all' | 'ready' | 'draft' | 'filed'>('all')
+  const [filter, setFilter] = useState<'all' | 'ready' | 'generating'>('all')
   const [loading, setLoading] = useState(true)
   const { needsOnboarding } = useOnboardingGuard()
 
@@ -106,7 +106,13 @@ export default function JusticaPage() {
 
   const filteredDemands = demands.filter(d => {
     const matchesSearch = (d.tipo_acao || '').toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesFilter = filter === 'all' || d.status === filter
+    const isGenerating = d.status === 'draft'
+    const isStale = isGenerating && (new Date().getTime() - new Date(d.created_at).getTime() > 180000)
+    
+    let matchesFilter = filter === 'all'
+    if (filter === 'generating') matchesFilter = d.status === 'draft'
+    if (filter === 'ready') matchesFilter = d.status === 'ready' || d.status === 'filed'
+    
     return matchesSearch && matchesFilter
   })
 
@@ -115,9 +121,10 @@ export default function JusticaPage() {
       case 'draft':
         return { label: 'Rascunho', className: 'bg-slate-100 text-slate-600 border-slate-200', icon: <Clock size={10} /> }
       case 'ready':
-        return { label: 'Pronto', className: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: <FileText size={10} /> }
       case 'filed':
-        return { label: 'Protocolado', className: 'bg-primary/10 text-primary border-primary/20', icon: <CheckCircle2 size={10} /> }
+        return { label: 'Concluído', className: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: <CheckCircle2 size={10} /> }
+      case 'timeout':
+        return { label: 'Timeout', className: 'bg-amber-100 text-amber-700 border-amber-200', icon: <AlertCircle size={10} /> }
       default:
         return { label: status, className: 'bg-slate-100 text-slate-600 border-slate-200', icon: <AlertCircle size={10} /> }
     }
@@ -176,21 +183,19 @@ export default function JusticaPage() {
               {/* Filters and Search - Padrão iaNow */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/30 p-2 rounded-[22px] border border-slate-100 shadow-inner-sm">
           <div className="relative flex items-center p-1 bg-slate-100/50 rounded-2xl w-full sm:w-auto">
-            <div 
-              className={cn(
-                "absolute h-[34px] transition-all duration-300 ease-out bg-white rounded-xl shadow-sm border border-slate-200/50",
-                filter === 'all' && "w-[calc(25%-4px)] left-1 sm:w-[80px] sm:left-1",
-                filter === 'draft' && "w-[calc(25%-4px)] left-[25%] sm:w-[94px] sm:left-[88px]",
-                filter === 'ready' && "w-[calc(25%-4px)] left-[50%] sm:w-[94px] sm:left-[186px]",
-                filter === 'filed' && "w-[calc(25%-4px)] left-[75%] sm:w-[104px] sm:left-[284px]"
-              )}
-            />
-            
-            <button onClick={() => setFilter('all')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/4 sm:w-[80px]", filter === 'all' ? 'text-primary' : 'text-slate-400 hover:text-slate-600')}>Todas</button>
-            <button onClick={() => setFilter('draft')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/4 sm:w-[94px]", filter === 'draft' ? 'text-slate-600' : 'text-slate-400 hover:text-slate-600')}>Fila</button>
-            <button onClick={() => setFilter('ready')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/4 sm:w-[94px]", filter === 'ready' ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600')}>Prontas</button>
-            <button onClick={() => setFilter('filed')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/4 sm:w-[104px]", filter === 'filed' ? 'text-primary' : 'text-slate-400 hover:text-slate-600')}>Protocolo</button>
-          </div>
+                  <div 
+                    className={cn(
+                      "absolute h-[34px] transition-all duration-300 ease-out bg-white rounded-xl shadow-sm border border-slate-200/50",
+                      filter === 'all' && "w-[calc(33.33%-4px)] left-1 sm:w-[80px] sm:left-1",
+                      filter === 'ready' && "w-[calc(33.33%-4px)] left-[33.33%] sm:w-[94px] sm:left-[88px]",
+                      filter === 'generating' && "w-[calc(33.33%-4px)] left-[calc(66.66%+2px)] sm:w-[94px] sm:left-[186px]"
+                    )}
+                  />
+                  
+                  <button onClick={() => setFilter('all')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[80px]", filter === 'all' ? 'text-primary' : 'text-slate-400 hover:text-slate-600')}>Todas</button>
+                  <button onClick={() => setFilter('ready')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[94px]", filter === 'ready' ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600')}>Prontas</button>
+                  <button onClick={() => setFilter('generating')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[94px]", filter === 'generating' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600')}>Em Fila</button>
+                </div>
 
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
@@ -222,31 +227,36 @@ export default function JusticaPage() {
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {filteredDemands.map((demand) => {
-              const badge = getStatusBadge(demand.status)
+              const isGenerating = demand.status === 'draft'
+              const isStale = isGenerating && (new Date().getTime() - new Date(demand.created_at).getTime() > 180000)
+              const badge = getStatusBadge(isStale ? 'timeout' : demand.status)
               const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(demand.valor_causa)
               
               return (
                 <DocumentCard
-                  key={demand.id}
-                  id={demand.id}
-                  href={`/justica/${demand.id}`}
-                  title={demand.tipo_acao || 'Ação não classificada'}
-                  subtitle={`Valor da Causa: ${valorFormatado}`}
-                  date={new Date(demand.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  isGenerating={false}
-                  icon={<Scale size={22} />}
-                  moduleLabel="Inteligência Jurídica"
-                  badge={badge}
-                  footerTags={[
-                    {
-                      icon: <div className="flex -space-x-1.5 mr-1">{[1,2,3].map(i => <div key={i} className="w-5 h-5 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center"><Scale size={8} className="text-primary" /></div>)}</div>,
-                      label: 'Processo Gratuito'
-                    },
-                    {
-                      icon: <FileSignature size={11} className="text-primary/70" />,
-                      label: 'Pronto para Protocolar'
-                    }
-                  ]}
+                   key={demand.id}
+                   id={demand.id}
+                   href={`/justica/${demand.id}`}
+                   title={demand.tipo_acao || 'Ação não classificada'}
+                   subtitle={`Valor da Causa: ${valorFormatado}`}
+                   date={new Date(demand.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                   isGenerating={isGenerating}
+                   isTimeout={isStale}
+                   icon={<Scale size={22} />}
+                   generatingIcon={<Clock size={16} className="animate-spin" />}
+                   timeoutIcon={<AlertCircle size={22} />}
+                   moduleLabel="Justiça Gratuita"
+                   badge={badge}
+                   footerTags={[
+                     {
+                       icon: <div className="flex -space-x-1.5 mr-1">{[1,2,3].map(i => <div key={i} className="w-5 h-5 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center"><Scale size={8} className="text-primary" /></div>)}</div>,
+                       label: 'Processo Gratuito'
+                     },
+                     {
+                       icon: <FileSignature size={11} className="text-primary/70" />,
+                       label: 'Pronto para Protocolar'
+                     }
+                   ]}
                 />
               )
             })}

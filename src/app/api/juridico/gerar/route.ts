@@ -204,6 +204,22 @@ ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
 
     const aiModel = 'gemini-2.0-flash'
 
+    // 1. INSERTS PLACEHOLDER FIRST for immediate visibility
+    const { data: document, error: docError } = await adminClient
+      .from('generated_documents')
+      .insert({
+        organization_id: orgId,
+        created_by: user.id,
+        title: `${tipoContrato}`,
+        document_type: 'custom',
+        ai_model: aiModel,
+        status: 'generating',
+        metadata: { requestPayload: body }
+      } as any)
+      .select().single() as any
+
+    if (docError) throw docError
+
     try {
       const aiResponse = await askAI(aiPrompt, systemPrompt)
       let rawResponse = aiResponse.content.trim()
@@ -220,27 +236,17 @@ ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
         }
       }
 
-      const { data: document, error: docError } = await adminClient
-        .from('generated_documents')
-        .insert({
-          organization_id: orgId,
-          created_by: user.id,
-          title: `${tipoContrato}`,
-          document_type: 'custom',
-          ai_model: aiModel,
-          status: 'ready',
-          content: parsedData.contract.trim(),
-          metadata: { 
-            ...body,
-            audit: parsedData.audit,
-            generated_at: new Date().toISOString()
-          }
-        } as any)
-        .select().single() as any
-
-      if (docError) throw docError
-
       const adminApi = adminClient as any
+      await adminApi.from('generated_documents').update({
+        content: parsedData.contract.trim(),
+        status: 'ready',
+        metadata: {
+          ...body,
+          audit: parsedData.audit,
+          generated_at: new Date().toISOString()
+        }
+      }).eq('id', document.id)
+
       await adminApi.from('activity_logs').insert({
         organization_id: orgId,
         user_id: user.id,
@@ -257,9 +263,14 @@ ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
       })
     } catch (e) {
       console.error('AI Generation Error:', e)
+      const adminApi = adminClient as any
+      await adminApi.from('generated_documents').update({
+        status: 'failed',
+        content: 'Falha na geração do documento pelo motor IA.'
+      }).eq('id', document.id)
+      
       return NextResponse.json({ error: 'Falha na geração do documento pelo motor IA.' }, { status: 500 })
     }
-
   } catch (error: any) {
     console.error('API Error Juridico:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

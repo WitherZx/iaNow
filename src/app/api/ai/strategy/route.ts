@@ -108,6 +108,23 @@ Gere o plano estratégico em JSON agora.`
 
     if (diagError) throw diagError
 
+    // 3. Salvar a Estratégia em estado PROCESSING (Placeholder)
+    const { data: strategy, error: stratError } = await adminClient
+      .from('strategies')
+      .insert({
+        organization_id: orgId,
+        diagnostic_id: diagnostic.id,
+        created_by: user.id,
+        title: 'Gerando Estratégia...',
+        description: 'A Inteligência Artificial está processando seu diagnóstico e construindo seu plano de atuação imediato.',
+        ai_model: aiModel,
+        content: {},
+        status: 'processing'
+      } as any)
+      .select().single() as any
+
+    if (stratError) throw stratError
+
     // ── GERAÇÃO SINCRONIZADA (Aguardando IA para Vercel) ──────────────────────────
     try {
       const aiResponse = await askAI(prompt, systemPrompt)
@@ -130,25 +147,16 @@ Gere o plano estratégico em JSON agora.`
         }
       }
 
-      // 3. Salvar a Estratégia em estado ACTIVE direto (AI Pronta)
-      const { data: strategy, error: stratError } = await adminClient
-        .from('strategies')
-        .insert({
-          organization_id: orgId,
-          diagnostic_id: diagnostic.id,
-          created_by: user.id,
-          title: parsedContent.title,
-          description: parsedContent.description,
-          ai_model: aiModel,
-          content: parsedContent,
-          status: 'active'
-        } as any)
-        .select().single() as any
-
-      if (stratError) throw stratError
+      // Atualiza para ACTIVE
+      const adminApi = adminClient as any
+      await adminApi.from('strategies').update({
+        title: parsedContent.title,
+        description: parsedContent.description,
+        content: parsedContent,
+        status: 'active'
+      }).eq('id', strategy.id)
 
       // Registra a atividade APÓS finalizar
-      const adminApi = adminClient as any
       await adminApi.from('activity_logs').insert({
         organization_id: orgId,
         user_id: user.id,
@@ -166,6 +174,13 @@ Gere o plano estratégico em JSON agora.`
       })
     } catch (e) {
       console.error('Erro na thread da IA:', e)
+      const adminApi = adminClient as any
+      await adminApi.from('strategies').update({
+        status: 'failed',
+        title: 'Falha na IA',
+        description: 'A inteligência não conseguiu processar este plano.'
+      }).eq('id', strategy.id)
+
       return NextResponse.json({ error: 'A inteligência não conseguiu processar este plano no momento.' }, { status: 500 })
     }
   } catch (error: any) {

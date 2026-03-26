@@ -24,11 +24,13 @@ interface DocumentCardProps {
   subtitle?: string
   date: string
   isGenerating?: boolean
+  isTimeout?: boolean
   badge: BadgeInfo
   moduleLabel?: string
   icon: React.ReactNode
   generatingIcon?: React.ReactNode
   footerTags?: FooterTag[]
+  timeoutIcon?: React.ReactNode
 }
 
 export function DocumentCard({
@@ -38,10 +40,12 @@ export function DocumentCard({
   subtitle,
   date,
   isGenerating = false,
+  isTimeout = false,
   badge,
   moduleLabel,
   icon,
   generatingIcon,
+  timeoutIcon,
   footerTags = [],
 }: DocumentCardProps) {
   const cardContent = (
@@ -54,11 +58,13 @@ export function DocumentCard({
         <div className="hidden md:flex w-32 shrink-0 items-center justify-center bg-slate-50/50 border-r border-slate-200">
           <div className={cn(
             'w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center border border-slate-200 transition-all duration-500',
-            isGenerating
+            isGenerating && !isTimeout
               ? 'text-blue-500 shadow-blue-500/10'
+              : isTimeout
+              ? 'text-amber-500 border-amber-200 bg-amber-50/30 shadow-amber-500/5'
               : 'text-primary group-hover:scale-110 group-hover:shadow-md'
           )}>
-            {isGenerating && generatingIcon ? generatingIcon : icon}
+            {isGenerating && !isTimeout && generatingIcon ? generatingIcon : isTimeout ? (timeoutIcon ?? icon) : icon}
           </div>
         </div>
 
@@ -68,8 +74,11 @@ export function DocumentCard({
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
               {/* Mobile Icon */}
-              <div className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary shrink-0">
-                {isGenerating && generatingIcon ? generatingIcon : icon}
+              <div className={cn(
+                "md:hidden flex items-center justify-center w-8 h-8 rounded-lg shrink-0",
+                isGenerating && !isTimeout ? "bg-primary/10 text-primary" : isTimeout ? "bg-amber-100 text-amber-600" : "bg-primary/10 text-primary"
+              )}>
+                {isGenerating && !isTimeout && generatingIcon ? generatingIcon : isTimeout ? (timeoutIcon ?? icon) : icon}
               </div>
 
               {/* Badge */}
@@ -106,7 +115,7 @@ export function DocumentCard({
               {title}
             </h3>
             {subtitle && (
-              <p className="text-slate-500 text-[11px] md:text-sm font-bold uppercase tracking-widest">
+              <p className="text-slate-500 text-[11px] md:text-sm font-medium leading-relaxed">
                 {subtitle}
               </p>
             )}
@@ -134,9 +143,13 @@ export function DocumentCard({
 
         {/* Desktop Right Action */}
         <div className="hidden md:flex w-32 shrink-0 items-center justify-center bg-slate-50/50 border-l border-slate-200">
-          {isGenerating ? (
+          {isGenerating && !isTimeout ? (
             <div className="w-12 h-12 rounded-full bg-slate-200 border border-slate-200 flex items-center justify-center text-slate-400">
               <Clock size={20} className="animate-spin" />
+            </div>
+          ) : isTimeout ? (
+            <div className="w-12 h-12 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shadow-sm">
+              <Clock size={20} />
             </div>
           ) : (
             <div className="w-12 h-12 rounded-full bg-white border border-slate-200 flex items-center justify-center text-primary shadow-sm group-hover:bg-primary group-hover:border-primary group-hover:text-white group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-primary/20 transition-all duration-300">

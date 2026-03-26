@@ -9,7 +9,7 @@ import { MetricCard } from '@/components/shared/MetricCard'
 import { SectionTitle } from '@/components/shared/SectionTitle'
 import { Card } from '@/components/shared/Card'
 import { StatusBadge } from '@/components/shared/StatusBadge'
-import { FileText, ShieldAlert, Scale, FileSignature, Loader2, Search, Clock, PlusCircle, Sparkles } from 'lucide-react'
+import { FileText, ShieldAlert, Scale, FileSignature, Loader2, Search, Clock, PlusCircle, Sparkles, AlertCircle } from 'lucide-react'
 import { DocumentCard } from '@/components/shared/DocumentCard'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
@@ -23,7 +23,7 @@ interface LegalDocument {
   id: string
   title: string
   document_type: string
-  status: 'generating' | 'ready' | 'failed'
+  status: 'generating' | 'ready' | 'failed' | 'timeout'
   created_at: string
 }
 
@@ -227,6 +227,8 @@ export default function JuridicoPage() {
               {filteredDocuments.length > 0 ? (
                 filteredDocuments.map((doc) => {
                   const isGenerating = doc.status === 'generating'
+                  const isStale = isGenerating && (new Date().getTime() - new Date(doc.created_at).getTime() > 180000)
+                  const displayStatus = isStale ? 'timeout' : doc.status
                   const isReady = doc.status === 'ready'
                   
                   return (
@@ -238,12 +240,16 @@ export default function JuridicoPage() {
                       subtitle={doc.document_type}
                       date={new Date(doc.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
                       isGenerating={isGenerating}
+                      isTimeout={isStale}
                       icon={<Scale size={22} />}
                       generatingIcon={<Clock size={16} className="animate-spin" />}
+                      timeoutIcon={<AlertCircle size={22} />}
                       moduleLabel="Inteligência Jurídica"
                       badge={{
-                        label: isGenerating ? 'Gerando' : isReady ? 'Pronto' : 'Falhou',
-                        className: isGenerating
+                        label: isStale ? 'Timeout' : isGenerating ? 'Gerando' : isReady ? 'Pronto' : 'Falhou',
+                        className: isStale
+                          ? 'bg-amber-100 text-amber-800 border-amber-200'
+                          : isGenerating
                           ? 'bg-blue-100 text-blue-700 border-blue-200'
                           : isReady
                           ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
