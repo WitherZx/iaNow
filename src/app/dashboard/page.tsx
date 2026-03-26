@@ -300,7 +300,7 @@ export default function DashboardPage() {
               {/* Estratégias */}
               <div className="flex flex-col space-y-6">
                 <SectionTitle
-                  title="Estratégias Recentes"
+                  title="Estratégia"
                   subtitle="Últimos planos gerados"
                   action={<Link href="/estrategia"><Button variant="link" className="text-primary font-bold px-0">Ver todas</Button></Link>}
                 />
@@ -318,7 +318,7 @@ export default function DashboardPage() {
               {/* Documentos */}
               <div className="flex flex-col space-y-6">
                 <SectionTitle
-                  title="Documentos Jurídicos"
+                  title="Contratos"
                   subtitle="Contratos e ofícios recentes"
                   action={<Link href="/juridico"><Button variant="link" className="text-primary font-bold px-0">Ver todos</Button></Link>}
                 />
@@ -337,12 +337,12 @@ export default function DashboardPage() {
             {/* Bottom Row: Jus Postulandi */}
             <div className="flex flex-col space-y-6 pt-4 border-t border-slate-100">
                <SectionTitle
-                  title="Jus Postulandi"
+                  title="Processos"
                   subtitle="Demandas protocoladas recentes"
                   action={<Link href="/justica"><Button variant="link" className="text-primary font-bold px-0">Ver todas</Button></Link>}
                />
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 {recentDemands.length > 0 ? recentDemands.map((item, idx) => renderItemCard(item, idx, recentDemands.length)) : renderGhostCards(3)}
+                 {recentDemands.length > 0 ? recentDemands.map((item, idx) => renderItemCard(item, idx, recentDemands.length)) : renderGhostCards(4)}
                  {recentDemands.length === 0 && (
                    <Card className="col-span-full py-6 text-center bg-primary/5 border-dashed border-primary/20">
                      <p className="text-sm text-slate-600 mb-3">Nenhuma demanda ativa no momento.</p>
