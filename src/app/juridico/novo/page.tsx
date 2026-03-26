@@ -1,7 +1,24 @@
 "use client"
 
 import { useState } from 'react'
-import { ArrowRight, CheckCircle2, ShieldCheck, Scale, Zap, Sparkles, Building2, UserCircle2 } from 'lucide-react'
+import { 
+  ArrowRight, 
+  CheckCircle2, 
+  ShieldCheck, 
+  Scale, 
+  Zap, 
+  Sparkles, 
+  Building2, 
+  UserCircle2, 
+  FileSearch, 
+  User, 
+  Building, 
+  Calculator, 
+  TrendingUp, 
+  MapPin, 
+  Loader2, 
+  FileText 
+} from 'lucide-react'
 import { Card } from '@/components/shared/Card'
 import { Button } from '@/components/shared/Button'
 import { cn } from '@/utils/cn'
@@ -324,46 +341,103 @@ export default function NewDocumentPage() {
             )}
 
             {/* STEP 3: PARÂMETROS ADICIONAIS E GERAÇÃO */}
-            {step === 3 && !isSubmitting && (
+            {step === 3 && (
               <div className="flex flex-col gap-y-10 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="mb-2 border-b border-slate-100 pb-6 flex flex-col gap-y-4">
-                  <div className="md:hidden">
-                    <StepBadge current={step} total={3} />
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">
-                      3. Parâmetros <span className="text-primary">Adicionais</span>
-                    </h3>
-                    <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Insira cláusulas específicas de proteção, multas ou exceções particulares.</p>
-                  </div>
-                </div>
+                {!isSubmitting ? (
+                  <>
+                    <div className="mb-2 border-b border-slate-100 pb-6 flex flex-col gap-y-4">
+                      <div className="md:hidden">
+                        <StepBadge current={step} total={3} />
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">
+                          3. Parâmetros <span className="text-primary">Adicionais</span>
+                        </h3>
+                        <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Insira cláusulas específicas de proteção, multas ou exceções particulares.</p>
+                      </div>
+                    </div>
 
-                <div className="flex flex-col gap-y-4">
-                  <p className="text-sm font-semibold text-slate-500 max-w-2xl leading-relaxed">
-                    Aqui você pode injetar regras customizadas que a Inteligência Sistêmica obrigatoriamente acatará. Ex: Multas rescisórias, prazos de vesting, métodos de compliance, regras de devolução de equipamento, etc.
-                  </p>
-                  <textarea 
-                    value={parametros} onChange={(e) => setParametros(e.target.value)}
-                    placeholder="Disposições que não podem faltar... (Você pode usar linguagem coloquial, nós validaremos os termos juridicamente)."
-                    className="w-full min-h-[220px] p-6 rounded-3xl bg-slate-50 border border-slate-200 text-slate-900 font-bold placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary focus:bg-white transition-all resize-none text-base leading-relaxed mt-2"
-                  />
-                </div>
+                    <div className="flex flex-col gap-y-4">
+                      <p className="text-sm font-semibold text-slate-500 max-w-2xl leading-relaxed">
+                        Aqui você pode injetar regras customizadas que a Inteligência Sistêmica obrigatoriamente acatará. Ex: Multas rescisórias, prazos de vesting, métodos de compliance, regras de devolução de equipamento, etc.
+                      </p>
+                      <textarea 
+                        value={parametros} onChange={(e) => setParametros(e.target.value)}
+                        placeholder="Disposições que não podem faltar... (Você pode usar linguagem coloquial, nós validaremos os termos juridicamente)."
+                        className="w-full min-h-[220px] p-6 rounded-3xl bg-slate-50 border border-slate-200 text-slate-900 font-bold placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary focus:bg-white transition-all resize-none text-base leading-relaxed mt-2 shadow-inner-sm"
+                      />
+                    </div>
 
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4 mt-6 pt-10 border-t border-slate-100">
-                  <Button variant="ghost" onClick={() => setStep(2)} className="w-full md:w-auto font-bold text-slate-400 hover:text-slate-900 h-14 px-6 order-2 md:order-1">
-                    <ArrowRight className="mr-2 w-5 h-5 rotate-180" /> Partes
-                  </Button>
-                  <Button 
-                    size="lg" 
-                    disabled={isSubmitting} 
-                    onClick={handleGenerate}
-                    className="w-full md:w-auto bg-primary hover:bg-blue-700 font-black px-12 h-14 rounded-xl text-white shadow-[0_15px_30px_-10px_rgba(37,99,235,0.4)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-base group overflow-hidden relative order-1 md:order-2"
-                  >
-                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 pointer-events-none" />
-                    <Sparkles className="mr-3 w-5 h-5 group-hover:animate-pulse text-blue-200" />
-                    Gerar Blindagem Jurídica
-                  </Button>
-                </div>
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-4 mt-6 pt-10 border-t border-slate-100 uppercase tracking-widest text-[11px] font-black">
+                      <Button variant="ghost" onClick={() => setStep(2)} className="w-full md:w-auto font-bold text-slate-400 hover:text-slate-900 h-14 px-6 order-2 md:order-1">
+                        <ArrowRight className="mr-2 w-5 h-5 rotate-180" /> Parte Anterior
+                      </Button>
+                      <Button 
+                        size="lg" 
+                        disabled={isSubmitting} 
+                        onClick={handleGenerate}
+                        className="w-full md:w-auto bg-primary hover:bg-blue-700 font-black px-12 h-14 rounded-xl text-white shadow-[0_15px_30px_-10px_rgba(37,99,235,0.4)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-base group overflow-hidden relative order-1 md:order-2"
+                      >
+                        <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 pointer-events-none" />
+                        <Sparkles className="mr-3 w-5 h-5 group-hover:animate-pulse text-blue-200" />
+                        Gerar Documento Blindado
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  /* PROCESSAMENTO UI - Novo */
+                  <div className="flex flex-col items-start text-left py-6 gap-y-10 min-h-[400px]">
+                    <div className="flex flex-col md:flex-row items-center md:items-start gap-6 border-b border-slate-100 pb-10 w-full animate-in zoom-in-95 duration-500">
+                      <div className="w-20 h-20 rounded-[28px] border-4 border-primary/5 flex items-center justify-center bg-primary text-white shadow-xl shadow-primary/20 shrink-0">
+                        <Zap size={32} className="animate-pulse" />
+                      </div>
+                      <div className="space-y-2 mt-2">
+                        <h3 className="text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tight">Processando Blindagem</h3>
+                        <p className="text-slate-500 max-w-xl leading-relaxed font-bold">
+                          Nossa Inteligência Jurídica está redigindo seu contrato. 
+                          Aplicando cláusulas de proteção de nível <span className="text-primary uppercase">{nivel}</span>.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Resumo da Blindagem */}
+                    <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-bottom-4 duration-700">
+                      <div className="p-6 bg-slate-50 border border-slate-100 rounded-[32px] space-y-4">
+                        <div className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">
+                           <Scale className="w-4 h-4" /> Natureza Contratual
+                        </div>
+                        <div className="flex flex-col gap-y-1 px-1">
+                          <span className="text-lg font-black text-slate-900">{tipoContrato}</span>
+                          <span className="text-[11px] text-slate-400 font-bold">{objetivo.substring(0, 100)}...</span>
+                        </div>
+                      </div>
+
+                      <div className="p-6 bg-slate-50 border border-slate-100 rounded-[32px] space-y-4">
+                        <div className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">
+                           <ShieldCheck className="w-4 h-4" /> Partes Envolvidas
+                        </div>
+                        <div className="space-y-3 px-1">
+                          <div className="flex items-center gap-2">
+                             <div className="w-2 h-2 rounded-full bg-primary" />
+                             <span className="text-xs font-bold text-slate-700 truncate">{partyA.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                             <div className="w-2 h-2 rounded-full bg-slate-400" />
+                             <span className="text-xs font-bold text-slate-700 truncate">{partyB.name}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="w-full p-8 bg-primary/5 rounded-[32px] border border-primary/20 flex flex-col items-center justify-center gap-y-4">
+                      <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                      <div className="text-center">
+                        <p className="text-primary font-black uppercase tracking-widest text-[11px]">Gerando Documento Jurídico...</p>
+                        <p className="text-primary/60 font-bold text-[10px] mt-1 italic">Isto pode levar até 30 segundos. Não feche esta janela.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             
