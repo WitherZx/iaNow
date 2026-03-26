@@ -8,6 +8,7 @@ import { MetricCard } from '@/components/shared/MetricCard'
 import { SectionTitle } from '@/components/shared/SectionTitle'
 import { Card } from '@/components/shared/Card'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { DashboardItemCard } from '@/components/shared/DashboardItemCard'
 import { Button } from '@/components/shared/Button'
 import { CTAButton } from '@/components/shared/CTAButton'
 import { Lightbulb, Scale, Gavel, PlayCircle, Eye, Loader2, Play, ShieldCheck, PlusCircle } from 'lucide-react'
@@ -181,7 +182,6 @@ export default function DashboardPage() {
   const renderItemCard = (item: DashboardItem, index: number, total: number) => {
     const isGenerating = item.status === 'generating' || item.status === 'processing'
     const isStale = isGenerating && (new Date().getTime() - new Date(item.rawDate).getTime() > 180000)
-    const displayStatus = isStale ? 'timeout' : item.status
     
     // Lógica de span dinâmico
     let spanClass = "col-span-1"
@@ -189,27 +189,18 @@ export default function DashboardPage() {
     if (total === 3 && index === 2) spanClass = "col-span-1 md:col-span-2"
 
     return (
-      <Link key={item.id} href={item.href} className={cn(spanClass, "flex flex-col h-full")}>
-        <Card padding="sm" className={cn("hover:border-primary/30 hover:shadow-md cursor-pointer group transition-all h-full min-h-[160px]", isGenerating && !isStale && "opacity-80")}>
-          <div className="flex flex-col gap-y-3 h-full">
-            <div className="flex items-center justify-between">
-              <StatusBadge status={displayStatus as any} />
-              <div className="flex items-center gap-1.5 overflow-hidden">
-                {isGenerating && !isStale && <Loader2 className="w-2.5 h-2.5 text-primary animate-spin shrink-0" />}
-                <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">{item.date}</span>
-              </div>
-            </div>
-            <h4 className="font-bold text-sm text-slate-900 group-hover:text-primary transition-colors line-clamp-1">
-              {item.title}
-            </h4>
-            <div className="flex-1 flex flex-col justify-between">
-              <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
-                {item.description}
-              </p>
-            </div>
-          </div>
-        </Card>
-      </Link>
+      <DashboardItemCard
+        key={item.id}
+        id={item.id}
+        title={item.title}
+        description={item.description}
+        status={item.status}
+        date={item.date}
+        href={item.href}
+        isGenerating={isGenerating}
+        isStale={isStale}
+        className={spanClass}
+      />
     )
   }
 

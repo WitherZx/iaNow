@@ -18,6 +18,7 @@ const STATUS_MAP: Record<string, { label: string; bg: string; color: string; bor
   canceled:   { label: 'Cancelado',   bg: 'bg-red-50', color: 'text-red-700', border: 'border-red-200' },
   filed:      { label: 'Protocolado', bg: 'bg-primary/10', color: 'text-primary', border: 'border-primary/20' },
   timeout:    { label: 'Timeout',      bg: 'bg-amber-100', color: 'text-amber-800', border: 'border-amber-200' },
+  deleted:    { label: 'Apagado',      bg: 'bg-orange-50', color: 'text-orange-600', border: 'border-orange-100' },
 }
 
 export function StatusBadge({ status, className }: { status: Status; className?: string }) {

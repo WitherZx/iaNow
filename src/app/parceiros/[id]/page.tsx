@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { Card } from '@/components/shared/Card'
+import { DashboardItemCard } from '@/components/shared/DashboardItemCard'
 import { Button } from '@/components/shared/Button'
 import { 
   ArrowLeft, 
@@ -154,6 +155,30 @@ export default function PartnerDetailPage() {
     }
   }
 
+  const handleDeletePermanent = async (item: any) => {
+    if (!window.confirm('Deseja excluir permanentemente este item? Esta ação não pode ser desfeita.')) return
+    
+    try {
+      const { error } = await (supabase.from(item.__table) as any)
+        .delete()
+        .eq('id', item.id)
+
+      if (error) throw error
+
+      toast.success('Item excluído permanentemente!')
+      
+      // Refresh local state
+      setItems(prev => ({
+        contracts: prev.contracts.filter(c => c.id !== item.id),
+        strategies: prev.strategies.filter(s => s.id !== item.id),
+        protocols: prev.protocols.filter(p => p.id !== item.id)
+      }))
+    } catch (err: any) {
+      console.error('Error deleting item permanently:', err)
+      toast.error('Erro ao excluir item: ' + err.message)
+    }
+  }
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -169,44 +194,23 @@ export default function PartnerDetailPage() {
 
   const renderDashboardItem = (item: any, href: string) => {
     const isDeleted = !!item.deleted_at
+    const title = item.title || item.name || item.tipo_acao || 'Execução'
+    const description = item.description || item.metadata?.description || item.category || (item.valor_causa ? `Valor: ${item.valor_causa.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : 'Gerado via IA')
+    const date = new Date(item.created_at).toLocaleDateString('pt-BR')
 
     return (
-      <div key={item.id} className="relative group/card h-full w-full">
-        <Link href={isDeleted ? '#' : href} className={cn("flex flex-col h-full w-full", isDeleted && "pointer-events-none opacity-60 grayscale-[0.5]")}>
-          <Card padding="sm" className={cn("hover:border-primary/30 hover:shadow-md transition-all h-full min-h-[140px]", isDeleted ? "bg-slate-50 border-dashed border-slate-200" : "cursor-pointer group")}>
-            <div className="flex flex-col gap-y-3 h-full">
-              <div className="flex items-center justify-between">
-                <span className={cn(
-                  "text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full border",
-                  isDeleted ? "bg-orange-50 text-orange-600 border-orange-100" : "bg-slate-50 text-slate-400 border-slate-100"
-                )}>
-                  {isDeleted ? 'Apagado' : 'Pronto'}
-                </span>
-                <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">
-                  {new Date(item.created_at).toLocaleDateString('pt-BR')}
-                </span>
-              </div>
-              <h4 className={cn("font-bold text-sm transition-colors line-clamp-2 leading-tight", isDeleted ? "text-slate-400" : "text-slate-900 group-hover:text-primary")}>
-                {item.title || item.name || item.tipo_acao || 'Execução'}
-              </h4>
-              <div className="flex-1 flex flex-col justify-end">
-                <p className="text-[10px] text-slate-500 line-clamp-1 leading-relaxed font-medium">
-                  {item.metadata?.description || item.category || (item.valor_causa ? `Valor: ${item.valor_causa.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : 'Gerado via IA')}
-                </p>
-              </div>
-            </div>
-          </Card>
-        </Link>
-        
-        {isDeleted && (
-          <button
-            onClick={() => handleRestore(item)}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white text-orange-600 font-black text-[10px] uppercase tracking-widest px-4 py-2 rounded-full border border-orange-200 shadow-lg hover:bg-orange-600 hover:text-white transition-all flex items-center gap-2 opacity-0 group-hover/card:opacity-100 scale-90 group-hover/card:scale-100 z-10"
-          >
-            <RotateCcw size={12} strokeWidth={3} /> Restaurar
-          </button>
-        )}
-      </div>
+      <DashboardItemCard
+        key={item.id}
+        id={item.id}
+        title={title}
+        description={description}
+        status={item.status || 'ready'}
+        date={date}
+        href={href}
+        isDeleted={isDeleted}
+        onRestore={() => handleRestore(item)}
+        onDeletePermanent={() => handleDeletePermanent(item)}
+      />
     )
   }
 
