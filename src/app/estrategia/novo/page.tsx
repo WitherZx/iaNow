@@ -167,8 +167,8 @@ export default function NovoDiagnosticoPage() {
             <div className="absolute inset-0 overflow-hidden rounded-[24px] md:rounded-[40px] pointer-events-none">
               <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-primary/5 rounded-full blur-2xl md:blur-3xl -mr-16 -mt-16 md:-mr-32 md:-mt-32" />
             </div>
-
-            <div className="flex w-full justify-start mb-6">
+            
+            <div className="absolute top-0 right-0 p-8 hidden md:block">
               <StepBadge current={currentStep + 1} total={STEPS.length} />
             </div>
 
@@ -182,7 +182,7 @@ export default function NovoDiagnosticoPage() {
                 </div>
 
                 <div className="pt-4 pb-8 border-b border-slate-100">
-                  <PartnerSelector
+                  <PartnerSelector 
                     label="Puxar Dados do Hub de Contatos"
                     onSelect={handleSelectPartner}
                     placeholder="Buscar histórico ou empresa matriz..."

@@ -121,7 +121,7 @@ export default function NewDocumentPage() {
           <Card padding="none" className="w-full min-w-0 min-h-[400px] p-4 sm:p-5 md:p-12 border-slate-100 shadow-xl shadow-slate-200/40 relative overflow-visible">
             
             {/* STEP PROGRESS INSTRUCTION */}
-            <div className="flex w-full justify-start p-4 sm:p-5 md:p-0 md:mb-10">
+            <div className="hidden md:block absolute top-0 right-0 p-8">
                <StepBadge current={step} total={3} />
             </div>
 
