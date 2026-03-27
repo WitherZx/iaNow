@@ -20,7 +20,7 @@ export function PageContainer({
   reverseMobile = false
 }: PageContainerProps) {
   return (
-    <div className="flex flex-col gap-y-8 md:gap-y-[50px]">
+    <div className="flex flex-col gap-y-8 md:gap-y-[50px] w-full min-w-0">
       {(title || action) && (
         <div className={cn(
           "flex",

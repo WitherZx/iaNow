@@ -31,15 +31,15 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Main Content Area */}
-      <div className="flex flex-col flex-1 overflow-hidden print:overflow-visible relative">
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden print:overflow-visible relative">
         {/* Topbar com trigger do menu mobile */}
         {isAuthenticated && (
           <Topbar onMenuClick={() => setSidebarOpen(!isSidebarOpen)} />
         )}
 
         <main className={cn(
-          "flex-1 overflow-y-auto print:overflow-visible font-montserrat",
-          isAuthenticated ? "px-4 py-8 md:px-8 md:py-10 print:p-0" : "px-4 py-8 md:px-12 lg:px-24 print:p-0"
+          "flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible font-montserrat",
+          isAuthenticated ? "px-6 py-8 md:px-8 md:py-10 print:p-0" : "px-6 py-8 md:px-12 lg:px-24 print:p-0"
         )}>
           {children}
         </main>

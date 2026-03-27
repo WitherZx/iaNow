@@ -16,7 +16,7 @@ export function Label({ children, error, required, tooltip, className, ...props 
   return (
     <label 
       className={cn(
-        "text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1 inline-flex items-center mb-1.5 transition-colors",
+        "text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1 flex flex-wrap items-center mb-1.5 transition-colors",
         error && "text-red-500",
         className
       )}

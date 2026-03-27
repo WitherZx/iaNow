@@ -174,11 +174,13 @@ export default function NovoJusticaPage() {
   return (
     <DashboardLayout>
       <PageContainer centered>
-        <div className="max-w-4xl mx-auto flex flex-col gap-y-10 pb-20">
+        <div className="w-full max-w-4xl mx-auto flex flex-col gap-y-10 pb-20">
           
 
-          <Card className="min-h-[500px] p-5 sm:p-8 md:p-12 rounded-[40px] border-slate-100 shadow-sm relative bg-white overflow-visible">
-            <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-primary/5 rounded-full blur-2xl md:blur-3xl -mr-16 -mt-16 md:-mr-32 md:-mt-32 pointer-events-none" />
+          <Card padding="none" className="w-full min-w-0 min-h-[500px] p-4 sm:p-8 md:p-12 rounded-[32px] sm:rounded-[40px] border-slate-100 shadow-sm relative bg-white overflow-visible">
+            <div className="absolute inset-0 overflow-hidden rounded-[32px] sm:rounded-[40px] pointer-events-none">
+              <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-primary/5 rounded-full blur-2xl md:blur-3xl -mr-16 -mt-16 md:-mr-32 md:-mt-32" />
+            </div>
             
             <div className="flex w-full justify-start mb-10">
               <StepBadge current={currentStep + 1} total={STEPS.length} />
@@ -187,8 +189,8 @@ export default function NovoJusticaPage() {
             {/* Step 0: Problema */}
             {currentStep === 0 && (
               <div className="flex flex-col gap-y-6 animate-in fade-in slide-in-from-right-4 duration-500 overflow-visible">
-                <div className="space-y-2 text-left text-slate-900 border-b border-slate-100 pb-5">
-                   <h2 className="text-3xl font-black uppercase">O Problema</h2>
+                <div className="space-y-2 text-left text-slate-900 border-b border-slate-100 pb-5 min-w-0">
+                   <h2 className="text-xl sm:text-3xl font-black uppercase break-words">O Problema</h2>
                    <p className="text-slate-500 font-medium">Selecione o tipo de reclamação para iniciarmos.</p>
                 </div>
 
@@ -245,12 +247,12 @@ export default function NovoJusticaPage() {
             {/* Step 1: Qualificação */}
             {currentStep === 1 && (
               <div className="flex flex-col gap-y-6 animate-in fade-in slide-in-from-right-4 duration-500 overflow-visible">
-                <div className="space-y-2 text-left border-b border-slate-100 pb-5">
-                   <h2 className="text-3xl font-black text-slate-900 uppercase">Qualificação das Partes</h2>
+                <div className="space-y-2 text-left border-b border-slate-100 pb-5 min-w-0">
+                   <h2 className="text-xl sm:text-3xl font-black text-slate-900 uppercase break-words">Qualificação das Partes</h2>
                    <p className="text-slate-500 font-medium">Estes dados são essenciais para que o documento saia pronto para o protocolo.</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 p-4 sm:p-8 md:p-10 bg-slate-100 rounded-[24px] sm:rounded-[40px] border-2 border-slate-200 mt-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-12 p-3 sm:p-8 md:p-10 bg-slate-100 rounded-[20px] sm:rounded-[40px] border-2 border-slate-200 mt-1">
                   
                   {/* Requerente */}
                   <div className="flex flex-col gap-y-4 sm:gap-y-6">
@@ -315,7 +317,7 @@ export default function NovoJusticaPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-y-3 mt-4 text-left p-4 sm:p-8 bg-slate-50 rounded-[24px] sm:rounded-[40px] border-2 border-slate-200">
+                <div className="flex flex-col gap-y-3 mt-4 text-left p-4 sm:p-8 bg-slate-50 rounded-[20px] sm:rounded-[40px] border-2 border-slate-200">
                   <Label tooltip="A comarca é a cidade do fórum onde o processo correrá. No JEC, você pode protocolar na sua cidade ou na cidade do Réu.">Comarca de Preferência do Fórum (Cidade/UF)</Label>
                   <div className="flex flex-col md:flex-row gap-4 items-center">
                      <div className="w-12 h-12 shrink-0 rounded-2xl bg-slate-200 flex items-center justify-center text-slate-500"><MapPin className="w-5 h-5" /></div>
@@ -334,8 +336,8 @@ export default function NovoJusticaPage() {
             {/* Step 2: Fatos */}
             {currentStep === 2 && (
               <div className="flex flex-col gap-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="space-y-2 text-left border-b border-slate-100 pb-5">
-                   <h2 className="text-3xl font-black text-slate-900 uppercase">Relato do Ocorrido</h2>
+                <div className="space-y-2 text-left border-b border-slate-100 pb-5 min-w-0">
+                   <h2 className="text-xl sm:text-3xl font-black text-slate-900 uppercase break-words">Relato do Ocorrido</h2>
                    <p className="text-slate-500 font-medium">Conte o que aconteceu de forma clara e objetiva.</p>
                 </div>
 
@@ -443,7 +445,7 @@ export default function NovoJusticaPage() {
                         <Label tooltip="Se você tem um PDF de uma decisão ou jurisprudência favorável, suba aqui. A IA extrairá os fundamentos legais para replicar na sua petição.">Jurisprudência de Referência (Opcional)</Label>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
                         <div className="md:col-span-1">
                           <div className={cn(
                             "relative h-full flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-[32px] transition-all group",
@@ -507,8 +509,8 @@ export default function NovoJusticaPage() {
             {/* Step 3: Valores */}
             {currentStep === 3 && (
               <div className="flex flex-col gap-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="space-y-2 text-left border-b border-slate-100 pb-5">
-                   <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Cálculo de Indenização</h2>
+                <div className="space-y-2 text-left border-b border-slate-100 pb-5 min-w-0">
+                   <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tight break-words">Cálculo de Indenização</h2>
                    <p className="text-slate-500 font-medium">O limite para processar sozinho no JEC é de 20 salários mínimos.</p>
                 </div>
 
@@ -559,8 +561,8 @@ export default function NovoJusticaPage() {
                   <div className="w-24 h-24 rounded-[32px] border-4 border-emerald-50 flex items-center justify-center bg-emerald-500 text-white shadow-xl shadow-emerald-500/20 shrink-0">
                     <ShieldCheck size={40} className="animate-pulse" />
                   </div>
-                  <div className="space-y-3">
-                    <h3 className="text-3xl md:text-5xl font-black text-slate-900 uppercase tracking-tight">Tudo Checado!</h3>
+                  <div className="space-y-3 min-w-0">
+                    <h3 className="text-xl sm:text-3xl md:text-5xl font-black text-slate-900 uppercase tracking-tight break-words">Tudo Checado!</h3>
                     <p className="text-slate-500 max-w-2xl leading-relaxed font-bold">
                       Sua petição de JEC está pronta para ser redigida pela nossa IA. 
                       Confira abaixo o resumo dos dados que serão utilizados no protocolo.
@@ -569,8 +571,8 @@ export default function NovoJusticaPage() {
                 </div>
 
                 {/* Card de Resumo do Protocolo */}
-                <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="p-8 bg-slate-50 border border-slate-100 rounded-[32px] space-y-6 shadow-inner-sm relative overflow-hidden group hover:border-primary/20 transition-all">
+                <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                  <div className="p-5 sm:p-8 bg-slate-50 border border-slate-100 rounded-[24px] sm:rounded-[32px] space-y-6 shadow-inner-sm relative overflow-hidden group hover:border-primary/20 transition-all">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
                     
                     <div className="flex items-center gap-3 px-1 text-[10px] font-black uppercase text-slate-400 tracking-widest">
@@ -596,7 +598,7 @@ export default function NovoJusticaPage() {
                     </div>
                   </div>
 
-                  <div className="p-8 bg-slate-50 border border-slate-100 rounded-[32px] space-y-6 shadow-inner-sm relative overflow-hidden group hover:border-primary/20 transition-all">
+                  <div className="p-5 sm:p-8 bg-slate-50 border border-slate-100 rounded-[24px] sm:rounded-[32px] space-y-6 shadow-inner-sm relative overflow-hidden group hover:border-primary/20 transition-all">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
                     
                     <div className="flex items-center gap-3 px-1 text-[10px] font-black uppercase text-slate-400 tracking-widest">

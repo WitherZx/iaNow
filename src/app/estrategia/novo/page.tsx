@@ -159,28 +159,30 @@ export default function NovoDiagnosticoPage() {
   return (
     <DashboardLayout>
       <PageContainer centered>
-        <div className="max-w-5xl mx-auto flex flex-col gap-y-12 pb-20">
+        <div className="w-full max-w-5xl mx-auto flex flex-col gap-y-12 pb-20">
 
 
           {/* Form Content */}
-          <Card className="min-h-[400px] p-5 sm:p-8 md:p-12 border-slate-100 shadow-sm relative group overflow-visible">
-            <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-primary/5 rounded-full blur-2xl md:blur-3xl -mr-16 -mt-16 md:-mr-32 md:-mt-32 pointer-events-none" />
-            
-            <div className="absolute top-0 right-0 p-8 hidden md:block">
+          <Card padding="none" className="w-full min-w-0 min-h-[400px] p-4 sm:p-8 md:p-12 border-slate-100 shadow-sm relative group overflow-visible">
+            <div className="absolute inset-0 overflow-hidden rounded-[24px] md:rounded-[40px] pointer-events-none">
+              <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-primary/5 rounded-full blur-2xl md:blur-3xl -mr-16 -mt-16 md:-mr-32 md:-mt-32" />
+            </div>
+
+            <div className="flex w-full justify-start mb-6">
               <StepBadge current={currentStep + 1} total={STEPS.length} />
             </div>
 
             {currentStep === 0 && (
               <div className="flex flex-col gap-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="space-y-2 text-left">
-                  <h2 className="text-3xl font-black text-slate-900 uppercase">Dados da Empresa</h2>
+                <div className="space-y-2 text-left min-w-0">
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 uppercase break-words">Dados da Empresa</h2>
                   <p className="text-slate-500 leading-relaxed max-w-2xl">
                     Para uma análise precisa, precisamos entender o contexto atual da sua operação.
                   </p>
                 </div>
 
                 <div className="pt-4 pb-8 border-b border-slate-100">
-                  <PartnerSelector 
+                  <PartnerSelector
                     label="Puxar Dados do Hub de Contatos"
                     onSelect={handleSelectPartner}
                     placeholder="Buscar histórico ou empresa matriz..."
@@ -190,7 +192,7 @@ export default function NovoDiagnosticoPage() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 mt-4">
                   <div className="flex flex-col gap-y-4">
                     <Label tooltip="Razão social ou nome fantasia da sua organização. Será o identificador principal no dashboard.">Nome da Organização</Label>
                     <input
@@ -269,7 +271,7 @@ export default function NovoDiagnosticoPage() {
                   </div>
                   <div className="flex flex-col gap-y-4">
                     <Label tooltip="Número total de colaboradores, incluindo sócios e prestadores fixos. Define o porte operacional.">Tamanho da Equipe</Label>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                       {['1-10', '11-50', '50+'].map(val => (
                         <button
                           key={val}
@@ -304,14 +306,14 @@ export default function NovoDiagnosticoPage() {
 
             {currentStep === 1 && (
               <div className="flex flex-col gap-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="space-y-2 text-left">
-                  <h2 className="text-3xl font-black text-slate-900 uppercase">Contexto Operacional</h2>
+                <div className="space-y-2 text-left min-w-0">
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 uppercase break-words">Contexto Operacional</h2>
                   <p className="text-slate-500 leading-relaxed max-w-2xl">
                     Como seu negócio funciona no dia a dia?
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 mt-4">
                   <div className="flex flex-col gap-y-4">
                     <Label tooltip="Natureza da sua venda principal. B2B (empresas), B2C (consumidor final), Híbrido ou SaaS (assinaturas).">Modelo de Negócio</Label>
                     <div className="grid grid-cols-2 gap-3">
@@ -368,8 +370,8 @@ export default function NovoDiagnosticoPage() {
 
             {currentStep === 2 && (
               <div className="flex flex-col gap-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="space-y-2 text-left">
-                  <h2 className="text-3xl font-black text-slate-900 uppercase">Riscos & Blindagem</h2>
+                <div className="space-y-2 text-left min-w-0">
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 uppercase break-words">Riscos & Blindagem</h2>
                   <p className="text-slate-500 leading-relaxed max-w-2xl">
                     Mapeando os pontos de vulnerabilidade da sua execução.
                   </p>
@@ -441,8 +443,8 @@ export default function NovoDiagnosticoPage() {
 
             {currentStep === 3 && (
               <div className="flex flex-col gap-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="space-y-2 text-left">
-                  <h2 className="text-3xl font-black text-slate-900 uppercase">Visão de Crescimento</h2>
+                <div className="space-y-2 text-left min-w-0">
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 uppercase break-words">Visão de Crescimento</h2>
                   <p className="text-slate-500 leading-relaxed max-w-2xl">
                     Onde sua execução precisa chegar?
                   </p>

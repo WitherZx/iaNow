@@ -130,22 +130,22 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
           isOpen ? "border-primary ring-4 ring-primary/5 shadow-lg" : "border-slate-200 hover:border-slate-300 shadow-sm"
         )}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           {selectedPartner ? (
             <>
-              <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", selectedPartner.isDefault ? "bg-primary text-white" : "bg-slate-100 text-slate-500")}>
+              <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", selectedPartner.isDefault ? "bg-primary text-white" : "bg-slate-100 text-slate-500")}>
                 {selectedPartner.type === 'pj' ? <Building2 size={16} /> : <User size={16} />}
               </div>
-              <div className="flex flex-col items-start leading-tight">
-                <span className="text-sm font-bold text-slate-900">{selectedPartner.name}</span>
-                <span className="text-[10px] text-slate-400 font-bold uppercase">{selectedPartner.document || '--'}</span>
+              <div className="flex flex-col items-start leading-tight min-w-0 flex-1">
+                <span className="text-[13px] sm:text-sm font-bold text-slate-900 truncate w-full block">{selectedPartner.name}</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase truncate w-full block">{selectedPartner.document || '--'}</span>
               </div>
             </>
           ) : (
-            <span className="text-sm font-bold text-slate-400">{placeholder}</span>
+            <span className="text-[13px] sm:text-sm font-bold text-slate-400 truncate block flex-1 text-left">{placeholder}</span>
           )}
         </div>
-        <ChevronDown size={18} className={cn("text-slate-400 transition-transform", isOpen && "rotate-180")} />
+        <ChevronDown size={18} className={cn("text-slate-400 transition-transform shrink-0", isOpen && "rotate-180")} />
       </button>
 
       {isOpen && (

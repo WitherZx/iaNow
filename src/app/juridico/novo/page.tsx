@@ -118,10 +118,10 @@ export default function NewDocumentPage() {
             </p>
           </div>
 
-          <Card className="min-h-[400px] p-5 md:p-12 border-slate-100 shadow-xl shadow-slate-200/40 relative overflow-visible">
+          <Card padding="none" className="w-full min-w-0 min-h-[400px] p-4 sm:p-5 md:p-12 border-slate-100 shadow-xl shadow-slate-200/40 relative overflow-visible">
             
             {/* STEP PROGRESS INSTRUCTION */}
-            <div className="hidden md:block absolute top-0 right-0 p-8">
+            <div className="flex w-full justify-start p-4 sm:p-5 md:p-0 md:mb-10">
                <StepBadge current={step} total={3} />
             </div>
 
@@ -239,7 +239,7 @@ export default function NewDocumentPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-12 p-4 md:p-10 bg-slate-100 rounded-[24px] md:rounded-[40px] border-2 border-slate-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-12 p-3 sm:p-4 md:p-10 bg-slate-100 rounded-[20px] sm:rounded-[24px] md:rounded-[40px] border-2 border-slate-200">
                   
                   {/* Parte A */}
                   <div className="flex flex-col gap-y-6">
@@ -387,12 +387,12 @@ export default function NewDocumentPage() {
                 ) : (
                   /* PROCESSAMENTO UI - Novo */
                   <div className="flex flex-col items-start text-left py-6 gap-y-10 min-h-[400px]">
-                    <div className="flex flex-col md:flex-row items-center md:items-start gap-6 border-b border-slate-100 pb-10 w-full animate-in zoom-in-95 duration-500">
-                      <div className="w-20 h-20 rounded-[28px] border-4 border-primary/5 flex items-center justify-center bg-primary text-white shadow-xl shadow-primary/20 shrink-0">
+                    <div className="flex flex-col md:flex-row items-start gap-6 border-b border-slate-100 pb-10 w-full animate-in zoom-in-95 duration-500">
+                      <div className="w-16 h-16 md:w-20 md:h-20 rounded-[22px] md:rounded-[28px] border-4 border-primary/5 flex items-center justify-center bg-primary text-white shadow-xl shadow-primary/20 shrink-0">
                         <Zap size={32} className="animate-pulse" />
                       </div>
-                      <div className="space-y-2 mt-2">
-                        <h3 className="text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tight">Processando Blindagem</h3>
+                      <div className="space-y-2 mt-2 min-w-0">
+                        <h3 className="text-xl sm:text-3xl md:text-5xl font-black text-slate-900 uppercase tracking-tight break-words">Processando Blindagem</h3>
                         <p className="text-slate-500 max-w-xl leading-relaxed font-bold">
                           Nossa Inteligência Jurídica está redigindo seu contrato. 
                           Aplicando cláusulas de proteção de nível <span className="text-primary uppercase">{nivel}</span>.
@@ -429,7 +429,7 @@ export default function NewDocumentPage() {
                       </div>
                     </div>
 
-                    <div className="w-full p-8 bg-primary/5 rounded-[32px] border border-primary/20 flex flex-col items-center justify-center gap-y-4">
+                    <div className="w-full p-6 sm:p-8 bg-primary/5 rounded-[24px] sm:rounded-[32px] border border-primary/20 flex flex-col items-center justify-center gap-y-4">
                       <Loader2 className="w-10 h-10 text-primary animate-spin" />
                       <div className="text-center">
                         <p className="text-primary font-black uppercase tracking-widest text-[11px]">Gerando Documento Jurídico...</p>

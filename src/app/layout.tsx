@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Montserrat } from 'next/font/google'
 import { Providers } from '@/lib/providers'
 import './globals.css'
@@ -26,6 +26,13 @@ export const metadata: Metadata = {
     locale: 'pt_BR',
     type: 'website',
   },
+}
+ 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
