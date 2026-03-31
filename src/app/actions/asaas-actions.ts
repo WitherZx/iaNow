@@ -41,7 +41,7 @@ async function assertOrganizationAdmin(supabase: ServerSupabase, orgId: string) 
     throw new Error('Sem permissão para esta organização')
   }
 
-  const roleName = (membership.roles as { name?: string } | null)?.name
+  const roleName = ((membership as unknown as { roles?: { name?: string } | null }).roles)?.name
   const allowed = new Set(['admin', 'owner', 'manager'])
   if (!roleName || !allowed.has(roleName)) {
     throw new Error('Apenas administradores podem alterar a assinatura')
