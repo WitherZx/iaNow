@@ -30,6 +30,7 @@ import { toast } from 'sonner'
 import { TechnicalReportCard } from '@/components/shared/TechnicalReportCard'
 import { SidebarRefineSection } from '@/components/shared/SidebarRefineSection'
 import { Paywall } from '@/components/shared/Paywall'
+import { getMonthlyPaymentLink, getSinglePaymentLink } from '@/lib/monetization'
 
 // Standard local components
 const Badge = ({ children, className }: { children: React.ReactNode, className?: string }) => (
@@ -50,6 +51,7 @@ export default function EstrategiaDetalhePage() {
   const [refining, setRefining] = useState(false)
   const [refinePrompt, setRefinePrompt] = useState('')
   const [isGuest, setIsGuest] = useState(true)
+  const [showPaywall, setShowPaywall] = useState(true)
 
   useEffect(() => {
     console.log('Current Strategy State:', strategy)
@@ -58,20 +60,60 @@ export default function EstrategiaDetalhePage() {
   useEffect(() => {
     async function checkUser() {
       try {
+        const singleUnlockKey = `ianow_unlock_estrategia_${id as string}`
+        const hasLocalUnlock =
+          localStorage.getItem(singleUnlockKey) === 'true' ||
+          localStorage.getItem('ianow_unlock_plan_monthly') === 'true'
+
+        if (hasLocalUnlock) {
+          setShowPaywall(false)
+        }
+
         const { data: { user } } = await supabase.auth.getUser()
         console.log('Auth Check - User:', user ? user.email : 'No user')
         if (user) {
           setIsGuest(false)
+          const { data: membership } = await supabase
+            .from('memberships')
+            .select('organization_id')
+            .eq('user_id', user.id)
+            .eq('status', 'active')
+            .limit(1)
+            .maybeSingle()
+
+          if (membership?.organization_id) {
+            const { data: organization } = await supabase
+              .from('organizations')
+              .select('plan_id')
+              .eq('id', membership.organization_id)
+              .single()
+
+            if (organization?.plan_id) {
+              const { data: plan } = await supabase
+                .from('plans')
+                .select('slug')
+                .eq('id', organization.plan_id)
+                .maybeSingle()
+              if (plan?.slug === 'pro') setShowPaywall(false)
+              else if (!hasLocalUnlock) setShowPaywall(true)
+            } else if (!hasLocalUnlock) {
+              setShowPaywall(true)
+            }
+          } else if (!hasLocalUnlock) {
+            setShowPaywall(true)
+          }
         } else {
           setIsGuest(true)
+          if (!hasLocalUnlock) setShowPaywall(true)
         }
       } catch (err) {
         console.error('Auth Check Error:', err)
         setIsGuest(true)
+        setShowPaywall(true)
       }
     }
     checkUser()
-  }, [])
+  }, [id])
 
   useEffect(() => {
     async function fetchStrategy() {
@@ -463,10 +505,19 @@ export default function EstrategiaDetalhePage() {
               </div>
             </div>
 
-            {isGuest && (
+            {showPaywall && (
               <Paywall 
                 type="estrategia" 
-                onPay={() => router.push('/onboarding?redirect=' + encodeURIComponent(window.location.pathname))}
+                onSinglePurchase={() => {
+                  const link = getSinglePaymentLink('estrategia')
+                  if (!link) return toast.error('Link de pagamento da estratégia não configurado')
+                  window.open(link, '_blank', 'noopener,noreferrer')
+                }}
+                onSubscribe={() => {
+                  const link = getMonthlyPaymentLink()
+                  if (!link) return toast.error('Link do plano mensal não configurado')
+                  window.open(link, '_blank', 'noopener,noreferrer')
+                }}
               />
             )}
           </div>

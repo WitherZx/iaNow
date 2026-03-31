@@ -3,6 +3,7 @@
 
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY;
 const ASAAS_API_URL = process.env.ASAAS_API_URL || 'https://sandbox.asaas.com/api/v3';
+const DEFAULT_TIMEOUT_MS = 15000;
 
 interface AsaasCustomerData {
   name: string;
@@ -23,33 +24,65 @@ interface AsaasSubscriptionData {
   externalReference?: string;
 }
 
-export const asaas = {
-  async get(endpoint: string) {
-    const response = await fetch(`${ASAAS_API_URL}${endpoint}`, {
-      headers: {
-        'access_token': ASAAS_API_KEY || '',
-        'Content-Type': 'application/json'
-      }
-    });
-    return response.json();
-  },
+type HttpMethod = 'GET' | 'POST' | 'DELETE';
 
-  async post(endpoint: string, data: any) {
+function assertAsaasEnv() {
+  if (!ASAAS_API_KEY) {
+    throw new Error('ASAAS_API_KEY não configurada');
+  }
+}
+
+async function request<T>(
+  endpoint: string,
+  method: HttpMethod = 'GET',
+  payload?: unknown
+): Promise<T> {
+  assertAsaasEnv();
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+
+  try {
     const response = await fetch(`${ASAAS_API_URL}${endpoint}`, {
-      method: 'POST',
+      method,
       headers: {
-        'access_token': ASAAS_API_KEY || '',
+        access_token: ASAAS_API_KEY as string,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(data)
+      body: payload ? JSON.stringify(payload) : undefined,
+      signal: controller.signal
     });
-    
+
+    const data = (await response.json().catch(() => ({}))) as {
+      errors?: Array<{ description?: string }>
+      message?: string
+    }
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.errors?.[0]?.description || 'Erro na API do Asaas');
+      const message =
+        data?.errors?.[0]?.description ||
+        data?.message ||
+        `Erro na API do Asaas (${response.status})`;
+      throw new Error(message);
     }
 
-    return response.json();
+    return data as T;
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Tempo limite excedido ao chamar API do Asaas');
+    }
+    throw error instanceof Error ? error : new Error('Erro inesperado na API do Asaas');
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export const asaas = {
+  async get<T = unknown>(endpoint: string): Promise<T> {
+    return request<T>(endpoint, 'GET');
+  },
+
+  async post<T = unknown>(endpoint: string, data: unknown): Promise<T> {
+    return request<T>(endpoint, 'POST', data);
   },
 
   async createCustomer(data: AsaasCustomerData) {
@@ -65,13 +98,6 @@ export const asaas = {
   },
 
   async deleteSubscription(subscriptionId: string) {
-    const response = await fetch(`${ASAAS_API_URL}/subscriptions/${subscriptionId}`, {
-      method: 'DELETE',
-      headers: {
-        'access_token': ASAAS_API_KEY || '',
-        'Content-Type': 'application/json'
-      }
-    });
-    return response.json();
+    return request(`/subscriptions/${subscriptionId}`, 'DELETE');
   }
 };

@@ -36,7 +36,18 @@ import { Label } from '@/components/shared/Label'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 
-import { upgradeToProAction } from '@/app/actions/asaas-actions'
+import { EmbeddedCheckout } from '@/components/billing/EmbeddedCheckout'
+
+interface OrganizationState {
+  id: string
+  name: string
+  email?: string | null
+  plan_id?: string | null
+  metadata?: Record<string, string | undefined>
+  document?: string
+  address?: string
+  phone?: string
+}
 
 function ConfiguraçõesPageContent() {
   const searchParams = useSearchParams()
@@ -45,35 +56,8 @@ function ConfiguraçõesPageContent() {
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'perfil')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [isUpgrading, setIsUpgrading] = useState(false)
-  const [org, setOrg] = useState<any>(null)
+  const [org, setOrg] = useState<OrganizationState | null>(null)
   const isPro = org?.plan_id === '38ea6933-f519-40d7-8e3e-1ff70ab53293'
-
-  const handleUpgrade = async () => {
-    if (!org?.id) return
-    
-    try {
-      setIsUpgrading(true)
-      const promise = upgradeToProAction(org.id, '38ea6933-f519-40d7-8e3e-1ff70ab53293') 
-      
-      toast.promise(promise, {
-        loading: 'Iniciando checkout seguro...',
-        success: (res: any) => {
-          if (res.success && res.checkoutUrl) {
-            window.location.href = res.checkoutUrl
-            return 'Redirecionando para o pagamento...'
-          }
-          throw new Error(res.error || 'Erro interno')
-        },
-        error: (err) => `Erro: ${err.message}`
-      })
-
-    } catch (err: any) {
-      toast.error(err.message)
-    } finally {
-      setIsUpgrading(false)
-    }
-  }
 
   // Update tab if query changes
   useEffect(() => {
@@ -104,7 +88,7 @@ function ConfiguraçõesPageContent() {
           .select('organization_id, organizations(*)')
           .eq('user_id', user.id)
           .limit(1)
-          .maybeSingle() as any
+          .maybeSingle()
         
         if (membership?.organizations) {
           const orgData = membership.organizations
@@ -154,8 +138,8 @@ function ConfiguraçõesPageContent() {
       })
       if (error) throw error
       toast.success('Perfil atualizado com sucesso!')
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao salvar perfil')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao salvar perfil')
     } finally {
       setSaving(false)
     }
@@ -411,6 +395,13 @@ function ConfiguraçõesPageContent() {
                     </div>
                   </div>
 
+                  {!isPro && org?.id && (
+                    <EmbeddedCheckout
+                      org={org}
+                      planId="38ea6933-f519-40d7-8e3e-1ff70ab53293"
+                    />
+                  )}
+
                   {/* SUBSCRIPTION DASHBOARD GRID */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
                     {/* FREE */}
@@ -464,7 +455,13 @@ function ConfiguraçõesPageContent() {
                             </li>
                           ))}
                         </ul>
-                        <Button className="w-full h-12 rounded-2xl bg-primary text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all">Assinar Agora</Button>
+                        <Button
+                          type="button"
+                          disabled={isPro}
+                          className="w-full h-12 rounded-2xl bg-primary text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-primary/20"
+                        >
+                          {isPro ? 'Plano Atual' : 'Use o checkout abaixo'}
+                        </Button>
                       </div>
                     </div>
 

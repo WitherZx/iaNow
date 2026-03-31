@@ -49,6 +49,7 @@ import { SidebarRefineSection } from '@/components/shared/SidebarRefineSection'
 import { ProcessTrackingSection } from '@/components/shared/ProcessTrackingSection'
 import { ProcessAnalysisSection } from '@/components/shared/ProcessAnalysisSection'
 import { legalApi } from '@/lib/services/legal-api'
+import { getMonthlyPaymentLink, getSinglePaymentLink } from '@/lib/monetization'
 
 export default function DemandDetailPage() {
   const { id } = useParams()
@@ -145,8 +146,46 @@ export default function DemandDetailPage() {
 
     // Check auth for paywall
     async function checkAuth() {
+      const singleUnlockKey = `ianow_unlock_processo_${id as string}`
+      const hasLocalUnlock =
+        localStorage.getItem(singleUnlockKey) === 'true' ||
+        localStorage.getItem('ianow_unlock_plan_monthly') === 'true'
+      if (hasLocalUnlock) {
+        setShowPaywall(false)
+      }
+
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
+      if (session) {
+        const { data: membership } = await supabase
+          .from('memberships')
+          .select('organization_id')
+          .eq('user_id', session.user.id)
+          .eq('status', 'active')
+          .limit(1)
+          .maybeSingle()
+
+        if (membership?.organization_id) {
+          const { data: organization } = await supabase
+            .from('organizations')
+            .select('plan_id')
+            .eq('id', membership.organization_id)
+            .single()
+
+          if (organization?.plan_id) {
+            const { data: plan } = await supabase
+              .from('plans')
+              .select('slug')
+              .eq('id', organization.plan_id)
+              .maybeSingle()
+            if (plan?.slug === 'pro') setShowPaywall(false)
+            else if (!hasLocalUnlock) setShowPaywall(true)
+          } else if (!hasLocalUnlock) {
+            setShowPaywall(true)
+          }
+        } else if (!hasLocalUnlock) {
+          setShowPaywall(true)
+        }
+      } else if (!hasLocalUnlock) {
         setShowPaywall(true)
       }
     }
@@ -675,7 +714,16 @@ export default function DemandDetailPage() {
           {showPaywall && (
             <Paywall 
               type="processo" 
-              onPay={() => router.push('/onboarding?redirect=' + encodeURIComponent(window.location.pathname))}
+              onSinglePurchase={() => {
+                const link = getSinglePaymentLink('processo')
+                if (!link) return toast.error('Link de pagamento do processo não configurado')
+                window.open(link, '_blank', 'noopener,noreferrer')
+              }}
+              onSubscribe={() => {
+                const link = getMonthlyPaymentLink()
+                if (!link) return toast.error('Link do plano mensal não configurado')
+                window.open(link, '_blank', 'noopener,noreferrer')
+              }}
             />
           )}
         </div>

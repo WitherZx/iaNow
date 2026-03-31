@@ -4,92 +4,119 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 
+const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN
+
 export async function POST(req: Request) {
-  const body = await req.json()
-  const supabase = createAdminClient() as any
+  try {
+    if (!ASAAS_WEBHOOK_TOKEN) {
+      return NextResponse.json({ ok: false, error: 'Webhook token não configurado' }, { status: 500 })
+    }
 
-  const { event, payment, subscription } = body
-  const orgId = payment?.externalReference || subscription?.externalReference
+    const incomingToken = req.headers.get('asaas-access-token')
+    if (!incomingToken || incomingToken !== ASAAS_WEBHOOK_TOKEN) {
+      return NextResponse.json({ ok: false, error: 'Não autorizado' }, { status: 401 })
+    }
 
-  console.log(`[ASAAS WEBHOOK] Evento: ${event} para Org: ${orgId}`)
+    const body = await req.json()
+    const supabase = createAdminClient()
+    const now = new Date().toISOString()
 
-  if (!orgId) return NextResponse.json({ ok: false, error: 'Sem identificador de organização' })
+    const { event, payment, subscription } = body
+    const orgId = payment?.externalReference || subscription?.externalReference
+    const eventKey = `${event}:${payment?.id || subscription?.id || 'unknown'}`
 
-  // 1. Pagamento Confirmado (Primeiro pagamento ou mensalidade)
-  if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
-    // Buscar o ID do plano 'pro' no banco de dados
-    const { data: plans } = await supabase
-      .from('plans')
-      .select('id')
-      .eq('slug', 'pro')
-      .single()
+    if (!orgId) {
+      return NextResponse.json({ ok: false, error: 'Sem identificador de organização' }, { status: 400 })
+    }
 
-    if (plans?.id) {
-       // Atualizar a organização para o plano PRO
-       await supabase
-         .from('organizations')
-         .update({ plan_id: plans.id, updated_at: new Date().toISOString() })
-         .eq('id', orgId)
+    console.log('[ASAAS WEBHOOK] evento recebido', { event, orgId, eventKey })
 
-       // Atualizar o status da subscrição
-       await supabase
-         .from('subscriptions')
-         .update({ status: 'active', updated_at: new Date().toISOString() })
-         .eq('organization_id', orgId)
+    // 1. Pagamento Confirmado (Primeiro pagamento ou mensalidade)
+    if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
+      if (!payment?.id) {
+        return NextResponse.json({ ok: false, error: 'Evento sem payment.id' }, { status: 400 })
+      }
 
-       // Registrar a fatura paga
-       if (payment.id) {
-          await supabase
-            .from('invoices')
-            .upsert({
+      // Idempotência defensiva: se já está pago para a mesma charge, encerra
+      const { data: existingInvoice } = await supabase
+        .from('invoices')
+        .select('id, status')
+        .eq('asaas_charge_id', payment.id)
+        .maybeSingle()
+
+      if (existingInvoice?.status === 'paid') {
+        return NextResponse.json({ ok: true, duplicate: true })
+      }
+
+      // Buscar o ID do plano 'pro' no banco de dados
+      const { data: plans } = await supabase
+        .from('plans')
+        .select('id')
+        .eq('slug', 'pro')
+        .single()
+
+      if (plans?.id) {
+        await supabase
+          .from('organizations')
+          .update({ plan_id: plans.id, updated_at: now })
+          .eq('id', orgId)
+
+        await supabase
+          .from('subscriptions')
+          .update({ status: 'active', updated_at: now })
+          .eq('organization_id', orgId)
+
+        await supabase
+          .from('invoices')
+          .upsert(
+            {
               organization_id: orgId,
               asaas_charge_id: payment.id,
               amount_due: payment.value,
               amount_paid: payment.value,
               status: 'paid',
               pdf_url: payment.invoiceUrl || null,
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'asaas_charge_id' })
-       }
-       
-       console.log(`[ASAAS WEBHOOK] Org: ${orgId} agora é PRO ✅`)
+              updated_at: now
+            },
+            { onConflict: 'asaas_charge_id' }
+          )
+      }
     }
-  }
 
-  // 2. Assinatura Cancelada (Downgrade para Free)
-  if (event === 'SUBSCRIPTION_DELETED') {
-    // Buscar o ID do plano 'free'
-    const { data: plans } = await supabase
-      .from('plans')
-      .select('id')
-      .eq('slug', 'free')
-      .single()
+    // 2. Assinatura Cancelada (Downgrade para Free)
+    if (event === 'SUBSCRIPTION_DELETED') {
+      const { data: plans } = await supabase
+        .from('plans')
+        .select('id')
+        .eq('slug', 'free')
+        .single()
 
-    if (plans?.id) {
-       await supabase
-         .from('organizations')
-         .update({ plan_id: plans.id, updated_at: new Date().toISOString() })
-         .eq('id', orgId)
+      if (plans?.id) {
+        await supabase
+          .from('organizations')
+          .update({ plan_id: plans.id, updated_at: now })
+          .eq('id', orgId)
 
-       await supabase
-         .from('subscriptions')
-         .update({ status: 'canceled', updated_at: new Date().toISOString() })
-         .eq('organization_id', orgId)
-
-       console.log(`[ASAAS WEBHOOK] Org: ${orgId} retornou para o FREE ⬇️`)
+        await supabase
+          .from('subscriptions')
+          .update({ status: 'canceled', updated_at: now })
+          .eq('organization_id', orgId)
+      }
     }
-  }
 
-  // 3. Pagamento Atrasado (Opcional: Bloquear ou Notificar)
-  if (event === 'PAYMENT_OVERDUE') {
-     // Aqui podemos marcar a subscrição como 'overdue' para limitar acessos
-     await supabase
-       .from('subscriptions')
-       .update({ status: 'overdue' })
-       .eq('organization_id', orgId)
-     
-     console.log(`[ASAAS WEBHOOK] Org: ${orgId} está com pagamento em atraso! ⚠️`)
-  }
+    // 3. Pagamento Atrasado
+    if (event === 'PAYMENT_OVERDUE') {
+      await supabase
+        .from('subscriptions')
+        .update({ status: 'overdue', updated_at: now })
+        .eq('organization_id', orgId)
+    }
 
-  return NextResponse.json({ ok: true })
+    console.log('[ASAAS WEBHOOK] evento processado', { event, orgId, eventKey })
+    return NextResponse.json({ ok: true })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Erro interno'
+    console.error('[ASAAS WEBHOOK] falha ao processar evento', { message })
+    return NextResponse.json({ ok: false, error: message }, { status: 500 })
+  }
 }

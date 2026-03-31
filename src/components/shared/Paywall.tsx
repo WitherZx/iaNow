@@ -15,7 +15,8 @@ import { cn } from '@/utils/cn'
 
 interface PaywallProps {
   type: 'contrato' | 'estrategia' | 'processo'
-  onPay?: () => void
+  onSinglePurchase?: () => void
+  onSubscribe?: () => void
 }
 
 const PRICING = {
@@ -42,7 +43,7 @@ const PRICING = {
   }
 }
 
-export function Paywall({ type, onPay }: PaywallProps) {
+export function Paywall({ type, onSinglePurchase, onSubscribe }: PaywallProps) {
   const current = PRICING[type]
   const Icon = current.icon
 
@@ -89,7 +90,7 @@ export function Paywall({ type, onPay }: PaywallProps) {
                   <span className="text-4xl font-black text-slate-900 tracking-tight">{current.price}</span>
                </div>
                <Button 
-                onClick={onPay}
+                onClick={onSinglePurchase}
                 className="w-full h-14 rounded-2xl bg-slate-900 hover:bg-black text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-slate-200 flex items-center justify-center gap-3 active:scale-95 transition-all"
                >
                  <CreditCard size={18} /> Desbloquear Agora
@@ -142,7 +143,7 @@ export function Paywall({ type, onPay }: PaywallProps) {
                   </div>
                </div>
                <Button 
-                onClick={onPay}
+                onClick={onSubscribe}
                 className="w-full h-14 rounded-2xl bg-primary hover:bg-blue-700 text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-primary/20 flex items-center justify-center gap-3 active:scale-95 transition-all"
                >
                  Assinar Plano Premium <ArrowRight size={18} />
