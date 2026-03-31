@@ -29,10 +29,25 @@ export async function middleware(request: NextRequest) {
 
   // Ajuste segurança: APENAS /estrategia/[id-uuid] é public route, mas a lista /estrategia e o /estrategia/novo não podem ser!
   const isStrategyPublicLink = request.nextUrl.pathname.match(/^\/estrategia\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/) !== null
+  
+  // Roteamento Monetização 2026: Permitir Novo e Detalhes sem Login (com Paywall interno)
+  const isGuestAllowedRoute = [
+    '/juridico/novo',
+    '/justica/novo',
+    '/estrategia/novo',
+    '/api/juridico/gerar',
+    '/api/justica/analisar',
+    '/api/ai/strategy'
+  ].some(p => request.nextUrl.pathname.startsWith(p)) || 
+  request.nextUrl.pathname.match(/^\/juridico\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/) ||
+  request.nextUrl.pathname.match(/^\/justica\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/)
 
-  const isPublicRoute = ['/login', '/signup', '/invite', '/api/strategy/public', '/_next', '/favicon'].some(
+  const isPublicRoute = [
+    '/login', '/signup', '/invite', '/api/onboarding', '/api/strategy/public', '/_next', '/favicon', '/dashboard',
+    '/juridico', '/justica', '/estrategia'
+  ].some(
     p => request.nextUrl.pathname.startsWith(p)
-  ) || isStrategyPublicLink
+  ) || isStrategyPublicLink || isGuestAllowedRoute
   
   const isRootLanding = request.nextUrl.pathname === '/'
 

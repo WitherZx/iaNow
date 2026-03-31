@@ -48,12 +48,14 @@ export function DocumentAuditLayout({
           </div>
 
           {/* HERO SECTION */}
-          {hero}
+          <div className="print:hidden">
+            {hero}
+          </div>
 
           {/* MAIN GRID */}
           <div className={cn("grid grid-cols-1 gap-6 w-full max-w-full overflow-hidden", sidebarGridCols)}>
             {/* CONTENT AREA */}
-            <div className="min-w-0 flex flex-col">
+            <div className="min-w-0 flex flex-col print:w-full print:max-w-none">
               {children}
             </div>
 

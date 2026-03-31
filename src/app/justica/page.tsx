@@ -27,6 +27,7 @@ import { Card } from '@/components/shared/Card'
 import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/utils/cn'
+import { Button } from '@/components/shared/Button'
 
 interface Demand {
   id: string
@@ -58,7 +59,10 @@ export default function JusticaPage() {
       try {
         setLoading(true)
         const { data: { session } } = await supabase.auth.getSession()
-        if (!session) return
+        if (!session) {
+          setDemands([])
+          return
+        }
 
         const { data: membership } = await supabase
           .from('memberships')
@@ -86,6 +90,58 @@ export default function JusticaPage() {
 
     loadDemands()
   }, [supabase])
+
+  const handleTrackExternal = async (processNumber: string) => {
+    try {
+      const guestId = !localStorage.getItem('sb-auth-token') 
+        ? (localStorage.getItem('ianow_guest_id') || crypto.randomUUID()) 
+        : null
+      
+      if (guestId && !localStorage.getItem('ianow_guest_id')) {
+        localStorage.setItem('ianow_guest_id', guestId)
+      }
+
+      const { data: { session } } = await supabase.auth.getSession()
+      let orgId: string | null = null
+
+      if (session) {
+        const { data: membership } = await supabase
+          .from('memberships')
+          .select('organization_id')
+          .eq('user_id', session.user.id)
+          .single() as any
+        orgId = membership?.organization_id
+      } else {
+        // Guest mode fallback org
+        const { data: sandbox } = await supabase.from('organizations').select('id').limit(1).single() as any
+        orgId = sandbox?.id
+      }
+
+      if (!orgId) return
+
+      const { data: newDemand, error } = await supabase
+        .from('justice_demands')
+        .insert({
+          organization_id: orgId,
+          user_id: session?.user.id || null,
+          status: 'ready',
+          tipo_acao: 'Acompanhamento Externo',
+          metadata: {
+            process_number: processNumber,
+            description: 'Processo adicionado para acompanhamento de movimentações.',
+            is_external: true,
+            guest_id: guestId
+          }
+        } as any)
+        .select().single() as any
+
+      if (error) throw error
+      router.push(`/justica/${newDemand.id}`)
+    } catch (err) {
+      console.error('Erro ao adicionar processo para acompanhamento:', err)
+      alert('Erro ao adicionar processo.')
+    }
+  }
 
   const [metrics, setMetrics] = useState({
     total: 0,
@@ -136,9 +192,22 @@ export default function JusticaPage() {
         title="PROCESSOS JUDICIAIS" 
         subtitle="Democratização do acesso à justiça para demandas de até 20 salários mínimos via JEC."
         action={
-          <CTAButton icon={PlusCircle} onClick={handleNewProtocol} className="w-full lg:w-auto">
-            Novo Processo
-          </CTAButton>
+          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+            <Button 
+              variant="outline"
+              onClick={() => {
+                const num = window.prompt('Digite o número do processo para acompanhar (CNJ):')
+                if (num) handleTrackExternal(num)
+              }}
+              className="h-12 px-6 rounded-2xl border-slate-200 bg-white text-slate-700 font-black text-[11px] uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center gap-2 group"
+            >
+              <Search size={16} className="text-primary group-hover:scale-110 transition-transform" />
+              Acompanhar Processo
+            </Button>
+            <CTAButton icon={PlusCircle} onClick={handleNewProtocol} className="w-full lg:w-auto shadow-xl shadow-primary/20">
+              Novo Processo
+            </CTAButton>
+          </div>
         }
       >
         <div className="flex flex-col gap-y-8">
@@ -245,7 +314,7 @@ export default function JusticaPage() {
                    icon={<Scale size={22} />}
                    generatingIcon={<Clock size={16} className="animate-spin" />}
                    timeoutIcon={<AlertCircle size={22} />}
-                   moduleLabel="Justiça Gratuita"
+                   moduleLabel="Minerva · Justiça Gratuita"
                    badge={badge}
                    footerTags={[
                      {

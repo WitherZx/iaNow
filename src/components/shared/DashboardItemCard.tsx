@@ -57,15 +57,15 @@ export function DashboardItemCard({
 
   return (
     <div className={cn("relative group/card h-full w-full", className)}>
-      <Link 
-        href={isDeleted ? '#' : href} 
+      <Link
+        href={isDeleted ? '#' : href}
         className={cn(
-            "flex flex-col h-full w-full transition-all", 
-            isDeleted && "pointer-events-none opacity-60 grayscale-[0.5]"
+          "flex flex-col h-full w-full transition-all",
+          isDeleted && "pointer-events-none opacity-60 grayscale-[0.5]"
         )}
       >
-        <Card 
-          padding="sm" 
+        <Card
+          padding="sm"
           className={cn(
             "hover:border-primary/30 hover:shadow-md transition-all h-full min-h-[160px] flex flex-col",
             isDeleted ? "bg-slate-50 border-dashed border-slate-200" : "cursor-pointer group",
@@ -80,15 +80,15 @@ export function DashboardItemCard({
                 <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">{date}</span>
               </div>
             </div>
-            
+
             <h4 className={cn(
               "font-bold text-sm transition-colors line-clamp-2 leading-tight",
               isDeleted ? "text-slate-400" : "text-slate-900 group-hover:text-primary"
             )}>
               {title}
             </h4>
-            
-            <div className="flex-1 flex flex-col justify-end">
+
+            <div className="flex-1 flex flex-col justify-start">
               <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
                 {description}
               </p>

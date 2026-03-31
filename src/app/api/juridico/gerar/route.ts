@@ -8,28 +8,38 @@ export async function POST(req: Request) {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    if (!user) {
+    const guestId = req.headers.get('X-Guest-Id')
+
+    if (!user && !guestId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const adminClient = createAdminClient()
     
     // Buscar a organização do usuário (mais robusto)
-    const { data: membership, error: memberError } = await adminClient
+    const { data: membership, error: memberError } = user ? await adminClient
       .from('memberships')
       .select('organization_id')
       .eq('user_id', user.id)
       .limit(1)
-      .maybeSingle() as any
+      .maybeSingle() as any : { data: null, error: null }
 
     if (memberError) {
       console.error('Membership Fetch Error:', memberError)
       return NextResponse.json({ error: 'Erro ao buscar organização do usuário' }, { status: 500 })
     }
 
-    const orgId = membership?.organization_id
+    let orgId = membership?.organization_id
     if (!orgId) {
-       return NextResponse.json({ error: 'Sua conta não possui uma organização vinculada. Complete o onboarding.' }, { status: 400 })
+      if (!user) {
+         // Guest Mode: Assign to the first available organization as sandbox
+         const { data: sandbox } = await adminClient.from('organizations').select('id').limit(1).single() as any
+         orgId = sandbox?.id
+      }
+      
+      if (!orgId) {
+         return NextResponse.json({ error: 'Sua conta não possui uma organização vinculada. Complete o onboarding.' }, { status: 400 })
+      }
     }
 
     const body = await req.json()
@@ -128,27 +138,25 @@ Siga rigorosamente as instruções abaixo:
 3. PARÂMETROS DO CONTRATO
    {{parametros}}
 
-4. REGRAS DE GERAÇÃO
+4. REGRAS DE GERAÇÃO E ESTRUTURAÇÃO
 * Utilize linguagem jurídica clara e profissional
 * PROIBIDO uso de emojis, ícones ou qualquer caractere decorativo. Apenas formatação de texto puro (Markdown).
 * Estruture o contrato com cláusulas numeradas
 * Adapte o nível de detalhamento conforme o nível escolhido.
+* MANDATÓRIO: O contrato foi solicitado e será emitido pela PARTE A. Portanto, a minuta deve IMPRETERIVELMENTE ser elaborada DE FORMA FAVORÁVEL À PARTE A. Maximize a proteção jurídica da Parte A, reduza suas responsabilidades sempre que possível, e aplique garantias, exigências e penalidades mais rígidas sobre a Parte B.
 * Inclua obrigatoriamente:
   * Objeto do contrato
-  * Obrigações das partes
-  * Valores e pagamentos (se aplicável)
+  * Obrigações das partes (Favorecendo e protegendo a atuação da Parte A)
+  * Valores e pagamentos (se aplicável, com forte regramento contra inadimplência por parte de B)
   * Prazo e vigência
-  * Rescisão
-  * Penalidades
+  * Rescisão (condicionada para dificultar a saída imotivada da Parte B)
+  * Penalidades (focadas em garantir a execução por Parte B)
   * Confidencialidade (quando relevante)
   * Proteção de dados (LGPD, se houver dados pessoais)
   * Foro
 * PROIBIDO incluir blocos de assinatura ao final do documento. Não coloque linhas pontilhadas, campos de data (ex: "[Local], [Data]") ou espaços para nomes dos contratantes assinarem. O contrato deve terminar logo após a última cláusula, pois a assinatura ocorrerá em plataforma digital externa separada.
-* Sempre que houver risco jurídico relevante:
-  * Inclua cláusulas de proteção adicionais automaticamente
-* Nunca invente informações não fornecidas se forem cruciais.
-* Quando faltar informação crítica:
-  * Faça suposições seguras e genéricas (ex: "valor a ser definido entre as partes")
+* Sempre que houver risco jurídico relevante, inclua cláusulas de proteção adicionais em benefício da Parte A automaticamente.
+* Nunca invente informações não fornecidas se forem cruciais. Quando faltar informação crítica, faça suposições genéricas seguras (ex: "valor a ser definido entre as partes").
 
 5. PERSONALIZAÇÃO INTELIGENTE
 * Se for contrato de prestação de serviços: incluir cláusula de escopo e limitação de responsabilidade
@@ -202,19 +210,23 @@ ${partesStr}
 PARÂMETROS E CLÁUSULAS ADICIONAIS / CONTEXTO:
 ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
 
-    const aiModel = 'gemini-2.0-flash'
+    const aiModel = 'Minerva'
 
     // 1. INSERTS PLACEHOLDER FIRST for immediate visibility
     const { data: document, error: docError } = await adminClient
       .from('generated_documents')
       .insert({
         organization_id: orgId,
-        created_by: user.id,
+        created_by: user?.id || null,
         title: `${tipoContrato}`,
         document_type: 'custom',
         ai_model: aiModel,
         status: 'generating',
-        metadata: { requestPayload: body }
+        metadata: { 
+          ...body,
+          guest_id: guestId,
+          is_guest: !user
+        }
       } as any)
       .select().single() as any
 
@@ -247,14 +259,16 @@ ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
         }
       }).eq('id', document.id)
 
-      await adminApi.from('activity_logs').insert({
-        organization_id: orgId,
-        user_id: user.id,
-        resource_type: 'juridico',
-        resource_id: document.id,
-        action: 'create',
-        description: `Gerou documento jurídico: ${tipoContrato}`
-      })
+      if (user) {
+        await adminApi.from('activity_logs').insert({
+          organization_id: orgId,
+          user_id: user.id,
+          resource_type: 'juridico',
+          resource_id: document.id,
+          action: 'create',
+          description: `Gerou documento jurídico: ${tipoContrato}`
+        })
+      }
 
       return NextResponse.json({ 
         success: true, 

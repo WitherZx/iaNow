@@ -101,7 +101,30 @@ button, [role="button"] {
 }
 
 /* ── Seleção de texto ────────────────────────────── */
-::selection {
-  background-color: rgba(108, 99, 255, 0.2);
-  color: var(--neutral-900);
+/* ── Impressão / PDF ────────────────────────────── */
+@media print {
+  @page {
+    margin: 20mm;
+  }
+  
+  body {
+    background-color: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Esconde Scrollbars e outros elementos fixos */
+  ::-webkit-scrollbar { display: none; }
+  
+  /* Garante que o conteúdo principal ocupe 100% da largura */
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Esconde botões de ação e navegação que podem ter escapado */
+  button, .btn, .no-print {
+    display: none !important;
+  }
 }

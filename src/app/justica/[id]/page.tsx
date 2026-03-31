@@ -38,11 +38,17 @@ import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import Link from 'next/link'
 import { cn } from '@/utils/cn'
+import { Paywall } from '@/components/shared/Paywall'
 
 import { DocumentActionBar } from '@/components/shared/DocumentActionBar'
 import { DocumentHero } from '@/components/shared/DocumentHero'
 import { DocumentAuditLayout } from '@/components/shared/DocumentAuditLayout'
 import { SidebarActionItem } from '@/components/shared/SidebarActionItem'
+import { TechnicalReportCard } from '@/components/shared/TechnicalReportCard'
+import { SidebarRefineSection } from '@/components/shared/SidebarRefineSection'
+import { ProcessTrackingSection } from '@/components/shared/ProcessTrackingSection'
+import { ProcessAnalysisSection } from '@/components/shared/ProcessAnalysisSection'
+import { legalApi } from '@/lib/services/legal-api'
 
 export default function DemandDetailPage() {
   const { id } = useParams()
@@ -58,6 +64,14 @@ export default function DemandDetailPage() {
   const [refinePrompt, setRefinePrompt] = useState('')
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
   const [activeToken, setActiveToken] = useState<string | null>(null)
+  const [showPaywall, setShowPaywall] = useState(false)
+
+  // Novas funcionalidades de Processo
+  const [activeTab, setActiveTab] = useState<'minuta' | 'acompanhamento' | 'analise'>('minuta')
+  const [processStatus, setProcessStatus] = useState<any>(null)
+  const [processAnalysis, setProcessAnalysis] = useState<any>(null)
+  const [isTrackingLoading, setIsTrackingLoading] = useState(false)
+  const [isAnalysisLoading, setIsAnalysisLoading] = useState(false)
 
   const scrollToToken = (token: string) => {
     setActiveToken(token)
@@ -128,6 +142,15 @@ export default function DemandDetailPage() {
     }
 
     loadDemand()
+
+    // Check auth for paywall
+    async function checkAuth() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setShowPaywall(true)
+      }
+    }
+    checkAuth()
   }, [id, supabase])
 
   const handleSave = async () => {
@@ -209,6 +232,47 @@ export default function DemandDetailPage() {
     }
   }
 
+  const fetchProcessStatus = async () => {
+    if (!demand?.metadata?.process_number) {
+      toast.error('Número do processo não informado.')
+      return
+    }
+    setIsTrackingLoading(true)
+    try {
+      const status = await legalApi.getProcessInfo(demand.metadata.process_number)
+      setProcessStatus(status)
+      toast.success('Status do processo atualizado.')
+    } catch (err) {
+      toast.error('Erro ao consultar processo.')
+    } finally {
+      setIsTrackingLoading(false)
+    }
+  }
+
+  const handleAnalyze = async () => {
+    if (!processStatus) {
+      toast.error('Consulte o status do processo antes de analisar.')
+      return
+    }
+    setIsAnalysisLoading(true)
+    try {
+      const response = await fetch('/api/justica/analisar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ processData: processStatus })
+      })
+      if (!response.ok) throw new Error('Erro na análise')
+      const analysis = await response.json()
+      setProcessAnalysis(analysis)
+      setActiveTab('analise')
+      toast.success('Análise da Minerva concluída!')
+    } catch (err) {
+      toast.error('Erro ao gerar análise.')
+    } finally {
+      setIsAnalysisLoading(false)
+    }
+  }
+
   if (loading) return <DashboardLayout><div className="flex h-full w-full items-center justify-center min-h-[400px]"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div></DashboardLayout>
   if (!demand) return <DashboardLayout><PageContainer>Não encontrado.</PageContainer></DashboardLayout>
 
@@ -241,35 +305,51 @@ export default function DemandDetailPage() {
       }
       sidebar={
         <>
-          {/* AJUSTES COM IA */}
+          {/* 1. NÚMERO DO PROCESSO (ACOMPANHAMENTO) */}
           {!isEditing && (
-            <div className="p-6 bg-primary/5 border border-primary/20 rounded-3xl space-y-4 shadow-sm">
-              <div className="flex items-center gap-2 text-[10px] font-black text-primary uppercase tracking-widest">
-                <Zap className="w-4 h-4 fill-primary" /> Ajustar com IA
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                <Gavel size={14} className="text-primary" /> Número do Processo
               </div>
-              <p className="text-[11px] text-slate-500 font-medium">Descreva o que deseja mudar ou adicionar ao documento.</p>
-              <div className="relative">
-                <textarea
-                  value={refinePrompt}
-                  onChange={e => setRefinePrompt(e.target.value)}
-                  placeholder="Ex: 'Excluir dano moral', 'Mudar valor'..."
-                  className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-xs focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all resize-none h-32 font-semibold text-slate-700 placeholder:text-slate-400"
-                />
-                <Button
-                  size="icon"
-                  onClick={() => handleRefine()}
-                  disabled={!refinePrompt.trim() || refining}
-                  className="absolute bottom-3 right-3 rounded-xl shadow-lg shadow-primary/20 h-10 w-10 bg-primary hover:bg-blue-700 flex items-center justify-center p-0"
-                >
-                  {refining ? <Loader2 size={18} className="animate-spin text-white" /> : <Send size={16} className="text-white" />}
-                </Button>
+              <div className="bg-white border border-slate-100 rounded-[24px] p-5 shadow-sm space-y-4">
+                <div className="space-y-1.5">
+                  <input
+                    type="text"
+                    placeholder="0000000-00.0000.0.00.0000"
+                    value={demand.metadata?.process_number || ''}
+                    onChange={async (e) => {
+                       const val = e.target.value
+                       setDemand({ ...demand, metadata: { ...demand.metadata, process_number: val } })
+                       // Auto-save process number
+                       await supabase.from('justice_demands').update({
+                         metadata: { ...demand.metadata, process_number: val }
+                       }).eq('id', id)
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 h-12 text-[13px] font-black focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all text-slate-700 placeholder:text-slate-300 tracking-wider"
+                  />
+                  <p className="text-[9px] text-slate-400 font-bold px-1">Necessário para acompanhamento e análise em tempo real.</p>
+                </div>
+                {demand.metadata?.process_number && (
+                  <Button 
+                    variant="primary" 
+                    size="sm" 
+                    onClick={() => {
+                      fetchProcessStatus()
+                      setActiveTab('acompanhamento')
+                    }}
+                    isLoading={isTrackingLoading}
+                    className="w-full rounded-xl"
+                  >
+                    Consultar Status
+                  </Button>
+                )}
               </div>
             </div>
           )}
 
-          {/* PREENCHER VARIÁVEIS - Padrão iaNow */}
-          {!isEditing && (
-            <div className="space-y-4 pt-6 border-t border-slate-100">
+          {/* 2. PREENCHER VARIÁVEIS - Padrão iaNow */}
+          {!isEditing && activeTab === 'minuta' && (
+            <div className="space-y-4">
               <div className="flex items-center gap-2 px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">
                 <Pencil className="w-3.5 h-3.5" /> Preencher Variáveis
               </div>
@@ -347,7 +427,17 @@ export default function DemandDetailPage() {
             </div>
           )}
 
-          {/* PROVAS ANEXADAS - Novo */}
+          {/* 2. AJUSTES COM IA */}
+          {!isEditing && (
+             <SidebarRefineSection
+                value={refinePrompt}
+                onChange={setRefinePrompt}
+                onSubmit={() => handleRefine()}
+                isLoading={refining}
+             />
+          )}
+
+          {/* 3. PROVAS ANEXADAS */}
           {demand.metadata?.evidenceFiles?.length > 0 && (
             <div className="space-y-4 pt-6 border-t border-slate-100">
               <div className="flex items-center gap-2 px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">
@@ -369,15 +459,14 @@ export default function DemandDetailPage() {
             </div>
           )}
 
-
-          {/* GUIA DE PROTOCOLO */}
+          {/* 4. GUIA DE PROTOCOLO */}
           <Card className="rounded-[32px] border-slate-100 shadow-xl shadow-slate-100/50 bg-white overflow-hidden border">
             <div className="p-6 bg-primary/5 border-b border-primary/10">
               <h4 className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-primary">
                 <Gavel size={16} className="text-primary fill-primary/20" /> Guia de Protocolo
               </h4>
             </div>
-            <div className="mt-6 flex flex-col gap-6">
+            <div className="p-6 flex flex-col gap-6">
               <div className="space-y-3">
                 <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
                   <MapPin size={12} /> Onde Protocolar?
@@ -427,7 +516,7 @@ export default function DemandDetailPage() {
             </div>
           </Card>
 
-          {/* SCORE CIRCULAR */}
+          {/* 5. SCORE CIRCULAR */}
           <Card className="p-6 rounded-[32px] bg-white border border-slate-100 shadow-sm flex flex-col items-center">
             <div className={cn(
               "w-20 h-20 rounded-full flex items-center justify-center mb-4 border-2",
@@ -450,7 +539,7 @@ export default function DemandDetailPage() {
             </div>
           </Card>
 
-          {/* PONTOS FORTES E RISCOS */}
+          {/* 6. PONTOS FORTES E RISCOS */}
           <div className="flex flex-col gap-6">
             {auditoria.pontos_fortes?.length > 0 && (
               <div className="space-y-3">
@@ -479,48 +568,118 @@ export default function DemandDetailPage() {
               </div>
             )}
           </div>
+
+          <TechnicalReportCard aiModel={demand.ai_model} createdAt={demand.created_at} />
         </>
       }
     >
-      <div className="min-w-0 flex flex-col">
-        <Card className="min-h-[600px] border-none shadow-2xl shadow-slate-200/50 rounded-[20px] md:rounded-[40px] bg-white flex flex-col overflow-hidden print:shadow-none print:border print:border-slate-100 print:rounded-none">
-          <div className="bg-slate-50 p-4 md:p-6 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
-              <FileText size={14} /> Minuta Gerada pela IA
-          </div>
-          <div className="text-[10px] font-bold text-slate-400">Pág 1 de 1</div>
+      <div className="min-w-0 flex flex-col space-y-8">
+        
+        {/* TABS SELECTOR */}
+        <div className="flex items-center bg-slate-100/50 p-1.5 rounded-[24px] w-fit border border-slate-200/50 print:hidden overflow-x-auto max-w-full no-scrollbar">
+           <button 
+             onClick={() => setActiveTab('minuta')}
+             className={cn(
+               "px-6 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+               activeTab === 'minuta' ? "bg-white text-primary shadow-sm border border-slate-100" : "text-slate-400 hover:text-slate-600"
+             )}
+           >
+             Minuta da Petição
+           </button>
+           <button 
+             onClick={() => {
+               setActiveTab('acompanhamento')
+               if (!processStatus && demand.metadata?.process_number) fetchProcessStatus()
+             }}
+             className={cn(
+               "px-6 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap",
+               activeTab === 'acompanhamento' ? "bg-white text-emerald-600 shadow-sm border border-slate-100" : "text-slate-400 hover:text-slate-600"
+             )}
+           >
+             <Clock size={14} /> Acompanhamento
+           </button>
+           <button 
+             onClick={() => setActiveTab('analise')}
+             className={cn(
+               "px-6 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap",
+               activeTab === 'analise' ? "bg-white text-primary shadow-sm border border-slate-100" : "text-slate-400 hover:text-slate-600"
+             )}
+           >
+             <Sparkles size={14} className="fill-current" /> Análise Minerva
+           </button>
         </div>
-        <div className="flex-1 p-4 md:p-8">
-          {isEditing ? (
-            <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} className="w-full h-full min-h-[800px] border-none focus:ring-0 text-sm md:text-base text-slate-700 leading-relaxed font-mono resize-none outline-none" />
-          ) : (
-            <div className="prose prose-slate max-w-none break-words whitespace-normal prose-headings:font-black prose-p:text-slate-700 text-sm sm:text-base md:text-lg leading-relaxed selection:bg-primary/20 overflow-hidden">
-              <ReactMarkdown
-                components={{
-                  li: ({node, children, ...props}) => (
-                    <li className="break-words whitespace-normal" {...props}>
-                      {typeof children === 'string' ? renderTextWithHighlights(children) : children}
-                    </li>
-                  ),
-                  p: ({node, children, ...props}) => (
-                    <p className="break-words whitespace-normal" {...props}>
-                      {typeof children === 'string' ? renderTextWithHighlights(children) : children}
-                    </p>
-                  ),
-                  blockquote: ({node, children, ...props}) => (
-                    <blockquote className="break-words whitespace-normal" {...props}>
-                      {typeof children === 'string' ? renderTextWithHighlights(children) : children}
-                    </blockquote>
-                  )
+
+        <div className="flex-1 min-h-[500px] relative">
+          <div className={cn("transition-all duration-1000", showPaywall && "blur-md select-none pointer-events-none opacity-40")}>
+            {activeTab === 'minuta' && (
+              <Card className="min-h-[600px] border-none shadow-2xl shadow-slate-200/50 rounded-[20px] md:rounded-[40px] bg-white flex flex-col overflow-hidden print:shadow-none print:border-none print:rounded-none">
+                <div className="bg-slate-50 p-4 md:p-6 border-b border-slate-100 flex items-center justify-between print:hidden">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <FileText size={14} /> Minuta Gerada pela IA
+                  </div>
+                  <div className="text-[10px] font-bold text-slate-400">Pág 1 de 1</div>
+                </div>
+                <div className="flex-1 p-4 md:p-8">
+                  {isEditing ? (
+                    <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} className="w-full h-full min-h-[800px] border-none focus:ring-0 text-sm md:text-base text-slate-700 leading-relaxed font-mono resize-none outline-none" />
+                  ) : (
+                    <div className="prose prose-slate max-w-none break-words whitespace-normal prose-headings:font-black prose-p:text-slate-700 text-sm sm:text-base md:text-lg leading-relaxed selection:bg-primary/20 overflow-hidden">
+                      <ReactMarkdown
+                        components={{
+                          li: ({node, children, ...props}) => (
+                            <li className="break-words whitespace-normal" {...props}>
+                              {typeof children === 'string' ? renderTextWithHighlights(children) : children}
+                            </li>
+                          ),
+                          p: ({node, children, ...props}) => (
+                            <p className="break-words whitespace-normal" {...props}>
+                              {typeof children === 'string' ? renderTextWithHighlights(children) : children}
+                            </p>
+                          ),
+                          blockquote: ({node, children, ...props}) => (
+                            <blockquote className="break-words whitespace-normal" {...props}>
+                              {typeof children === 'string' ? renderTextWithHighlights(children) : children
+                              }
+                            </blockquote>
+                          )
+                        }}
+                      >
+                        {demand.metadata?.petition_content || ''}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+
+            {activeTab === 'acompanhamento' && (
+              <ProcessTrackingSection 
+                status={processStatus} 
+                isLoading={isTrackingLoading} 
+                onAnalyze={() => {
+                  if (processAnalysis) setActiveTab('analise')
+                  else handleAnalyze()
                 }}
-              >
-                {demand.metadata?.petition_content || ''}
-              </ReactMarkdown>
-            </div>
+              />
+            )}
+
+            {activeTab === 'analise' && (
+              <ProcessAnalysisSection 
+                analysis={processAnalysis} 
+                isLoading={isAnalysisLoading} 
+                onGenerate={handleAnalyze} 
+              />
+            )}
+          </div>
+
+          {showPaywall && (
+            <Paywall 
+              type="processo" 
+              onPay={() => router.push('/onboarding?redirect=' + encodeURIComponent(window.location.pathname))}
+            />
           )}
         </div>
-      </Card>
-    </div>
+      </div>
     </DocumentAuditLayout>
   )
 }

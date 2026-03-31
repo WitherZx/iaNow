@@ -37,6 +37,9 @@ import ReactMarkdown from 'react-markdown'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn } from '@/utils/cn'
+import { TechnicalReportCard } from '@/components/shared/TechnicalReportCard'
+import { SidebarRefineSection } from '@/components/shared/SidebarRefineSection'
+import { Paywall } from '@/components/shared/Paywall'
 
 export default function ViewDocumentPage() {
   const { id } = useParams()
@@ -53,6 +56,7 @@ export default function ViewDocumentPage() {
   const [resolvedSuggestions, setResolvedSuggestions] = useState<string[]>([])
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
   const [activeToken, setActiveToken] = useState<string | null>(null)
+  const [showPaywall, setShowPaywall] = useState(false)
 
   const scrollToToken = (token: string) => {
     setActiveToken(token)
@@ -130,6 +134,15 @@ export default function ViewDocumentPage() {
 
     // Initial load
     loadDocument()
+
+    // Check auth for paywall
+    async function checkAuth() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setShowPaywall(true)
+      }
+    }
+    checkAuth()
 
     // Poll every 4s — will stop once status changes
     interval = setInterval(loadDocument, 4000)
@@ -311,92 +324,10 @@ export default function ViewDocumentPage() {
       }
       sidebar={
         <>
-          {/* AJUSTAR COM IA */}
-          <div className="p-6 bg-primary/5 border border-primary/20 rounded-3xl space-y-4 shadow-sm">
-            <div className="flex items-center gap-2 text-[10px] font-black text-primary uppercase tracking-widest">
-              <Zap className="w-4 h-4 fill-primary" /> Ajustar com IA
-            </div>
-            <p className="text-[11px] text-slate-500 font-medium">Descreva o que deseja mudar ou adicionar ao documento.</p>
-            <div className="relative">
-              <textarea
-                value={refinePrompt}
-                onChange={(e) => setRefinePrompt(e.target.value)}
-                placeholder="Ex: Adicione uma cláusula de confidencialidade de 2 anos..."
-                className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-xs focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all resize-none h-32 font-semibold text-slate-700 placeholder:text-slate-400"
-              />
-              <Button
-                size="icon"
-                onClick={() => handleRefine()}
-                disabled={!refinePrompt.trim() || refining}
-                className="absolute bottom-3 right-3 rounded-xl shadow-lg shadow-primary/20 h-10 w-10 bg-primary hover:bg-blue-700 flex items-center justify-center p-0"
-              >
-                {refining ? (
-                  <Loader2 className="w-5 h-5 text-white animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4 text-white" />
-                )}
-              </Button>
-            </div>
-          </div>
-
-          {/* SCORE E RISCO */}
-          {audit && (
-            <Card padding="none" className="p-6 bg-white border-slate-100 shadow-sm rounded-3xl flex flex-col items-center">
-              <div className={cn(
-                "w-20 h-20 rounded-full flex items-center justify-center mb-4 border-2",
-                getScoreColor(audit.score).split(' ')[0],
-                getScoreColor(audit.score).split(' ')[1]
-              )}>
-                <span className="text-3xl font-black">{audit.score}</span>
-              </div>
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Score de Compliance</span>
-              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-4">
-                <div className={cn(
-                  "h-full transition-all duration-1000",
-                  audit.score >= 80 ? "bg-emerald-500" : audit.score >= 50 ? "bg-amber-500" : "bg-red-500"
-                )} style={{ width: `${audit.score}%` }} />
-              </div>
-              <div className="px-3 py-1.5 bg-slate-50 rounded-xl flex items-center gap-2 w-full justify-center mb-3">
-                <span className={`w-2 h-2 rounded-full ${audit.risk_level === 'baixo' ? 'bg-emerald-500' : audit.risk_level === 'médio' ? 'bg-amber-500' : 'bg-red-500'}`} />
-                <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight">Risco {audit.risk_level}</span>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleReaudit}
-                disabled={refining}
-                className="w-full text-xs font-black uppercase text-primary hover:bg-primary/5 rounded-xl h-10 gap-2"
-              >
-                <RefreshCcw className={cn("w-3.5 h-3.5", refining && "animate-spin")} />
-                Reavaliar Blindagem
-              </Button>
-            </Card>
-          )}
-        {/* SUGESTÕES */}
-          {audit?.suggestions?.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 px-1 text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                <Sparkles className="w-3 h-3" /> Sugestões Críticas
-              </div>
-              {audit.suggestions
-                .filter((s: string) => !resolvedSuggestions.includes(s))
-                .map((s: string, i: number) => (
-                  <SidebarActionItem
-                    key={i}
-                    icon={<CheckCircle2 size={16} className="text-emerald-500" />}
-                    text={s}
-                    onAction={() => handleRefine(s)}
-                    isLoading={refining}
-                    variant="primary"
-                  />
-                ))}
-            </div>
-          )}
-
-          {/* CAMPOS DINÂMICOS */}
+          {/* 1. CAMPOS DINÂMICOS (VARIÁVEIS) */}
           {!isGenerating && !isEditing && (
-            <div className="space-y-4 pt-6 border-t border-slate-100">
-              <div className="flex items-center gap-2 px-1 text-[11px] font-black text-slate-400">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">
                 <Pencil className="w-3.5 h-3.5" /> Preencher Variáveis
               </div>
               
@@ -410,7 +341,6 @@ export default function ViewDocumentPage() {
                       <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                         {tokens.map((token: string) => {
                           const rawLabel = token.slice(1, -1)
-                          // Mapeamento de labels comuns para serem mais amigáveis e evitar confusão
                           const labelMap: Record<string, string> = {
                             'DATA': 'Data de assinatura',
                             'LOCAL': 'Cidade/UF',
@@ -421,7 +351,6 @@ export default function ViewDocumentPage() {
                             'OPERADOR/CONTROLADOR': 'Papel na LGPD (Ex: Controlador ou Operador)'
                           }
                           const label = labelMap[rawLabel.toUpperCase()] || rawLabel
-
                           const isDate = rawLabel.toUpperCase() === 'DATA'
 
                           const handleInputChange = (val: string) => {
@@ -480,12 +409,77 @@ export default function ViewDocumentPage() {
               </div>
             </div>
           )}
+
+          {/* 2. AJUSTAR COM IA */}
+          <SidebarRefineSection
+             value={refinePrompt}
+             onChange={setRefinePrompt}
+             onSubmit={() => handleRefine()}
+             isLoading={refining}
+          />
+
+          {/* 3. SCORE E RISCO */}
+          {audit && (
+            <Card padding="none" className="p-6 bg-white border-slate-100 shadow-sm rounded-3xl flex flex-col items-center">
+              <div className={cn(
+                "w-20 h-20 rounded-full flex items-center justify-center mb-4 border-2",
+                getScoreColor(audit.score).split(' ')[0],
+                getScoreColor(audit.score).split(' ')[1]
+              )}>
+                <span className="text-3xl font-black">{audit.score}</span>
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Score de Compliance</span>
+              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-4">
+                <div className={cn(
+                  "h-full transition-all duration-1000",
+                  audit.score >= 80 ? "bg-emerald-500" : audit.score >= 50 ? "bg-amber-500" : "bg-red-500"
+                )} style={{ width: `${audit.score}%` }} />
+              </div>
+              <div className="px-3 py-1.5 bg-slate-50 rounded-xl flex items-center gap-2 w-full justify-center mb-3">
+                <span className={`w-2 h-2 rounded-full ${audit.risk_level === 'baixo' ? 'bg-emerald-500' : audit.risk_level === 'médio' ? 'bg-amber-500' : 'bg-red-500'}`} />
+                <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight">Risco {audit.risk_level}</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleReaudit}
+                disabled={refining}
+                className="w-full text-xs font-black uppercase text-primary hover:bg-primary/5 rounded-xl h-10 gap-2"
+              >
+                <RefreshCcw className={cn("w-3.5 h-3.5", refining && "animate-spin")} />
+                Reavaliar Blindagem
+              </Button>
+            </Card>
+          )}
+
+          {/* 3.1 SUGESTÕES */}
+          {audit?.suggestions?.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 px-1 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                <Sparkles className="w-3 h-3" /> Sugestões Críticas
+              </div>
+              {audit.suggestions
+                .filter((s: string) => !resolvedSuggestions.includes(s))
+                .map((s: string, i: number) => (
+                  <SidebarActionItem
+                    key={i}
+                    icon={<CheckCircle2 size={16} className="text-emerald-500" />}
+                    text={s}
+                    onAction={() => handleRefine(s)}
+                    isLoading={refining}
+                    variant="primary"
+                  />
+                ))}
+            </div>
+          )}
+
+          <TechnicalReportCard aiModel={doc.ai_model} createdAt={doc.created_at} />
         </>
       }
     >
       <div className="min-w-0 flex flex-col">
         {!isGenerating && !isFailed && (
-          <Card className="min-h-[600px] border-none shadow-2xl shadow-slate-200/50 rounded-[20px] md:rounded-[32px] overflow-hidden bg-white flex flex-col relative print:min-h-0 print:h-auto print:shadow-none print:border-none print:rounded-none">
+          <Card className="min-h-[600px] border-none shadow-2xl shadow-slate-200/50 rounded-[20px] md:rounded-[32px] overflow-hidden bg-white flex flex-col relative print:min-h-0 print:h-auto print:shadow-none print:border-none print:rounded-none print:p-0">
             {isEditing ? (
               <div className="flex-1">
                 <textarea
@@ -496,40 +490,50 @@ export default function ViewDocumentPage() {
                 />
               </div>
             ) : (
-              <div className="flex-1 p-4 md:p-8 print:p-0 prose prose-slate max-w-none whitespace-normal break-words prose-headings:font-black prose-h1:text-2xl md:prose-h1:text-3xl prose-h2:text-xl md:prose-h2:text-2xl prose-p:text-slate-600 prose-p:leading-relaxed prose-li:text-slate-600 text-sm sm:text-base md:text-lg overflow-hidden">
-                <ReactMarkdown
-                  components={{
-                    li: ({node, children, ...props}) => (
-                      <li className="break-words whitespace-normal" {...props}>
-                        {Array.isArray(children) 
-                          ? children.map((c, i) => typeof c === 'string' ? <React.Fragment key={i}>{renderTextWithHighlights(c)}</React.Fragment> : c)
-                          : typeof children === 'string' ? renderTextWithHighlights(children) : children
-                        }
-                      </li>
-                    ),
-                    p: ({node, children, ...props}) => (
-                      <p className="break-words whitespace-normal" {...props}>
-                        {Array.isArray(children) 
-                          ? children.map((c, i) => typeof c === 'string' ? <React.Fragment key={i}>{renderTextWithHighlights(c)}</React.Fragment> : c)
-                          : typeof children === 'string' ? renderTextWithHighlights(children) : children
-                        }
-                      </p>
-                    ),
-                    blockquote: ({node, children, ...props}) => (
-                      <blockquote className="break-words whitespace-normal" {...props}>
-                        {Array.isArray(children) 
-                          ? children.map((c, i) => typeof c === 'string' ? <React.Fragment key={i}>{renderTextWithHighlights(c)}</React.Fragment> : c)
-                          : typeof children === 'string' ? renderTextWithHighlights(children) : children
-                        }
-                      </blockquote>
-                    )
-                  }}
-                >
-                  {doc.content?.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '') || ''}
-                </ReactMarkdown>
+              <div className="flex-1 p-4 md:p-8 print:p-0 prose prose-slate max-w-none whitespace-normal break-words prose-headings:font-black prose-h1:text-2xl md:prose-h1:text-3xl prose-h2:text-xl md:prose-h2:text-2xl prose-p:text-slate-600 prose-p:leading-relaxed prose-li:text-slate-600 text-sm sm:text-base md:text-lg overflow-hidden relative min-h-[500px]">
+                <div className={cn("transition-all duration-1000", showPaywall && "blur-md select-none pointer-events-none opacity-40")}>
+                  <ReactMarkdown
+                    components={{
+                      li: ({node, children, ...props}) => (
+                        <li className="break-words whitespace-normal" {...props}>
+                          {Array.isArray(children) 
+                            ? children.map((c, i) => typeof c === 'string' ? <React.Fragment key={i}>{renderTextWithHighlights(c)}</React.Fragment> : c)
+                            : typeof children === 'string' ? renderTextWithHighlights(children) : children
+                          }
+                        </li>
+                      ),
+                      p: ({node, children, ...props}) => (
+                        <p className="break-words whitespace-normal" {...props}>
+                          {Array.isArray(children) 
+                            ? children.map((c, i) => typeof c === 'string' ? <React.Fragment key={i}>{renderTextWithHighlights(c)}</React.Fragment> : c)
+                            : typeof children === 'string' ? renderTextWithHighlights(children) : children
+                          }
+                        </p>
+                      ),
+                      blockquote: ({node, children, ...props}) => (
+                        <blockquote className="break-words whitespace-normal" {...props}>
+                          {Array.isArray(children) 
+                            ? children.map((c, i) => typeof c === 'string' ? <React.Fragment key={i}>{renderTextWithHighlights(c)}</React.Fragment> : c)
+                            : typeof children === 'string' ? renderTextWithHighlights(children) : children
+                          }
+                        </blockquote>
+                      )
+                    }}
+                  >
+                    {doc.content?.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '') || ''}
+                  </ReactMarkdown>
+                </div>
+
+                {showPaywall && (
+                  <Paywall 
+                    type="contrato" 
+                    onPay={() => router.push('/onboarding?redirect=' + encodeURIComponent(window.location.pathname))}
+                  />
+                )}
               </div>
             )}
           </Card>
+
         )}
 
         {isGenerating && (

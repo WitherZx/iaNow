@@ -7,18 +7,18 @@ import { PageContainer } from '@/components/layout/PageContainer'
 import { Card } from '@/components/shared/Card'
 import { Button } from '@/components/shared/Button'
 import { StatusBadge } from '@/components/shared/StatusBadge'
-import { 
-  Users, 
-  Search, 
-  Plus, 
-  Filter, 
-  Building2, 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  FileText, 
-  Gavel, 
+import {
+  Users,
+  Search,
+  Plus,
+  Filter,
+  Building2,
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  FileText,
+  Gavel,
   ShieldCheck,
   CheckCircle2,
   AlertCircle,
@@ -36,7 +36,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
 import { useEffect } from 'react'
 import { cn } from '@/utils/cn'
-import { Label } from '@/components/shared/Label'
+import { FormInput } from '@/components/shared/FormInput'
+import { FormTextArea } from '@/components/shared/FormTextArea'
 import { toast } from 'sonner'
 import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
 import { useRouter } from 'next/navigation'
@@ -51,7 +52,7 @@ export default function PartnerHubPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [partners, setPartners] = useState<any[]>([])
   const [orgInfo, setOrgInfo] = useState<any>(null)
-  const [counts, setCounts] = useState<{contracts: Record<string, number>, cases: Record<string, number>}>({
+  const [counts, setCounts] = useState<{ contracts: Record<string, number>, cases: Record<string, number> }>({
     contracts: {},
     cases: {}
   })
@@ -77,68 +78,68 @@ export default function PartnerHubPage() {
 
   const loadData = async () => {
     if (!session?.user?.id) return
-    
-      try {
-        setLoading(true)
-        
-        // 1. Fetch Org Info (Profile Matriz)
-        const { data: membership } = await supabase
-          .from('memberships')
-          .select('organization_id')
-          .eq('user_id', session.user.id)
-          .limit(1)
-          .maybeSingle() as any
-          
-        const orgId = membership?.organization_id
 
-        if (orgId) {
-          // 2. Fetch data in parallel for better performance
-          const res = await Promise.all([
-            supabase.from('organizations').select('*').eq('id', orgId).single(),
-            supabase.from('partners').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }),
-            supabase.from('generated_documents').select('metadata').eq('organization_id', orgId).is('deleted_at', null),
-            supabase.from('justice_demands').select('metadata').eq('organization_id', orgId).is('deleted_at', null)
-          ]) as any[]
-          
-          const [orgRes, partnersRes, contractsRes, demandsRes] = res
-          
-          if (orgRes.data) setOrgInfo(orgRes.data)
+    try {
+      setLoading(true)
 
-          // 3. Process Counts
-          const contractMap: Record<string, number> = {}
-          const caseMap: Record<string, number> = {}
+      // 1. Fetch Org Info (Profile Matriz)
+      const { data: membership } = await supabase
+        .from('memberships')
+        .select('organization_id')
+        .eq('user_id', session.user.id)
+        .limit(1)
+        .maybeSingle() as any
 
-          contractsRes.data?.forEach((doc: any) => {
-            const pA = doc.metadata?.requestPayload?.partyA?.id
-            const pB = doc.metadata?.requestPayload?.partyB?.id
-            if (pA) contractMap[pA] = (contractMap[pA] || 0) + 1
-            if (pB) contractMap[pB] = (contractMap[pB] || 0) + 1
-          })
+      const orgId = membership?.organization_id
 
-          demandsRes.data?.forEach((dem: any) => {
-            const authId = dem.metadata?.authorId
-            const defId = dem.metadata?.defendantId
-            if (authId) caseMap[authId] = (caseMap[authId] || 0) + 1
-            if (defId) caseMap[defId] = (caseMap[defId] || 0) + 1
-          })
+      if (orgId) {
+        // 2. Fetch data in parallel for better performance
+        const res = await Promise.all([
+          supabase.from('organizations').select('*').eq('id', orgId).single(),
+          supabase.from('partners').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }),
+          supabase.from('generated_documents').select('metadata').eq('organization_id', orgId).is('deleted_at', null),
+          supabase.from('justice_demands').select('metadata').eq('organization_id', orgId).is('deleted_at', null)
+        ]) as any[]
 
-          setCounts({ contracts: contractMap, cases: caseMap })
+        const [orgRes, partnersRes, contractsRes, demandsRes] = res
 
-          const processedPartners = (partnersRes.data || []).map((p: any) => ({
-            ...p,
-            contractsCount: contractMap[p.id] || 0,
-            casesCount: caseMap[p.id] || 0
-          }))
-            
-          setPartners(processedPartners)
-        } else {
-          setPartners([])
-        }
-      } catch (err) {
-        console.error('Error loading partners:', err)
-      } finally {
-        setLoading(false)
+        if (orgRes.data) setOrgInfo(orgRes.data)
+
+        // 3. Process Counts
+        const contractMap: Record<string, number> = {}
+        const caseMap: Record<string, number> = {}
+
+        contractsRes.data?.forEach((doc: any) => {
+          const pA = doc.metadata?.requestPayload?.partyA?.id
+          const pB = doc.metadata?.requestPayload?.partyB?.id
+          if (pA) contractMap[pA] = (contractMap[pA] || 0) + 1
+          if (pB) contractMap[pB] = (contractMap[pB] || 0) + 1
+        })
+
+        demandsRes.data?.forEach((dem: any) => {
+          const authId = dem.metadata?.authorId
+          const defId = dem.metadata?.defendantId
+          if (authId) caseMap[authId] = (caseMap[authId] || 0) + 1
+          if (defId) caseMap[defId] = (caseMap[defId] || 0) + 1
+        })
+
+        setCounts({ contracts: contractMap, cases: caseMap })
+
+        const processedPartners = (partnersRes.data || []).map((p: any) => ({
+          ...p,
+          contractsCount: contractMap[p.id] || 0,
+          casesCount: caseMap[p.id] || 0
+        }))
+
+        setPartners(processedPartners)
+      } else {
+        setPartners([])
       }
+    } catch (err) {
+      console.error('Error loading partners:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -218,10 +219,10 @@ export default function PartnerHubPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newPartner.name) return
-    
+
     try {
       setIsSaving(true)
-      
+
       const payload = {
         name: newPartner.name,
         metadata: {
@@ -240,9 +241,9 @@ export default function PartnerHubPage() {
       if (isEditingMatriz) {
         // Update Organization
         const { error } = await (supabase.from('organizations') as any)
-          .update({ 
-            name: payload.name, 
-            metadata: payload.metadata 
+          .update({
+            name: payload.name,
+            metadata: payload.metadata
           })
           .eq('id', editingId as string)
         if (error) throw error
@@ -267,7 +268,7 @@ export default function PartnerHubPage() {
         })
         if (error) throw error
       }
-      
+
       setIsModalOpen(false)
       setEditingId(null)
       await loadData()
@@ -281,7 +282,7 @@ export default function PartnerHubPage() {
         newPartner,
         orgInfoId: orgInfo?.id
       })
-      
+
       const errorMsg = err.message || JSON.stringify(err)
       toast.error('Impossível salvar: ' + errorMsg)
     } finally {
@@ -311,13 +312,13 @@ export default function PartnerHubPage() {
     <DashboardLayout>
       <PageContainer>
         <div className="flex flex-col gap-y-12 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-full overflow-x-hidden">
-          
+
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-y-8 text-center lg:text-left">
             <div className="space-y-2">
               <h1 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tight">Hub de Contatos & CRM</h1>
               <p className="text-slate-500 text-sm md:text-base font-medium max-w-xl mx-auto lg:mx-0">Gerencie as relações da sua empresa integradas à inteligência sistêmica.</p>
             </div>
-            <Button 
+            <Button
               onClick={() => setIsModalOpen(true)}
               className="h-12 px-8 rounded-2xl bg-primary text-white font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all w-full lg:w-auto"
             >
@@ -329,7 +330,7 @@ export default function PartnerHubPage() {
           <div className="flex flex-col gap-y-8">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white p-3 md:p-4 rounded-[32px] border border-slate-100 shadow-sm">
               <div className="grid grid-cols-3 md:flex items-center gap-1 md:gap-2 p-1.5 bg-slate-200/60 rounded-2xl overflow-hidden shadow-inner-sm">
-                <button 
+                <button
                   onClick={() => setActiveTab('all')}
                   className={cn(
                     "px-2 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-widest transition-all text-center",
@@ -338,7 +339,7 @@ export default function PartnerHubPage() {
                 >
                   Todos
                 </button>
-                <button 
+                <button
                   onClick={() => setActiveTab('pf')}
                   className={cn(
                     "px-2 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-widest transition-all text-center",
@@ -347,7 +348,7 @@ export default function PartnerHubPage() {
                 >
                   PF
                 </button>
-                <button 
+                <button
                   onClick={() => setActiveTab('pj')}
                   className={cn(
                     "px-2 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-widest transition-all text-center",
@@ -361,9 +362,9 @@ export default function PartnerHubPage() {
               <div className="flex items-center gap-3 w-full md:w-auto">
                 <div className="relative flex-1 md:flex-none">
                   <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" />
-                  <input 
-                    type="text" 
-                    placeholder="Buscar parceiro..." 
+                  <input
+                    type="text"
+                    placeholder="Buscar parceiro..."
                     className="h-12 pl-12 pr-6 rounded-2xl bg-slate-200/60 border-none text-sm font-black focus:ring-4 focus:ring-primary/10 transition-all outline-none w-full md:w-64 placeholder:text-slate-500 shadow-inner-sm"
                   />
                 </div>
@@ -374,9 +375,9 @@ export default function PartnerHubPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
 
               {filteredPartners.map((partner) => (
-                <Card 
-                  key={partner.id} 
-                  padding="none" 
+                <Card
+                  key={partner.id}
+                  padding="none"
                   className={cn(
                     "group relative overflow-hidden bg-white hover:border-primary/30 transition-all hover:shadow-xl hover:shadow-primary/5",
                     partner.isDefault && "border-primary/40 bg-primary/[0.01]"
@@ -446,7 +447,7 @@ export default function PartnerHubPage() {
                     </div>
 
                     {partner.representative && (
-                      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
+                      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2 bg-slate-100">
                         <div className="flex items-center justify-between">
                           <span className="text-[9px] font-black text-primary uppercase tracking-[0.1em]">Representante</span>
                           <CheckCircle2 size={12} className="text-primary" />
@@ -462,10 +463,10 @@ export default function PartnerHubPage() {
                   </div>
 
                   <div className="p-3 bg-slate-50/50 border-t border-slate-50 flex items-center gap-2">
-                    <Button 
+                    <Button
                       onClick={() => handleEdit(partner)}
-                      variant="ghost" 
-                      size="sm" 
+                      variant="ghost"
+                      size="sm"
                       className="flex-1 h-10 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-primary border border-transparent hover:border-primary/10"
                     >
                       Editar
@@ -494,7 +495,7 @@ export default function PartnerHubPage() {
           {/* AI CONNECTION TIP */}
           <div className="bg-primary/5 border border-primary/20 rounded-[32px] p-6 md:p-10 flex flex-col md:flex-row items-center gap-6 md:gap-10 text-center md:text-left">
             <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-white flex items-center justify-center text-primary shadow-lg shrink-0">
-               <ShieldCheck size={32} className="animate-pulse md:size-[48px]" />
+              <ShieldCheck size={32} className="animate-pulse md:size-[48px]" />
             </div>
             <div className="flex-1 space-y-3 md:space-y-4">
               <h4 className="text-lg md:text-xl font-black text-slate-900 leading-tight">IA Inteligente & Partner Hub unidos.</h4>
@@ -510,7 +511,7 @@ export default function PartnerHubPage() {
                 </span>
               </div>
             </div>
-            <Button 
+            <Button
               onClick={() => setIsModalOpen(true)}
               className="h-12 md:h-14 px-10 rounded-2xl bg-slate-900 border-none text-white font-bold hover:bg-slate-800 transition-all shrink-0 shadow-lg shadow-slate-200/50 w-full md:w-auto"
             >
@@ -529,27 +530,27 @@ export default function PartnerHubPage() {
                       <h2 className="text-xl md:text-3xl font-black text-slate-900 tracking-tight">Novo Parceiro</h2>
                       <p className="text-[10px] md:text-sm text-slate-700 font-bold uppercase tracking-widest opacity-70">Cadastro Estruturado</p>
                     </div>
-                    <button 
-                      type="button" 
-                      onClick={() => setIsModalOpen(false)} 
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
                       className="w-12 h-12 rounded-2xl bg-white border-2 border-slate-300 flex items-center justify-center text-slate-900 hover:text-primary hover:border-primary/50 hover:shadow-lg transition-all"
                     >
                       <X size={24} />
                     </button>
                   </div>
-                  
+
                   <div className="p-5 md:p-8 space-y-6 md:space-y-8 max-h-[65vh] overflow-y-auto custom-scrollbar bg-white">
                     <div className="grid grid-cols-2 gap-2 md:gap-4 p-2 bg-slate-200 rounded-[22px] md:rounded-[24px] border border-slate-300 shadow-inner">
-                      <button 
+                      <button
                         type="button"
-                        onClick={() => setNewPartner({...newPartner, type: 'pf'})}
+                        onClick={() => setNewPartner({ ...newPartner, type: 'pf' })}
                         className={cn("py-3 md:py-4 rounded-xl md:rounded-2xl text-[10px] md:text-[11px] font-black uppercase tracking-widest transition-all duration-300 leading-none", newPartner.type === 'pf' ? "bg-primary text-white shadow-xl shadow-primary/30" : "text-slate-600 hover:text-slate-900")}
                       >
                         Pessoa Física
                       </button>
-                      <button 
+                      <button
                         type="button"
-                        onClick={() => setNewPartner({...newPartner, type: 'pj'})}
+                        onClick={() => setNewPartner({ ...newPartner, type: 'pj' })}
                         className={cn("py-3 md:py-4 rounded-xl md:rounded-2xl text-[10px] md:text-[11px] font-black uppercase tracking-widest transition-all duration-300 leading-none", newPartner.type === 'pj' ? "bg-primary text-white shadow-xl shadow-primary/30" : "text-slate-600 hover:text-slate-900")}
                       >
                         Pessoa Jurídica
@@ -557,90 +558,79 @@ export default function PartnerHubPage() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      <div className="space-y-3 col-span-full">
-                        <Label>Nome / Razão Social</Label>
-                        <input 
+                      <div className="col-span-full">
+                        <FormInput
+                          label="Nome / Razão Social"
                           required
                           value={newPartner.name}
-                          onChange={e => setNewPartner({...newPartner, name: e.target.value})}
-                          placeholder="Ex: iaNow Tech Ltda" 
-                          className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 font-bold text-slate-900 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all outline-none placeholder:text-slate-400 text-lg shadow-sm" 
+                          onChange={e => setNewPartner({ ...newPartner, name: e.target.value })}
+                          placeholder="Ex: iaNow Tech Ltda"
                         />
                       </div>
-                      <div className="space-y-3">
-                        <Label>{newPartner.type === 'pj' ? 'CNPJ' : 'CPF'}</Label>
-                        <input 
-                          value={newPartner.document}
-                          onChange={e => {
-                            const val = e.target.value.replace(/\D/g, '')
-                            let formatted = val
-                            if (newPartner.type === 'pf') {
-                              formatted = val
-                                .replace(/(\d{3})(\d)/, '$1.$2')
-                                .replace(/(\d{3})(\d)/, '$1.$2')
-                                .replace(/(\d{3})(\d{1,2})/, '$1-$2')
-                                .slice(0, 14)
-                            } else {
-                              formatted = val
-                                .replace(/(\d{2})(\d)/, '$1.$2')
-                                .replace(/(\d{3})(\d)/, '$1.$2')
-                                .replace(/(\d{3})(\d)/, '$1/$2')
-                                .replace(/(\d{4})(\d{1,2})/, '$1-$2')
-                                .slice(0, 18)
-                            }
-                            setNewPartner({...newPartner, document: formatted})
-                          }}
-                          placeholder={newPartner.type === 'pj' ? '00.000.000/0001-00' : '000.000.000-00'} 
-                          className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 font-bold text-slate-900 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all outline-none placeholder:text-slate-400 shadow-sm" 
-                        />
-                      </div>
-                      <div className="space-y-3">
-                        <Label>Telefone</Label>
-                        <input 
-                          value={newPartner.phone}
-                          onChange={e => {
-                            const val = e.target.value.replace(/\D/g, '')
-                            let formatted = val
-                            if (val.length > 10) {
-                              formatted = val.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
-                            } else if (val.length > 5) {
-                              formatted = val.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3')
-                            } else if (val.length > 2) {
-                              formatted = val.replace(/(\d{2})(\d{0,5})/, '($1) $2')
-                            }
-                            setNewPartner({...newPartner, phone: formatted.slice(0, 15)})
-                          }}
-                          placeholder="(11) 99999-9999" 
-                          className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 font-bold text-slate-900 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all outline-none placeholder:text-slate-400 shadow-sm" 
-                        />
-                      </div>
-                      <div className="space-y-3 col-span-full">
-                        <Label>E-mail</Label>
-                        <input 
+                      <FormInput
+                        label={newPartner.type === 'pj' ? 'CNPJ' : 'CPF'}
+                        value={newPartner.document}
+                        onChange={e => {
+                          const val = e.target.value.replace(/\D/g, '')
+                          let formatted = val
+                          if (newPartner.type === 'pf') {
+                            formatted = val
+                              .replace(/(\d{3})(\d)/, '$1.$2')
+                              .replace(/(\d{3})(\d)/, '$1.$2')
+                              .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+                              .slice(0, 14)
+                          } else {
+                            formatted = val
+                              .replace(/(\d{2})(\d)/, '$1.$2')
+                              .replace(/(\d{3})(\d)/, '$1.$2')
+                              .replace(/(\d{3})(\d)/, '$1/$2')
+                              .replace(/(\d{4})(\d{1,2})/, '$1-$2')
+                              .slice(0, 18)
+                          }
+                          setNewPartner({ ...newPartner, document: formatted })
+                        }}
+                        placeholder={newPartner.type === 'pj' ? '00.000.000/0001-00' : '000.000.000-00'}
+                      />
+                      <FormInput
+                        label="Telefone"
+                        value={newPartner.phone}
+                        onChange={e => {
+                          const val = e.target.value.replace(/\D/g, '')
+                          let formatted = val
+                          if (val.length > 10) {
+                            formatted = val.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
+                          } else if (val.length > 5) {
+                            formatted = val.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3')
+                          } else if (val.length > 2) {
+                            formatted = val.replace(/(\d{2})(\d{0,5})/, '($1) $2')
+                          }
+                          setNewPartner({ ...newPartner, phone: formatted.slice(0, 15) })
+                        }}
+                        placeholder="(11) 99999-9999"
+                      />
+                      <div className="col-span-full">
+                        <FormInput
+                          label="E-mail"
                           type="email"
                           value={newPartner.email}
-                          onChange={e => setNewPartner({...newPartner, email: e.target.value})}
-                          placeholder="contato@empresa.com" 
-                          className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 font-bold text-slate-900 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all outline-none placeholder:text-slate-400 shadow-sm" 
+                          onChange={e => setNewPartner({ ...newPartner, email: e.target.value })}
+                          placeholder="contato@empresa.com"
                         />
                       </div>
-                      <div className="space-y-3 col-span-full">
-                        <Label>Site / URL (Opcional)</Label>
-                        <input 
-                          type="text"
+                      <div className="col-span-full">
+                        <FormInput
+                          label="Site / URL (Opcional)"
                           value={newPartner.website}
-                          onChange={e => setNewPartner({...newPartner, website: e.target.value})}
-                          placeholder="exemplo.com.br" 
-                          className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 font-bold text-slate-900 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all outline-none placeholder:text-slate-400 shadow-sm" 
+                          onChange={e => setNewPartner({ ...newPartner, website: e.target.value })}
+                          placeholder="exemplo.com.br"
                         />
                       </div>
-                      <div className="space-y-3 col-span-full">
-                        <Label>Endereço Completo</Label>
-                        <input 
+                      <div className="col-span-full">
+                        <FormInput
+                          label="Endereço Completo"
                           value={newPartner.address}
-                          onChange={e => setNewPartner({...newPartner, address: e.target.value})}
-                          placeholder="Rua, Número, Cidade/Estado" 
-                          className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-6 font-bold text-slate-900 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all outline-none placeholder:text-slate-400 shadow-sm" 
+                          onChange={e => setNewPartner({ ...newPartner, address: e.target.value })}
+                          placeholder="Rua, Número, Cidade/Estado"
                         />
                       </div>
                     </div>
@@ -651,32 +641,28 @@ export default function PartnerHubPage() {
                           <CheckCircle2 size={16} className="text-primary" /> Representante Legal
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                          <div className="space-y-3">
-                            <Label>Nome Completo</Label>
-                            <input 
-                              placeholder="..." 
-                              value={newPartner.representative.nome}
-                              onChange={e => setNewPartner({...newPartner, representative: {...newPartner.representative, nome: e.target.value}})}
-                              className="w-full bg-white border border-slate-200 rounded-xl h-14 px-5 text-sm font-bold shadow-inner outline-none placeholder:text-slate-400 focus:border-primary transition-all text-slate-900" 
-                            />
-                          </div>
-                          <div className="space-y-3">
-                            <Label>Doc Identidade (CPF)</Label>
-                            <input 
-                              placeholder="..." 
-                              value={newPartner.representative.cpf}
-                              onChange={e => {
-                                const val = e.target.value.replace(/\D/g, '')
-                                const formatted = val
-                                  .replace(/(\d{3})(\d)/, '$1.$2')
-                                  .replace(/(\d{3})(\d)/, '$1.$2')
-                                  .replace(/(\d{3})(\d{1,2})/, '$1-$2')
-                                  .slice(0, 14)
-                                setNewPartner({...newPartner, representative: {...newPartner.representative, cpf: formatted}})
-                              }}
-                              className="w-full bg-white border border-slate-200 rounded-xl h-14 px-5 text-sm font-bold shadow-inner outline-none placeholder:text-slate-400 focus:border-primary transition-all text-slate-900" 
-                            />
-                          </div>
+                          <FormInput
+                            label="Nome Completo"
+                            placeholder="..."
+                            value={newPartner.representative.nome}
+                            onChange={e => setNewPartner({ ...newPartner, representative: { ...newPartner.representative, nome: e.target.value } })}
+                            className="bg-white"
+                          />
+                          <FormInput
+                            label="Doc Identidade (CPF)"
+                            placeholder="..."
+                            value={newPartner.representative.cpf}
+                            onChange={e => {
+                              const val = e.target.value.replace(/\D/g, '')
+                              const formatted = val
+                                .replace(/(\d{3})(\d)/, '$1.$2')
+                                .replace(/(\d{3})(\d)/, '$1.$2')
+                                .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+                                .slice(0, 14)
+                              setNewPartner({ ...newPartner, representative: { ...newPartner.representative, cpf: formatted } })
+                            }}
+                            className="bg-white"
+                          />
                         </div>
                       </div>
                     )}

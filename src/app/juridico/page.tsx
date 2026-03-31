@@ -56,9 +56,13 @@ export default function JuridicoPage() {
     let interval: NodeJS.Timeout
 
     async function loadData() {
-      if (!session?.user?.id) return
-
       try {
+        setLoading(true)
+        if (!session?.user?.id) {
+          setDocuments([])
+          return
+        }
+
         const { data: membership, error: memberError } = await supabase
           .from('memberships')
           .select('organization_id')
@@ -144,11 +148,11 @@ export default function JuridicoPage() {
   return (
     <DashboardLayout>
       <PageContainer
-        title="Central de Contratos"
-        subtitle="Geração de contratos inteligentes, procurações automáticas e blindagem legal."
+        title="Repositório Jurídico"
+        subtitle="Documentos redigidos com precisão. Cada cláusula, revisada."
         action={
           <CTAButton icon={PlusCircle} onClick={handleNewDocument} className="w-full lg:w-auto">
-             Novo Documento
+             Redigir Documento
           </CTAButton>
         }
       >
@@ -175,7 +179,7 @@ export default function JuridicoPage() {
               </div>
               <div className="flex flex-col gap-y-1">
                 <span className="text-3xl font-black text-slate-900">{metrics.generating}</span>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Processamentos IA</span>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Análises em Curso</span>
               </div>
             </Card>
 
@@ -244,9 +248,9 @@ export default function JuridicoPage() {
                       icon={<Scale size={22} />}
                       generatingIcon={<Clock size={16} className="animate-spin" />}
                       timeoutIcon={<AlertCircle size={22} />}
-                      moduleLabel="Inteligência Jurídica"
+                      moduleLabel="Minerva · Inteligência Jurídica"
                       badge={{
-                        label: isStale ? 'Timeout' : isGenerating ? 'Gerando' : isReady ? 'Pronto' : 'Falhou',
+                        label: isStale ? 'Timeout' : isGenerating ? 'Analisando' : isReady ? 'Pronto' : 'Falhou',
                         className: isStale
                           ? 'bg-amber-100 text-amber-800 border-amber-200'
                           : isGenerating
@@ -271,9 +275,9 @@ export default function JuridicoPage() {
               ) : (
                 <EmptyState 
                   icon={FileText}
-                  title="Nenhum documento gerado"
-                  description="Seu repositório jurídico está em branco. Comece a blindar seu negócio gerando o primeiro contrato padrão ou análise."
-                  actionText="Criar Primeiro Documento"
+                  title="Nenhum documento gerado ainda"
+                  description="O repositório está vazio. Descreva o contexto e a Minerva redige o primeiro documento — pronto para assinar."
+                  actionText="Redigir Primeiro Documento"
                   onClick={handleNewDocument}
                 />
               )}
@@ -285,19 +289,19 @@ export default function JuridicoPage() {
            <Card className="bg-primary/5 border-primary/10 p-6 rounded-3xl">
               <h4 className="text-primary font-black text-xs uppercase tracking-widest mb-2">Validade Jurídica</h4>
               <p className="text-slate-600 text-sm leading-relaxed font-medium">
-                Todos os documentos seguem os padrões do Código Civil e MP 2.200-2/01, garantindo plena validade para assinaturas digitais.
+                Cada documento gerado está em conformidade com o Código Civil e a MP 2.200-2/01 — válido para assinatura digital com plena eficácia legal.
               </p>
            </Card>
            <Card className="bg-amber-50/50 border-amber-100 p-6 rounded-3xl">
-              <h4 className="text-amber-800 font-black text-xs uppercase tracking-widest mb-2">Segurança de Dados</h4>
+              <h4 className="text-amber-800 font-black text-xs uppercase tracking-widest mb-2">Proteção de Dados</h4>
               <p className="text-amber-700/80 text-sm leading-relaxed font-medium">
-                Nossas minutas são projetadas com cláusulas de conformidade LGPD para proteger a privacidade de todas as partes envolvidas.
+                Cláusulas de tratamento de dados são inseridas automaticamente, assegurando conformidade com a LGPD desde a minuta.
               </p>
            </Card>
            <Card className="bg-emerald-50/50 border-emerald-100 p-6 rounded-3xl">
-              <h4 className="text-emerald-800 font-black text-xs uppercase tracking-widest mb-2">Blindagem Ativa</h4>
+              <h4 className="text-emerald-800 font-black text-xs uppercase tracking-widest mb-2">Atualização Contínua</h4>
               <p className="text-emerald-700/80 text-sm leading-relaxed font-medium">
-                Mantenha seus contratos atualizados de acordo com as novas resoluções para garantir a máxima proteção patrimonial.
+                A Minerva acompanha as resoluções vigentes. Seus contratos refletem o estado atual da legislação, sem revisão manual.
               </p>
            </Card>
         </div>

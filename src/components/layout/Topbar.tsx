@@ -3,12 +3,15 @@
 import { Menu, Settings, User } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/utils/cn'
+import { useAuth } from '@/hooks/useAuth'
 
 interface TopbarProps {
   onMenuClick?: () => void
 }
 
 export function Topbar({ onMenuClick }: TopbarProps) {
+  const { isAuthenticated, user } = useAuth()
+  const initial = user?.user_metadata?.full_name?.[0]?.toUpperCase() || 'V'
   return (
     <header className="flex items-center justify-between px-6 lg:px-8 h-16 shrink-0 bg-white border-b border-[#E5E5E5] relative z-40">
       <div className="flex items-center gap-x-4">
@@ -37,7 +40,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
         </Link>
 
         <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm font-montserrat shadow-md">
-          M
+          {initial}
         </div>
       </div>
     </header>

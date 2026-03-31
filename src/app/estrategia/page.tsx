@@ -61,10 +61,12 @@ export default function EstrategiaPage() {
 
   useEffect(() => {
     async function fetchStrategies() {
-      if (!session?.user?.id) return
-
       try {
         setLoading(true)
+        if (!session?.user?.id) {
+          setStrategies([])
+          return
+        }
         // Pegar a organização do usuário
         const { data: membershipData } = await supabase
           .from('memberships')
@@ -94,7 +96,7 @@ export default function EstrategiaPage() {
               }),
               raw_created_at: s.created_at,
               version: s.version || 1,
-              ai_model: s.ai_model || 'gemini-2.0-flash'
+              ai_model: s.ai_model || 'Minerva'
             })))
           }
         }
@@ -236,7 +238,7 @@ export default function EstrategiaPage() {
                     icon={<Lightbulb size={22} />}
                     generatingIcon={<Clock size={16} className="animate-spin" />}
                     timeoutIcon={<AlertCircle size={22} />}
-                    moduleLabel="Inteligência Estratégica"
+                    moduleLabel="Minerva · Inteligência Estratégica"
                     badge={{
                       label: isStale ? 'Timeout' : isGenerating ? 'Gerando' : isReady ? 'Pronto' : 'Falhou',
                       className: isStale

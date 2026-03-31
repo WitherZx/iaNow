@@ -116,7 +116,10 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
     p.document.includes(searchTerm)
   )
 
-  const selectedPartner = partners.find(p => p.id === selectedId)
+  let selectedPartner: Partner | undefined = partners.find(p => p.id === selectedId)
+  if (selectedId === 'manual') {
+    selectedPartner = { id: 'manual', name: 'Inserção Manual', document: 'Preenchimento abaixo', type: 'pf', email: '', phone: '', address: '' }
+  }
 
   return (
     <div className={cn("flex flex-col gap-y-3 relative", className)}>
@@ -133,12 +136,12 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {selectedPartner ? (
             <>
-              <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", selectedPartner.isDefault ? "bg-primary text-white" : "bg-slate-100 text-slate-500")}>
-                {selectedPartner.type === 'pj' ? <Building2 size={16} /> : <User size={16} />}
+              <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", selectedPartner.id === 'manual' ? "bg-amber-100 text-amber-600" : selectedPartner.isDefault ? "bg-primary text-white" : "bg-slate-100 text-slate-500")}>
+                {selectedPartner.id === 'manual' ? <UserPlus size={16} /> : selectedPartner.type === 'pj' ? <Building2 size={16} /> : <User size={16} />}
               </div>
               <div className="flex flex-col items-start leading-tight min-w-0 flex-1">
-                <span className="text-[13px] sm:text-sm font-bold text-slate-900 truncate w-full block">{selectedPartner.name}</span>
-                <span className="text-[10px] text-slate-400 font-bold uppercase truncate w-full block">{selectedPartner.document || '--'}</span>
+                <span className="text-[13px] sm:text-sm font-bold text-slate-900 truncate w-full block text-left">{selectedPartner.name}</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase truncate w-full block text-left">{selectedPartner.document || '--'}</span>
               </div>
             </>
           ) : (
@@ -166,9 +169,9 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
           <div className="max-h-[280px] overflow-y-auto custom-scrollbar p-2">
             {loading ? (
               <div className="p-8 text-center text-slate-400 font-bold text-xs uppercase tracking-widest animate-pulse">Buscando contatos...</div>
-            ) : filteredPartners.length > 0 ? (
+            ) : (
               <div className="space-y-1">
-                {filteredPartners.map(partner => (
+                {filteredPartners.length > 0 && filteredPartners.map(partner => (
                   <button
                     key={partner.id}
                     type="button"
@@ -204,13 +207,45 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
                     {selectedId === partner.id && <Check size={16} className="text-primary shrink-0" />}
                   </button>
                 ))}
-              </div>
-            ) : (
-              <div className="p-10 text-center space-y-3">
-                <p className="text-slate-400 font-bold text-sm">Nenhum contato encontrado.</p>
-                <a href="/parceiros" className="inline-flex items-center gap-2 text-primary text-xs font-black uppercase hover:underline">
-                  <UserPlus size={14} /> Cadastrar Novo Contato
-                </a>
+                
+                {filteredPartners.length === 0 && (
+                  <div className="py-4 text-center">
+                    <p className="text-slate-400 font-bold text-xs">Nenhum contato encontrado.</p>
+                  </div>
+                )}
+
+                <div className="pt-2 mt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelect({ id: 'manual', name: '', document: '', type: 'pf' })
+                      setIsOpen(false)
+                      setSearchTerm('')
+                    }}
+                    className={cn(
+                      "w-full px-4 py-3 rounded-xl flex items-center justify-between transition-all group",
+                      selectedId === 'manual' ? "bg-amber-100/50 shadow-inner" : "hover:bg-slate-50 border border-transparent"
+                    )}
+                  >
+                    <div className="flex items-center gap-3 text-left overflow-hidden">
+                      <div className={cn(
+                        "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all",
+                        selectedId === 'manual' ? "bg-amber-100 text-amber-600 border border-amber-200" : "bg-white border border-slate-200 text-slate-500 group-hover:text-amber-600 group-hover:border-amber-200"
+                      )}>
+                        <UserPlus size={18} />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className={cn("text-sm font-black truncate", selectedId === 'manual' ? "text-amber-700" : "text-slate-900 group-hover:text-amber-700")}>
+                          Inserir Manualmente
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight truncate group-hover:text-amber-600/70">
+                          Digitar dados apenas para este caso
+                        </span>
+                      </div>
+                    </div>
+                    {selectedId === 'manual' && <Check size={16} className="text-amber-600 shrink-0" />}
+                  </button>
+                </div>
               </div>
             )}
           </div>

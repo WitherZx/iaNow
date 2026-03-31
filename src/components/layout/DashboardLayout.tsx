@@ -23,23 +23,22 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen print:h-auto overflow-hidden print:overflow-visible bg-slate-200" suppressHydrationWarning>
       {/* Sidebar - Controlada internamente para mobile e desktop */}
-      {isAuthenticated && (
+      <div className="print:hidden">
         <Sidebar 
           isOpen={isSidebarOpen} 
           onClose={() => setSidebarOpen(false)} 
         />
-      )}
+      </div>
 
       {/* Main Content Area */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden print:overflow-visible relative">
         {/* Topbar com trigger do menu mobile */}
-        {isAuthenticated && (
+        <div className="print:hidden">
           <Topbar onMenuClick={() => setSidebarOpen(!isSidebarOpen)} />
-        )}
+        </div>
 
         <main className={cn(
-          "flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible font-montserrat",
-          isAuthenticated ? "px-6 py-8 md:px-8 md:py-10 print:p-0" : "px-6 py-8 md:px-12 lg:px-24 print:p-0"
+          "flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible font-montserrat px-6 py-8 md:px-8 md:py-10 print:p-0"
         )}>
           {children}
         </main>

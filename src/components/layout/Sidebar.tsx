@@ -8,16 +8,17 @@ import {
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { supabase } from '@/lib/supabase/client'
+import { useAuth } from '@/hooks/useAuth'
 
 const NAV_ITEMS = [
-  { href: '/dashboard',        label: 'Dashboard',     icon: LayoutDashboard },
-  { href: '/estrategia',       label: 'Estratégia',    icon: Lightbulb },
-  { href: '/juridico',         label: 'Contratos',      icon: FileText },
-  { href: '/justica',          label: 'Processos',     icon: Gavel },
-  { href: '/parceiros',        label: 'Hub de Contatos', icon: Users },
-  { href: '/financeiro',       label: 'Financeiro',    icon: LineChart, locked: true },
-  { href: '/pessoas',          label: 'Gestão de Pessoas', icon: Share2, locked: true },
-  { href: '/tributario',       label: 'Tributário',    icon: Landmark, locked: true },
+  { href: '/dashboard', label: 'Home', icon: LayoutDashboard },
+  { href: '/estrategia', label: 'Estratégia', icon: Lightbulb },
+  { href: '/juridico', label: 'Contratos', icon: FileText },
+  { href: '/justica', label: 'Processos', icon: Gavel },
+  { href: '/parceiros', label: 'Contatos', icon: Users },
+  { href: '/financeiro', label: 'Financeiro', icon: LineChart, locked: true },
+  { href: '/pessoas', label: 'Gestão de Pessoas', icon: Share2, locked: true },
+  { href: '/tributario', label: 'Tributário', icon: Landmark, locked: true },
 ] as const
 
 interface SidebarProps {
@@ -28,6 +29,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
+  const { isAuthenticated } = useAuth()
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -41,7 +43,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       isOpen ? "translate-x-0" : "-translate-x-full"
     )}>
       {/* Mobile Close Button */}
-      <button 
+      <button
         onClick={onClose}
         className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white lg:hidden"
       >
@@ -50,10 +52,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Logo */}
       <div className="px-6 mb-8 flex items-center">
-        <img 
-          src="/logo.webp" 
-          alt="iaNow" 
-          className="h-10 w-auto object-contain brightness-0 invert opacity-90 hover:opacity-100 transition-opacity" 
+        <img
+          src="/logo.webp"
+          alt="iaNow"
+          className="h-10 w-auto object-contain brightness-0 invert opacity-90 hover:opacity-100 transition-opacity"
         />
       </div>
 
@@ -61,13 +63,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       <nav className="flex flex-col flex-1 gap-y-[2px] px-3">
         {NAV_ITEMS.map((item) => {
           const { href, label, icon: Icon } = item;
-          const locked = 'locked' in item ? item.locked : false;
+          const isLockedByDef = 'locked' in item ? item.locked : false;
+          const isLockedByGuest = href === '/parceiros' && !isAuthenticated;
+          const locked = isLockedByDef || isLockedByGuest;
           const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href));
 
           if (locked) {
             return (
-              <div 
-                key={href} 
+              <div
+                key={href}
                 className="flex items-center justify-between px-3 py-[10px] rounded-lg text-sm transition-all duration-150 font-montserrat opacity-60 cursor-not-allowed"
                 title="Módulo em breve"
               >
@@ -81,14 +85,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           }
 
           return (
-            <Link 
-              key={href} 
-              href={href} 
+            <Link
+              key={href}
+              href={href}
               onClick={onClose}
               className={cn(
                 "flex items-center gap-x-3 px-3 py-[10px] rounded-lg text-sm transition-all duration-150 font-montserrat",
-                isActive 
-                  ? "bg-primary text-white font-bold shadow-lg shadow-primary/30" 
+                isActive
+                  ? "bg-primary text-white font-bold shadow-lg shadow-primary/30"
                   : "text-white hover:bg-white/12 font-bold opacity-80 hover:opacity-100"
               )}
             >
@@ -99,14 +103,24 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         })}
       </nav>
 
-      {/* Placeholder logout */}
+      {/* Auth Action */}
       <div className="p-3 border-t border-white/5">
-        <button 
-          onClick={handleLogout}
-          className="flex items-center gap-x-3 w-full px-3 py-[10px] rounded-lg bg-transparent border-none cursor-pointer text-slate-300 text-sm font-semibold font-montserrat hover:text-white hover:bg-white/10 transition-colors"
-        >
-          <LogOut size={18} /> Sair
-        </button>
+        {isAuthenticated ? (
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-x-3 w-full px-3 py-[10px] rounded-lg bg-transparent border-none cursor-pointer text-slate-300 text-sm font-semibold font-montserrat hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <LogOut size={18} /> Sair
+          </button>
+        ) : (
+          <Link
+            href="/login"
+            onClick={onClose}
+            className="flex items-center gap-x-3 w-full px-3 py-[10px] rounded-lg bg-primary text-white text-sm font-bold font-montserrat hover:bg-blue-700 transition-all shadow-lg shadow-primary/20"
+          >
+            <LogOut size={18} className="rotate-180" /> Entrar na Plataforma
+          </Link>
+        )}
       </div>
 
     </aside>

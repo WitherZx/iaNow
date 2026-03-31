@@ -22,17 +22,19 @@ import {
 import { Card } from '@/components/shared/Card'
 import { Button } from '@/components/shared/Button'
 import { cn } from '@/utils/cn'
-import { Label } from '@/components/shared/Label'
-import { StepBadge } from '@/components/shared/StepBadge'
+import { FormInput } from '@/components/shared/FormInput'
+import { FormTextArea } from '@/components/shared/FormTextArea'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { PageContainer } from '@/components/layout/PageContainer'
+import { StepBadge } from '@/components/shared/StepBadge'
 import { PartnerSelector } from '@/components/shared/PartnerSelector'
+import { Label } from '@/components/shared/Label'
 import { toast } from 'sonner'
 
 const COMPLEXITY_LEVELS = [
-  { id: 'básico', title: 'Básico', desc: 'Direto e simplificado, focado no essencial ágil.', icon: Zap },
-  { id: 'intermediário', title: 'Intermediário', desc: 'Foco no equilíbrio entre clareza e proteção ativa.', icon: Scale },
-  { id: 'avançado', title: 'Avançado', desc: 'Robustez total, com 100% de cláusulas protecionistas.', icon: ShieldCheck }
+  { id: 'básico', title: 'Básico', desc: 'Estrutura enxuta para acordos diretos e de baixo risco.', icon: Zap },
+  { id: 'intermediário', title: 'Intermediário', desc: 'Cláusulas de proteção balanceadas — indicado para a maioria dos contratos.', icon: Scale },
+  { id: 'avançado', title: 'Avançado', desc: 'Máxima proteção contratual. Ideal para alto valor ou risco elevado.', icon: ShieldCheck }
 ]
 
 export default function NewDocumentPage() {
@@ -71,9 +73,20 @@ export default function NewDocumentPage() {
     setIsSubmitting(true)
     
     try {
+      const guestId = !localStorage.getItem('sb-auth-token') 
+        ? (localStorage.getItem('ianow_guest_id') || crypto.randomUUID()) 
+        : null
+      
+      if (guestId && !localStorage.getItem('ianow_guest_id')) {
+        localStorage.setItem('ianow_guest_id', guestId)
+      }
+
       const res = await fetch('/api/juridico/gerar', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(guestId ? { 'X-Guest-Id': guestId } : {})
+        },
         body: JSON.stringify({
           tipoContrato,
           nivel,
@@ -112,9 +125,9 @@ export default function NewDocumentPage() {
             <div className="mx-auto w-20 h-20 bg-primary/10 border border-primary/20 rounded-3xl flex items-center justify-center text-primary mb-4 shadow-sm shadow-primary/20">
               <ShieldCheck size={36} strokeWidth={2} />
             </div>
-            <h1 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">Motor Jurídico</h1>
+            <h1 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">Minerva — Redação Jurídica</h1>
             <p className="text-slate-500 font-medium text-lg max-w-2xl mx-auto">
-              Defina os parâmetros, nós aplicamos a jurisprudência. Estruturando o seu documento validado e seguro.
+              Descreva o contexto. A Minerva redige o documento com base na legislação vigente e nas cláusulas de proteção adequadas ao seu caso.
             </p>
           </div>
 
@@ -136,50 +149,49 @@ export default function NewDocumentPage() {
                     <h3 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">
                       1. Contexto do <span className="text-primary">Contrato</span>
                     </h3>
-                    <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Defina os parâmetros centrais e o escopo fundamental da negociação.</p>
+                    <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Informe o tipo, o objetivo e o foro. Esses dados determinam a estrutura legal do documento.</p>
                   </div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Tipo de Contrato */}
-                  <div className="flex flex-col gap-y-3">
-                    <Label required tooltip="Informe o tipo contratual. Ex: Prestarão de Serviços, NDA, Acordo de Sócios, Contrato de Locação, Termo de Parceria.">Tipo de Documento</Label>
-                    <input 
-                      type="text" value={tipoContrato} onChange={(e) => setTipoContrato(e.target.value)}
-                      placeholder="Ex: Prestação de Serviços, Acordo de Sócios, NDA"
-                      className="w-full h-14 px-5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 font-bold placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all text-sm"
-                    />
-                  </div>
-                  
-                  {/* Perfil das Partes */}
-                  <div className="flex flex-col gap-y-3">
-                    <Label required tooltip="Descreva quem são os envolvidos (Pessoa Física ou Jurídica) e a natureza da relação. Ex: Empresa fornecedora de software (B2B) vs. cliente empresa de varejo.">Perfil das Partes</Label>
-                    <input 
-                      type="text" value={perfilPartes} onChange={(e) => setPerfilPartes(e.target.value)}
-                      placeholder="Ex: Empresa de Software (B2B) vs Cliente Corporativo"
-                      className="w-full h-14 px-5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 font-bold placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all text-sm"
-                    />
-                  </div>
+                  <FormInput 
+                    label="Tipo de Documento"
+                    required
+                    value={tipoContrato}
+                    onChange={(e) => setTipoContrato(e.target.value)}
+                    placeholder="Ex: Prestação de Serviços, Acordo de Sócios, NDA"
+                    tooltip="Qual a natureza jurídica deste documento? Ex: Prestação de Serviços, NDA, Acordo de Sócios, Contrato de Locação. Isso define a estrutura das cláusulas geradas."
+                  />
+                  <FormInput 
+                    label="Perfil das Partes"
+                    required
+                    value={perfilPartes}
+                    onChange={(e) => setPerfilPartes(e.target.value)}
+                    placeholder="Ex: Empresa de Software (B2B) vs Cliente Corporativo"
+                    tooltip="Identifique quem são os contratantes: Pessoa Física ou Jurídica, e a natureza da relação. Ex: Agência de marketing (PJ) prestando serviços para cliente corporativo (PJ)."
+                  />
                 </div>
 
                 {/* Objetivo Principal e Foro */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <div className="flex flex-col gap-y-3 md:col-span-2">
-                    <Label required tooltip="Explique o que este documento deve garantir juridicamente: valores acordados, prazo de vigência, obrigações principais. Ex: Regular prestação de serviços mensais de R$ 10.000,00 por 12 meses.">Objetivo Financeiro / Legal do Documento</Label>
-                    <textarea 
-                      value={objetivo} onChange={(e) => setObjetivo(e.target.value)}
+                  <div className="md:col-span-2">
+                    <FormTextArea
+                      label="Objetivo do Documento"
+                      required
+                      value={objetivo}
+                      onChange={(e) => setObjetivo(e.target.value)}
                       placeholder="Ex: Regular a prestação de serviços continuados sob o framework ágil no valor mensal de R$ 10.000,00."
-                      className="w-full h-24 p-5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 font-bold placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all resize-none text-sm"
+                      tooltip="O que este documento deve assegurar? Inclua valores, prazos e obrigações principais. Ex: Formalizar prestação de serviços mensais de R$ 10.000,00 pelo prazo de 12 meses, com cláusula de renovação automática."
                     />
                   </div>
-                  <div className="flex flex-col gap-y-3">
-                    <Label required tooltip="Local (cidade e estado) onde eventuais disputas judiciais serão julgadas. Geralmente é a cidade-sede de uma das partes. Ex: Comarca de Curitiba/PR.">Foro / Comarca</Label>
-                    <textarea 
-                      value={foro} onChange={(e) => setForo(e.target.value)}
-                      placeholder="Ex: Comarca de São Paulo/SP"
-                      className="w-full h-24 p-5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 font-bold placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all resize-none text-sm"
-                    />
-                  </div>
+                  <FormTextArea
+                    label="Foro / Comarca"
+                    required
+                    value={foro}
+                    onChange={(e) => setForo(e.target.value)}
+                    placeholder="Ex: Comarca de São Paulo/SP"
+                    tooltip="Cidade e estado onde eventuais litígios serão julgados. Normalmente a sede de uma das partes. Ex: Comarca de São Paulo/SP. Este dado é obrigatório no contrato."
+                  />
                 </div>
                 
                 {/* Nível de Complexidade */}
@@ -235,7 +247,7 @@ export default function NewDocumentPage() {
                     <h3 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">
                       2. <span className="text-primary">Qualificação</span> das Partes
                     </h3>
-                    <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Identifique quem compõe o polo ativo e passivo deste documento.</p>
+                    <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Vincule os dados das partes. Eles serão inseridos automaticamente nas cláusulas de identificação.</p>
                   </div>
                 </div>
 
@@ -251,16 +263,12 @@ export default function NewDocumentPage() {
                     </div>
                     
                     <div className="space-y-4 md:space-y-6 bg-white p-4 md:p-6 rounded-[20px] md:rounded-[32px] border border-slate-200 shadow-sm">
-                      <div className="space-y-2.5">
-                        <Label>Papel na Relação</Label>
-                        <input 
-                          type="text" 
-                          value={partyA.role} 
-                          onChange={(e) => setPartyA({...partyA, role: e.target.value})} 
-                          placeholder="Ex: Contratante, Licenciante..." 
-                          className="w-full h-12 px-5 rounded-2xl bg-slate-50 border-2 border-slate-200 text-slate-900 font-bold focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all text-sm outline-none" 
-                        />
-                      </div>
+                      <FormInput
+                        label="Papel na Relação"
+                        value={partyA.role}
+                        onChange={(e) => setPartyA({...partyA, role: e.target.value})}
+                        placeholder="Ex: Contratante, Licenciante..."
+                      />
 
                       <PartnerSelector 
                         label="Selecionar Contato Registrado"
@@ -293,16 +301,12 @@ export default function NewDocumentPage() {
                     </div>
 
                     <div className="space-y-4 md:space-y-6 bg-white p-4 md:p-6 rounded-[20px] md:rounded-[32px] border border-slate-200 shadow-sm">
-                      <div className="space-y-2.5">
-                        <Label>Papel na Relação</Label>
-                        <input 
-                          type="text" 
-                          value={partyB.role} 
-                          onChange={(e) => setPartyB({...partyB, role: e.target.value})} 
-                          placeholder="Ex: Contratada, Licenciada..." 
-                          className="w-full h-12 px-5 rounded-2xl bg-slate-50 border-2 border-slate-200 text-slate-900 font-bold focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all text-sm outline-none" 
-                        />
-                      </div>
+                      <FormInput
+                        label="Papel na Relação"
+                        value={partyB.role}
+                        onChange={(e) => setPartyB({...partyB, role: e.target.value})}
+                        placeholder="Ex: Contratada, Licenciada..."
+                      />
 
                       <PartnerSelector 
                         label="Selecionar Contato Registrado"
@@ -353,18 +357,21 @@ export default function NewDocumentPage() {
                         <h3 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">
                           3. Parâmetros <span className="text-primary">Adicionais</span>
                         </h3>
-                        <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Insira cláusulas específicas de proteção, multas ou exceções particulares.</p>
+                        <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Adicione cláusulas específicas: multas, prazos de carência, regras de sigilo ou qualquer disposição obrigatória.</p>
                       </div>
                     </div>
 
                     <div className="flex flex-col gap-y-4">
                       <p className="text-sm font-semibold text-slate-500 max-w-2xl leading-relaxed">
-                        Aqui você pode injetar regras customizadas que a Inteligência Sistêmica obrigatoriamente acatará. Ex: Multas rescisórias, prazos de vesting, métodos de compliance, regras de devolução de equipamento, etc.
+                        Informe disposições que não podem faltar no documento. A Minerva validará os termos e os incorporará com precisão jurídica — você pode usar linguagem coloquial.
                       </p>
-                      <textarea 
-                        value={parametros} onChange={(e) => setParametros(e.target.value)}
-                        placeholder="Disposições que não podem faltar... (Você pode usar linguagem coloquial, nós validaremos os termos juridicamente)."
-                        className="w-full min-h-[220px] p-6 rounded-3xl bg-slate-50 border border-slate-200 text-slate-900 font-bold placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary focus:bg-white transition-all resize-none text-base leading-relaxed mt-2 shadow-inner-sm"
+                      <FormTextArea
+                        label="Parâmetros Específicos"
+                        value={parametros}
+                        onChange={(e) => setParametros(e.target.value)}
+                        placeholder="Ex: Multa de 20% sobre o valor total em caso de rescisão antecipada. Equipamentos fornecidos devem ser devolvidos em até 5 dias úteis."
+                        className="min-h-[220px] mt-2"
+                        tooltip="Disposições e cláusulas obrigatórias para este caso específico."
                       />
                     </div>
 
@@ -392,10 +399,9 @@ export default function NewDocumentPage() {
                         <Zap size={32} className="animate-pulse" />
                       </div>
                       <div className="space-y-2 mt-2 min-w-0">
-                        <h3 className="text-xl sm:text-3xl md:text-5xl font-black text-slate-900 uppercase tracking-tight break-words">Processando Blindagem</h3>
+                        <h3 className="text-xl sm:text-3xl md:text-5xl font-black text-slate-900 uppercase tracking-tight break-words">Minerva Está Redigindo</h3>
                         <p className="text-slate-500 max-w-xl leading-relaxed font-bold">
-                          Nossa Inteligência Jurídica está redigindo seu contrato. 
-                          Aplicando cláusulas de proteção de nível <span className="text-primary uppercase">{nivel}</span>.
+                          Analisando o contexto e aplicando cláusulas de proteção de nível <span className="text-primary uppercase">{nivel}</span>. Cada detalhe está sendo revisado.
                         </p>
                       </div>
                     </div>
@@ -432,8 +438,8 @@ export default function NewDocumentPage() {
                     <div className="w-full p-6 sm:p-8 bg-primary/5 rounded-[24px] sm:rounded-[32px] border border-primary/20 flex flex-col items-center justify-center gap-y-4">
                       <Loader2 className="w-10 h-10 text-primary animate-spin" />
                       <div className="text-center">
-                        <p className="text-primary font-black uppercase tracking-widest text-[11px]">Gerando Documento Jurídico...</p>
-                        <p className="text-primary/60 font-bold text-[10px] mt-1 italic">Isto pode levar até 30 segundos. Não feche esta janela.</p>
+                        <p className="text-primary font-black uppercase tracking-widest text-[11px]">Redigindo o Documento...</p>
+                        <p className="text-primary/60 font-bold text-[10px] mt-1 italic">A análise pode levar até 30 segundos. Não feche esta janela.</p>
                       </div>
                     </div>
                   </div>
