@@ -2,6 +2,7 @@
 'use server'
 
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { asaas } from '@/lib/asaas'
 import { revalidatePath } from 'next/cache'
 
@@ -181,4 +182,121 @@ export async function upgradeToProAction(orgId: string, planId: string) {
       mobilePhone: meta.phone || ''
     }
   })
+}
+
+export interface CreateTransparentChargePayload {
+  demandId: string
+  name: string
+  email: string
+  cpfCnpj: string
+  mobilePhone: string
+  postalCode: string
+  addressNumber: string
+  addressComplement?: string
+  billingType: 'CREDIT_CARD' | 'PIX'
+  value: number
+  description: string
+  creditCard?: {
+    holderName: string
+    number: string
+    expiryMonth: string
+    expiryYear: string
+    ccv: string
+  }
+}
+
+export async function createTransparentChargeAction(payload: CreateTransparentChargePayload) {
+  try {
+    const rawCpf = cleanDigits(payload.cpfCnpj)
+    
+    // 1. Criar Cliente no Asaas para a transação avulsa
+    const customer = (await asaas.createCustomer({
+      name: payload.name,
+      email: payload.email,
+      cpfCnpj: rawCpf,
+      mobilePhone: cleanDigits(payload.mobilePhone),
+      externalReference: payload.demandId
+    })) as AsaasCustomerResponse
+
+    const customerId = customer.id
+
+    // 2. Montar payload do pagamento
+    const tomorrow = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString().split('T')[0]
+    const paymentPayload: any = {
+      customer: customerId,
+      billingType: payload.billingType,
+      dueDate: tomorrow,
+      value: payload.value,
+      description: payload.description,
+      externalReference: payload.demandId
+    }
+
+    if (payload.billingType === 'CREDIT_CARD' && payload.creditCard) {
+      paymentPayload.creditCard = {
+        holderName: payload.creditCard.holderName,
+        number: cleanDigits(payload.creditCard.number),
+        expiryMonth: payload.creditCard.expiryMonth.padStart(2, '0'),
+        expiryYear: payload.creditCard.expiryYear.length === 2 ? `20${payload.creditCard.expiryYear}` : payload.creditCard.expiryYear,
+        ccv: payload.creditCard.ccv
+      }
+      paymentPayload.creditCardHolderInfo = {
+        name: payload.name,
+        email: payload.email,
+        cpfCnpj: rawCpf,
+        postalCode: cleanDigits(payload.postalCode),
+        addressNumber: payload.addressNumber,
+        addressComplement: payload.addressComplement || '',
+        phone: cleanDigits(payload.mobilePhone),
+        mobilePhone: cleanDigits(payload.mobilePhone)
+      }
+    }
+
+    // 3. Processar Cobrança
+    const payment = await asaas.post<any>('/payments', paymentPayload)
+
+    // Se for PIX, precisamos pegar o QRCode. O Asaas gera isso em /payments/{id}/pixQrCode
+    if (payload.billingType === 'PIX' && payment.id) {
+      const pixInfo = await asaas.get<any>(`/payments/${payment.id}/pixQrCode`)
+      return {
+        success: true,
+        paymentId: payment.id,
+        pix: {
+          encodedImage: pixInfo.encodedImage,
+          payload: pixInfo.payload,
+          expirationDate: pixInfo.expirationDate
+        }
+      }
+    }
+
+    return {
+      success: true,
+      paymentId: payment.id,
+      status: payment.status,
+      receiptUrl: payment.transactionReceiptUrl || payment.invoiceUrl
+    }
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Erro genérico no checkout transparente' }
+  }
+}
+
+export async function unlockDocumentMockAction(demandId: string, type: 'contrato' | 'estrategia' | 'processo') {
+  try {
+    const admin = createAdminClient() as any
+    let table = ''
+    if (type === 'contrato') table = 'generated_documents'
+    else if (type === 'estrategia') table = 'strategies'
+    else table = 'justice_demands'
+
+    // Not all tables might exist (e.g. justice_demands). 
+    // In any case, we fetch current metadata, then append unlocked: true
+    const { data: doc } = await admin.from(table).select('metadata').eq('id', demandId).maybeSingle()
+    if (doc) {
+      const newMeta = { ...(doc.metadata || {}), unlocked: true }
+      await admin.from(table).update({ metadata: newMeta }).eq('id', demandId)
+    }
+    return { success: true }
+  } catch (err) {
+    console.error('Mock Unlock Error:', err)
+    return { success: false }
+  }
 }

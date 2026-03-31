@@ -40,7 +40,7 @@ import { cn } from '@/utils/cn'
 import { TechnicalReportCard } from '@/components/shared/TechnicalReportCard'
 import { SidebarRefineSection } from '@/components/shared/SidebarRefineSection'
 import { Paywall } from '@/components/shared/Paywall'
-import { getMonthlyPaymentLink, getSinglePaymentLink } from '@/lib/monetization'
+import { unlockDocumentMockAction } from '@/app/actions/asaas-actions'
 
 export default function ViewDocumentPage() {
   const { id } = useParams()
@@ -58,6 +58,15 @@ export default function ViewDocumentPage() {
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
   const [activeToken, setActiveToken] = useState<string | null>(null)
   const [showPaywall, setShowPaywall] = useState(false)
+
+  const getOrCreateGuestId = () => {
+    if (typeof window === 'undefined') return ''
+    const current = localStorage.getItem('ianow_guest_id')
+    if (current) return current
+    const generated = `guest-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    localStorage.setItem('ianow_guest_id', generated)
+    return generated
+  }
 
   const scrollToToken = (token: string) => {
     setActiveToken(token)
@@ -110,15 +119,29 @@ export default function ViewDocumentPage() {
     async function loadDocument() {
       if (!id) return
       try {
-        const { data, error } = await supabase
-          .from('generated_documents')
-          .select('*')
-          .eq('id', id)
-          .single() as any
+        const response = await fetch(`/api/juridico/document/${id as string}`, {
+          method: 'GET',
+          headers: { 'X-Guest-Id': getOrCreateGuestId() }
+        })
+        const payload = await response.json()
 
-        if (error) throw error
+        if (response.status === 402 && payload?.paywall) {
+          setShowPaywall(true)
+          setDoc(payload.document || null)
+          setLoading(false)
+          if (interval) {
+            clearInterval(interval)
+            interval = null
+          }
+          return
+        }
+
+        if (!response.ok) throw new Error(payload?.error || 'Falha ao carregar documento')
+
+        const data = payload.document
+        setShowPaywall(false)
         setDoc(data)
-        setEditContent(data.content || '')
+        setEditContent(data?.content || '')
 
         // Stop polling if no longer generating
         if (data.status !== 'generating' && interval) {
@@ -135,53 +158,6 @@ export default function ViewDocumentPage() {
 
     // Initial load
     loadDocument()
-
-    // Check auth for paywall
-    async function checkAuth() {
-      const singleUnlockKey = `ianow_unlock_contrato_${id as string}`
-      const hasLocalUnlock =
-        localStorage.getItem(singleUnlockKey) === 'true' ||
-        localStorage.getItem('ianow_unlock_plan_monthly') === 'true'
-      if (hasLocalUnlock) {
-        setShowPaywall(false)
-      }
-
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        const { data: membership } = await supabase
-          .from('memberships')
-          .select('organization_id')
-          .eq('user_id', session.user.id)
-          .eq('status', 'active')
-          .limit(1)
-          .maybeSingle()
-
-        if (membership?.organization_id) {
-          const { data: organization } = await supabase
-            .from('organizations')
-            .select('plan_id')
-            .eq('id', membership.organization_id)
-            .single()
-
-          if (organization?.plan_id) {
-            const { data: plan } = await supabase
-              .from('plans')
-              .select('slug')
-              .eq('id', organization.plan_id)
-              .maybeSingle()
-            if (plan?.slug === 'pro') setShowPaywall(false)
-            else if (!hasLocalUnlock) setShowPaywall(true)
-          } else if (!hasLocalUnlock) {
-            setShowPaywall(true)
-          }
-        } else if (!hasLocalUnlock) {
-          setShowPaywall(true)
-        }
-      } else if (!hasLocalUnlock) {
-        setShowPaywall(true)
-      }
-    }
-    checkAuth()
 
     // Poll every 4s — will stop once status changes
     interval = setInterval(loadDocument, 4000)
@@ -303,6 +279,28 @@ export default function ViewDocumentPage() {
       <DashboardLayout>
         <div className="flex h-full w-full items-center justify-center min-h-[400px]">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  if (showPaywall) {
+    return (
+      <DashboardLayout>
+        <div className="relative h-[calc(100vh-64px)] overflow-hidden bg-slate-100">
+          <Paywall
+            demandId={id as string}
+            type="contrato"
+            fullscreen
+            onBack={() => router.back()}
+            onUnlockSuccess={async () => {
+              const toastId = toast.loading('Processando liberação...')
+              await unlockDocumentMockAction(id as string, 'contrato')
+              toast.success('Pagamento confirmado e documento liberado!', { id: toastId })
+              setShowPaywall(false)
+              setTimeout(() => window.location.reload(), 1500)
+            }}
+          />
         </div>
       </DashboardLayout>
     )
@@ -530,7 +528,7 @@ export default function ViewDocumentPage() {
               </div>
             ) : (
               <div className="flex-1 p-4 md:p-8 print:p-0 prose prose-slate max-w-none whitespace-normal break-words prose-headings:font-black prose-h1:text-2xl md:prose-h1:text-3xl prose-h2:text-xl md:prose-h2:text-2xl prose-p:text-slate-600 prose-p:leading-relaxed prose-li:text-slate-600 text-sm sm:text-base md:text-lg overflow-hidden relative min-h-[500px]">
-                <div className={cn("transition-all duration-1000", showPaywall && "blur-md select-none pointer-events-none opacity-40")}>
+                <div className={cn("transition-all duration-1000")}>
                   <ReactMarkdown
                     components={{
                       li: ({node, children, ...props}) => (
@@ -563,21 +561,6 @@ export default function ViewDocumentPage() {
                   </ReactMarkdown>
                 </div>
 
-                {showPaywall && (
-                  <Paywall 
-                    type="contrato" 
-                    onSinglePurchase={() => {
-                      const link = getSinglePaymentLink('contrato')
-                      if (!link) return toast.error('Link de pagamento do contrato não configurado')
-                      window.open(link, '_blank', 'noopener,noreferrer')
-                    }}
-                    onSubscribe={() => {
-                      const link = getMonthlyPaymentLink()
-                      if (!link) return toast.error('Link do plano mensal não configurado')
-                      window.open(link, '_blank', 'noopener,noreferrer')
-                    }}
-                  />
-                )}
               </div>
             )}
           </Card>

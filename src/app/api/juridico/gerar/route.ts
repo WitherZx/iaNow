@@ -275,7 +275,7 @@ ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
         documentId: document.id,
         status: 'ready'
       })
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('AI Generation Error:', e)
       const adminApi = adminClient as any
       await adminApi.from('generated_documents').update({
@@ -283,7 +283,11 @@ ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
         content: 'Falha na geração do documento pelo motor IA.'
       }).eq('id', document.id)
       
-      return NextResponse.json({ error: 'Falha na geração do documento pelo motor IA.' }, { status: 500 })
+      const detail = e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e)
+      return NextResponse.json(
+        { error: 'Falha na geração do documento pelo motor IA.', detail },
+        { status: 500 }
+      )
     }
   } catch (error: any) {
     console.error('API Error Juridico:', error)

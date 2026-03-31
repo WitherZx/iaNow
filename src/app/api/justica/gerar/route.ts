@@ -7,28 +7,40 @@ export async function POST(req: Request) {
   try {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
+    const guestId = req.headers.get('X-Guest-Id')
 
-    if (!user) {
+    if (!user && !guestId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const adminClient = createAdminClient()
     
     // Buscar a organização do usuário (mais robusto)
-    const { data: membership, error: memberError } = await adminClient
+    const { data: membership, error: memberError } = user ? await adminClient
       .from('memberships')
       .select('organization_id')
       .eq('user_id', user.id)
       .limit(1)
-      .maybeSingle() as any
+      .maybeSingle() as any : { data: null, error: null }
 
     if (memberError) {
       console.error('Membership Fetch Error:', memberError)
     }
 
-    const orgId = membership?.organization_id
+    let orgId = membership?.organization_id
     if (!orgId) {
-       return NextResponse.json({ error: 'Sua conta não possui uma organização vinculada. Complete o onboarding.' }, { status: 400 })
+      if (!user) {
+        const { data: sandbox } = await adminClient
+          .from('organizations')
+          .select('id')
+          .limit(1)
+          .single() as any
+        orgId = sandbox?.id
+      }
+
+      if (!orgId) {
+        return NextResponse.json({ error: 'Sua conta não possui uma organização vinculada. Complete o onboarding.' }, { status: 400 })
+      }
     }
 
     const body = await req.json()
@@ -143,7 +155,7 @@ Gere o JSON completo.`
         .from('justice_demands')
         .insert({
           organization_id: orgId,
-          user_id: user.id,
+          user_id: user?.id || null,
           status: 'ready',
           tipo_acao: parsedData.tipo_acao,
           descricao_fatos: diagnosticData.whatHappened,
@@ -153,7 +165,8 @@ Gere o JSON completo.`
              ...diagnosticData,
              petition_content: parsedData.petition,
              auditoria: parsedData.auditoria,
-             generated_at: new Date().toISOString()
+             generated_at: new Date().toISOString(),
+             guest_id: guestId
           }
         } as any)
         .select().single() as any

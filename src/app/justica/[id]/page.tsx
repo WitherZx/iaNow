@@ -315,6 +315,25 @@ export default function DemandDetailPage() {
   if (loading) return <DashboardLayout><div className="flex h-full w-full items-center justify-center min-h-[400px]"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div></DashboardLayout>
   if (!demand) return <DashboardLayout><PageContainer>Não encontrado.</PageContainer></DashboardLayout>
 
+  if (showPaywall) {
+    return (
+      <DashboardLayout>
+        <div className="relative h-[calc(100vh-64px)] overflow-hidden bg-slate-100">
+          <Paywall
+            demandId={id as string}
+            type="processo"
+            fullscreen
+            onBack={() => router.back()}
+            onUnlockSuccess={() => {
+              localStorage.setItem(`ianow_unlock_processo_${id as string}`, 'true')
+              setShowPaywall(false)
+            }}
+          />
+        </div>
+      </DashboardLayout>
+    )
+  }
+
   const auditoria = demand.metadata?.auditoria || {}
   const ondeProtocolar = auditoria.onde_protocolar || {}
   const checklist = auditoria.documentos_necessarios || []
@@ -649,7 +668,7 @@ export default function DemandDetailPage() {
         </div>
 
         <div className="flex-1 min-h-[500px] relative">
-          <div className={cn("transition-all duration-1000", showPaywall && "blur-md select-none pointer-events-none opacity-40")}>
+          <div className="transition-all duration-1000">
             {activeTab === 'minuta' && (
               <Card className="min-h-[600px] border-none shadow-2xl shadow-slate-200/50 rounded-[20px] md:rounded-[40px] bg-white flex flex-col overflow-hidden print:shadow-none print:border-none print:rounded-none">
                 <div className="bg-slate-50 p-4 md:p-6 border-b border-slate-100 flex items-center justify-between print:hidden">
@@ -710,22 +729,6 @@ export default function DemandDetailPage() {
               />
             )}
           </div>
-
-          {showPaywall && (
-            <Paywall 
-              type="processo" 
-              onSinglePurchase={() => {
-                const link = getSinglePaymentLink('processo')
-                if (!link) return toast.error('Link de pagamento do processo não configurado')
-                window.open(link, '_blank', 'noopener,noreferrer')
-              }}
-              onSubscribe={() => {
-                const link = getMonthlyPaymentLink()
-                if (!link) return toast.error('Link do plano mensal não configurado')
-                window.open(link, '_blank', 'noopener,noreferrer')
-              }}
-            />
-          )}
         </div>
       </div>
     </DocumentAuditLayout>

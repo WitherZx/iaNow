@@ -275,6 +275,25 @@ export default function EstrategiaDetalhePage() {
     )
   }
 
+  if (showPaywall) {
+    return (
+      <DashboardLayout>
+        <div className="relative h-[calc(100vh-64px)] overflow-hidden bg-slate-100">
+          <Paywall
+            demandId={id as string}
+            type="estrategia"
+            fullscreen
+            onBack={() => router.back()}
+            onUnlockSuccess={() => {
+              localStorage.setItem(`ianow_unlock_estrategia_${id as string}`, 'true')
+              setShowPaywall(false)
+            }}
+          />
+        </div>
+      </DashboardLayout>
+    )
+  }
+
   const { content } = strategy
 
   return (
@@ -346,7 +365,7 @@ export default function EstrategiaDetalhePage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start print:block relative">
-            <div className={cn("lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-8 transition-all duration-1000", isGuest && "blur-md select-none pointer-events-none opacity-40 min-h-[600px]")}>
+            <div className="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-8 transition-all duration-1000">
               {/* Left Column */}
               <div className="lg:col-span-8 flex flex-col gap-y-12 print:w-full">
                 
@@ -504,22 +523,6 @@ export default function EstrategiaDetalhePage() {
 
               </div>
             </div>
-
-            {showPaywall && (
-              <Paywall 
-                type="estrategia" 
-                onSinglePurchase={() => {
-                  const link = getSinglePaymentLink('estrategia')
-                  if (!link) return toast.error('Link de pagamento da estratégia não configurado')
-                  window.open(link, '_blank', 'noopener,noreferrer')
-                }}
-                onSubscribe={() => {
-                  const link = getMonthlyPaymentLink()
-                  if (!link) return toast.error('Link do plano mensal não configurado')
-                  window.open(link, '_blank', 'noopener,noreferrer')
-                }}
-              />
-            )}
           </div>
         </div>
       </PageContainer>

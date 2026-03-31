@@ -23,6 +23,7 @@ import { cn } from '@/utils/cn'
 import { useRouter } from 'next/navigation'
 import { FormSelect } from '@/components/shared/FormSelect'
 import { PartnerSelector } from '@/components/shared/PartnerSelector'
+import { toast } from 'sonner'
 
 interface Message {
   role: 'bot' | 'user'
@@ -38,13 +39,63 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
   const [messages, setMessages] = useState<Message[]>([])
   const [isTyping, setIsTyping] = useState(false)
   const [inputValue, setInputValue] = useState('')
-  const [isHistoryOpen, setIsHistoryOpen] = useState(true)
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [sessionId, setSessionId] = useState<string>(() => `session-${Date.now()}`)
   const [history, setHistory] = useState<{ id: string, title: string, date: string }[]>([])
   const [wizardData, setWizardData] = useState<Record<string, any>>({})
   const [isProcessing, setIsProcessing] = useState(false)
+  const [guestId, setGuestId] = useState<string>('')
+  const [latestResultPath, setLatestResultPath] = useState<string | null>(null)
+  const ACTIVE_SESSION_KEY = 'minerva_active_session_id'
   const scrollRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
+
+  const getOrCreateGuestId = (forceNew = false) => {
+    if (typeof window === 'undefined') return ''
+    if (!forceNew) {
+      const current = localStorage.getItem('ianow_guest_id')
+      if (current) return current
+    }
+    const generated = `guest-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    localStorage.setItem('ianow_guest_id', generated)
+    return generated
+  }
+
+  const fetchWithGuest = async (url: string, options: RequestInit = {}, retryOn401 = false) => {
+    const resolvedGuestId = guestId || getOrCreateGuestId()
+    if (!guestId) setGuestId(resolvedGuestId)
+    const headers = {
+      'Content-Type': 'application/json',
+      'X-Guest-Id': resolvedGuestId,
+      ...(options.headers || {})
+    }
+
+    let response = await fetch(url, { ...options, headers })
+
+    if (retryOn401 && response.status === 401) {
+      const renewedGuestId = getOrCreateGuestId(true)
+      setGuestId(renewedGuestId)
+      toast.error('Sessao de visitante expirada. Reconectando...')
+      response = await fetch(url, {
+        ...options,
+        headers: {
+          ...headers,
+          'X-Guest-Id': renewedGuestId
+        }
+      })
+    }
+
+    return response
+  }
+
+  const wizardStep = (() => {
+    if (messages.some((m) => m.role === 'bot' && m.content.includes('processado com sucesso'))) return 5
+    if (isProcessing) return 4
+    const keys = Object.keys(wizardData)
+    if (keys.length >= 5) return 3
+    if (keys.length > 0) return 2
+    return 1
+  })()
 
   // Load history from localStorage
   useEffect(() => {
@@ -52,6 +103,14 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
       const storedHistory = localStorage.getItem('minerva_chat_history')
       if (storedHistory) {
         setHistory(JSON.parse(storedHistory))
+      }
+      setGuestId(getOrCreateGuestId())
+
+      // Retoma a conversa ativa para não perder o “final” ao navegar/voltar.
+      const storedActiveSessionId = localStorage.getItem(ACTIVE_SESSION_KEY)
+      if (storedActiveSessionId) {
+        setSessionId(storedActiveSessionId)
+        loadMessagesFromStorage(storedActiveSessionId)
       }
     } catch (e) {
       console.error('Failed to load history', e)
@@ -69,7 +128,7 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
         {
           id: sessionId,
           title: firstUserMsg.length > 40 ? firstUserMsg.substring(0, 40) + '...' : firstUserMsg,
-          date: 'Agora'
+          date: new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
         },
         ...prev
       ]
@@ -138,18 +197,17 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
     setIsTyping(true)
 
     try {
-      const response = await fetch('/api/ai/chat', {
+      const response = await fetchWithGuest('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [...messages, userMsg].map(m => ({
             role: m.role === 'bot' ? 'assistant' : 'user',
             content: m.content
           }))
         })
-      })
+      }, true)
 
-      if (!response.ok) throw new Error('API Error')
+      if (!response.ok) throw new Error(response.status === 401 ? 'Sessao nao autorizada' : 'API Error')
 
       const data = await response.json()
       const newBotMsg: Message = { role: 'bot', content: data.content }
@@ -304,22 +362,25 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
           }
         }
 
-        const response = await fetch(endpoint, {
+        const response = await fetchWithGuest(endpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         })
 
         const data = await response.json()
-        if (!response.ok) throw new Error(data.error || 'Falha no processamento')
+        if (!response.ok) {
+          throw new Error(data.detail || data.error || 'Falha no processamento')
+        }
 
         setIsProcessing(false)
         const moduleName = path.includes('estrategia') ? 'Estratégia' : path.includes('juridico') ? 'Contrato' : 'Caso'
         const resultId = data.strategyId || data.documentId || data.demandId
+        const resolvedResultPath = `${path.replace('/novo', '')}${resultId ? '/' + resultId : ''}`
+        setLatestResultPath(resolvedResultPath)
 
         setMessages(prev => [...prev, {
           role: 'bot',
-          content: `✅ **${moduleName} processado com sucesso!**\n\nA execução foi finalizada em segundo plano com base nos dados fornecidos. Você já pode visualizar o resultado completo.\n\n[ACTION: ${path.replace('/novo', '')}${resultId ? '/' + resultId : ''}]`
+          content: `✅ **${moduleName} processado com sucesso!**\n\nA execução foi finalizada em segundo plano com base nos dados fornecidos. Você já pode visualizar o resultado completo.\n\n[ACTION: ${resolvedResultPath}]`
         }])
       } catch (error: any) {
         console.error('Action processing error:', error)
@@ -340,6 +401,9 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
     if (path.includes('/juridico/novo')) return "Gerar Novo Contrato"
     if (path.includes('/justica/novo')) return "Iniciar Nova Demanda"
     if (path.includes('/estrategia/novo')) return "Criar Diagnóstico"
+    if (path.match(/^\/juridico\/[^/]+/)) return "Ver Contrato Gerado"
+    if (path.match(/^\/justica\/[^/]+/)) return "Ver Caso Gerado"
+    if (path.match(/^\/estrategia\/[^/]+/)) return "Ver Estratégia Gerada"
     if (path.includes('/parceiros')) return "Ver Hub de Parceiros"
     return "Acessar Módulo"
   }
@@ -390,6 +454,37 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
             >
               <History size={16} className="sm:w-[18px] sm:h-[18px]" />
             </button>
+          </div>
+        </div>
+        <div className="px-4 sm:px-6 py-3 border-b border-slate-100 bg-white">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Status da sessao:</span>
+            <span className="text-[10px] font-black uppercase tracking-wider rounded-full px-2 py-1 bg-slate-100 text-slate-700">
+              {isProcessing ? 'Processando' : wizardStep >= 2 ? 'Em coleta' : 'Visitante'}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            {[
+              '1. Contexto',
+              '2. Dados',
+              '3. Revisao',
+              '4. Processamento',
+              '5. Resultado'
+            ].map((label, idx) => {
+              const stepNumber = idx + 1
+              const active = wizardStep >= stepNumber
+              return (
+                <div
+                  key={label}
+                  className={cn(
+                    'text-[10px] px-2 py-1 rounded-lg font-bold border',
+                    active ? 'bg-primary/10 text-primary border-primary/20' : 'bg-slate-50 text-slate-400 border-slate-100'
+                  )}
+                >
+                  {label}
+                </div>
+              )
+            })}
           </div>
         </div>
 
@@ -505,6 +600,20 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
         {/* Input de Mensagem */}
         <div className="p-3 sm:p-8 bg-white border-t border-slate-100 shrink-0">
           <div className="w-full">
+            {wizardStep === 5 && (
+              <div className="mb-3 sm:mb-5 p-3 sm:p-4 rounded-xl border border-amber-200 bg-amber-50 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-amber-700">Resultado pronto</p>
+                  <p className="text-[12px] sm:text-sm font-bold text-amber-900">Seu resultado foi processado. Continue para visualizar o documento completo.</p>
+                </div>
+                <button
+                  onClick={() => router.push(latestResultPath || '/dashboard')}
+                  className="px-3 py-2 rounded-lg bg-amber-500 text-white text-[10px] font-black uppercase tracking-widest hover:bg-amber-600 transition-colors"
+                >
+                  Ver resultado
+                </button>
+              </div>
+            )}
             <div className="relative flex items-center">
               <div className="absolute left-6 text-slate-300 hidden sm:block">
                 <Sparkles size={20} />
@@ -563,6 +672,7 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
                 onClick={() => {
                   const newId = `session-${Date.now()}`
                   setSessionId(newId)
+                  localStorage.setItem('minerva_active_session_id', newId)
                   setWizardData({}) // Clear the wizard buffer for the new chat
                   const greeting = `Olá, ${userName}. Sou a Minerva, sua inteligência estratégica e jurídica. Como posso te auxiliar hoje?`
                   const initialMsg: Message = { role: 'bot', content: greeting }
@@ -584,6 +694,7 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
                 key={item.id}
                 onClick={() => {
                   setSessionId(item.id)
+                  localStorage.setItem('minerva_active_session_id', item.id)
                   loadMessagesFromStorage(item.id)
                   if (window.innerWidth < 1024) setIsHistoryOpen(false) // auto-close on mobile
                 }}
@@ -613,6 +724,7 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
                       if (sessionId === item.id) {
                         const newId = `session-${Date.now()}`
                         setSessionId(newId)
+                        localStorage.setItem('minerva_active_session_id', newId)
                         loadMessagesFromStorage(newId)
                       }
                     }}
