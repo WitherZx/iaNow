@@ -325,7 +325,7 @@ export function TransparentCheckoutModal({ demandId, demandType, value, descript
 
           {/* STEP 4: PIX CODE */}
           {step === 'PIX_CODE' && pixData && (
-            <div className="flex flex-col gap-6 animate-in fade-in zoom-in-95 items-center text-center">
+            <div className="flex flex-col gap-6 animate-in fade-in zoom-in-95 items-center text-center mt-4">
               <div className="w-16 h-16 shrink-0 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-500">
                 <QrCode size={32} />
               </div>
@@ -359,7 +359,7 @@ export function TransparentCheckoutModal({ demandId, demandType, value, descript
 
           {/* STEP 5: SUCCESS */}
           {step === 'SUCCESS' && (
-            <div className="flex flex-col gap-6 animate-in fade-in zoom-in-95 items-center text-center py-4">
+            <div className="flex flex-col gap-6 animate-in fade-in zoom-in-95 items-center text-center mt-4">
               <div className="w-24 h-24 shrink-0 rounded-full bg-emerald-500 flex items-center justify-center text-white shadow-2xl shadow-emerald-500/40">
                 <CheckCircle2 size={48} />
               </div>
