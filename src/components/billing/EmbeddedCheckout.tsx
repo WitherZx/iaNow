@@ -15,9 +15,9 @@ interface EmbeddedCheckoutProps {
   org: {
     id?: string
     name?: string
-    email?: string
-    document?: string
-    phone?: string
+    email?: string | null
+    document?: string | null
+    phone?: string | null
   }
   planId: string
 }

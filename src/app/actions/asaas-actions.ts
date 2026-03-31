@@ -20,6 +20,22 @@ interface CreateCheckoutPayload {
 }
 
 type ServerSupabase = Awaited<ReturnType<typeof createServerSupabaseClient>>
+type MembershipRow = { roles?: { name?: string } | null }
+type OrganizationRow = {
+  id: string
+  name: string
+  email: string | null
+  slug: string | null
+  asaas_customer_id: string | null
+  metadata?: Record<string, string | undefined> | null
+}
+type PlanRow = { id: string; name: string; price_monthly: number }
+type AsaasCustomerResponse = { id: string }
+type AsaasSubscriptionResponse = {
+  id: string
+  invoiceUrl?: string
+  invoiceCustomization?: { url?: string }
+}
 
 function cleanDigits(value: string) {
   return value.replace(/\D/g, '')
@@ -29,19 +45,20 @@ async function assertOrganizationAdmin(supabase: ServerSupabase, orgId: string) 
   const { data: userData, error: userError } = await supabase.auth.getUser()
   if (userError || !userData?.user) throw new Error('Usuário não autenticado')
 
-  const { data: membership, error: membershipError } = await supabase
+  const { data: membershipData, error: membershipError } = await supabase
     .from('memberships')
     .select('organization_id, roles(name)')
     .eq('organization_id', orgId)
     .eq('user_id', userData.user.id)
     .eq('status', 'active')
     .maybeSingle()
+  const membership = membershipData as MembershipRow | null
 
   if (membershipError || !membership) {
     throw new Error('Sem permissão para esta organização')
   }
 
-  const roleName = ((membership as unknown as { roles?: { name?: string } | null }).roles)?.name
+  const roleName = membership.roles?.name
   const allowed = new Set(['admin', 'owner', 'manager'])
   if (!roleName || !allowed.has(roleName)) {
     throw new Error('Apenas administradores podem alterar a assinatura')
@@ -53,19 +70,21 @@ export async function createEmbeddedCheckoutAction(payload: CreateCheckoutPayloa
   await assertOrganizationAdmin(supabase, payload.orgId)
 
   // 1. Buscar a Organização e os dados do Plano
-  const { data: org, error: orgError } = await supabase
+  const { data: orgDataRaw, error: orgError } = await supabase
     .from('organizations')
     .select('*')
     .eq('id', payload.orgId)
     .single()
+  const org = orgDataRaw as OrganizationRow | null
 
   if (orgError || !org) throw new Error('Organização não encontrada')
 
-  const { data: plan, error: planError } = await supabase
+  const { data: planDataRaw, error: planError } = await supabase
     .from('plans')
     .select('*')
     .eq('id', payload.planId)
     .single()
+  const plan = planDataRaw as PlanRow | null
 
   if (planError || !plan) throw new Error('Plano não encontrado')
 
@@ -75,11 +94,12 @@ export async function createEmbeddedCheckoutAction(payload: CreateCheckoutPayloa
   if (!asaasCustomerId) {
     // Pegar metadados da organização para preencher dados no Asaas
     // (CNPJ, Endereço, etc. que buscamos no backend)
-    const { data: orgData } = await supabase
+    const { data: orgDataRaw } = await supabase
       .from('organizations')
       .select('metadata')
       .eq('id', payload.orgId)
       .single()
+    const orgData = orgDataRaw as Pick<OrganizationRow, 'metadata'> | null
 
     const meta = (orgData?.metadata as Record<string, string | undefined>) || {}
     const cpfCnpj = cleanDigits(payload.customer.cpfCnpj || meta.document || org.slug || '')
@@ -87,18 +107,18 @@ export async function createEmbeddedCheckoutAction(payload: CreateCheckoutPayloa
       throw new Error('CPF/CNPJ inválido para cobrança')
     }
 
-    const customer = await asaas.createCustomer({
+    const customer = (await asaas.createCustomer({
       name: payload.customer.name || org.name,
-      email: payload.customer.email || org.email || meta.email,
+      email: payload.customer.email || org.email || meta.email || '',
       cpfCnpj,
       mobilePhone: cleanDigits(payload.customer.mobilePhone || meta.phone || ''),
       externalReference: org.id
-    })
+    })) as AsaasCustomerResponse
 
     asaasCustomerId = customer.id
 
     // Atualizar na nossa DB
-    await supabase
+    await (supabase as any)
       .from('organizations')
       .update({ asaas_customer_id: asaasCustomerId })
       .eq('id', payload.orgId)
@@ -106,7 +126,7 @@ export async function createEmbeddedCheckoutAction(payload: CreateCheckoutPayloa
 
   // 3. Criar a Assinatura no Asaas
   try {
-    const subscription = await asaas.post('/subscriptions', {
+    const subscription = (await asaas.post('/subscriptions', {
       customer: asaasCustomerId,
       billingType: payload.billingType,
       value: plan.price_monthly,
@@ -114,10 +134,10 @@ export async function createEmbeddedCheckoutAction(payload: CreateCheckoutPayloa
       cycle: 'MONTHLY',
       description: `Mensalidade iaNow - Plano ${plan.name}`,
       externalReference: payload.orgId
-    })
+    })) as AsaasSubscriptionResponse
 
     // 4. Salvar log da subscrição no nosso Supabase
-    await supabase
+    await (supabase as any)
       .from('subscriptions')
       .upsert({
         organization_id: payload.orgId,
@@ -142,11 +162,12 @@ export async function createEmbeddedCheckoutAction(payload: CreateCheckoutPayloa
 export async function upgradeToProAction(orgId: string, planId: string) {
   const supabase = await createServerSupabaseClient()
 
-  const { data: org } = await supabase
+  const { data: orgDataRaw } = await supabase
     .from('organizations')
     .select('name, email, metadata')
     .eq('id', orgId)
     .single()
+  const org = orgDataRaw as Pick<OrganizationRow, 'name' | 'email' | 'metadata'> | null
 
   const meta = (org?.metadata as Record<string, string | undefined>) || {}
   return createEmbeddedCheckoutAction({

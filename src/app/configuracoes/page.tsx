@@ -91,7 +91,10 @@ function ConfiguraçõesPageContent() {
           .maybeSingle()
         
         if (membership?.organizations) {
-          const orgData = membership.organizations
+          const orgData = Array.isArray(membership.organizations)
+            ? membership.organizations[0]
+            : membership.organizations
+          if (!orgData) return
           const meta = orgData.metadata || {}
           
           setOrg({

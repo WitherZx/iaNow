@@ -19,6 +19,7 @@ export async function POST(req: Request) {
 
     const body = await req.json()
     const supabase = createAdminClient()
+    const db = supabase as any
     const now = new Date().toISOString()
 
     const { event, payment, subscription } = body
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
       }
 
       // Idempotência defensiva: se já está pago para a mesma charge, encerra
-      const { data: existingInvoice } = await supabase
+      const { data: existingInvoice } = await db
         .from('invoices')
         .select('id, status')
         .eq('asaas_charge_id', payment.id)
@@ -49,24 +50,24 @@ export async function POST(req: Request) {
       }
 
       // Buscar o ID do plano 'pro' no banco de dados
-      const { data: plans } = await supabase
+      const { data: plans } = await db
         .from('plans')
         .select('id')
         .eq('slug', 'pro')
         .single()
 
       if (plans?.id) {
-        await supabase
+        await db
           .from('organizations')
           .update({ plan_id: plans.id, updated_at: now })
           .eq('id', orgId)
 
-        await supabase
+        await db
           .from('subscriptions')
           .update({ status: 'active', updated_at: now })
           .eq('organization_id', orgId)
 
-        await supabase
+        await db
           .from('invoices')
           .upsert(
             {
@@ -85,19 +86,19 @@ export async function POST(req: Request) {
 
     // 2. Assinatura Cancelada (Downgrade para Free)
     if (event === 'SUBSCRIPTION_DELETED') {
-      const { data: plans } = await supabase
+      const { data: plans } = await db
         .from('plans')
         .select('id')
         .eq('slug', 'free')
         .single()
 
       if (plans?.id) {
-        await supabase
+        await db
           .from('organizations')
           .update({ plan_id: plans.id, updated_at: now })
           .eq('id', orgId)
 
-        await supabase
+        await db
           .from('subscriptions')
           .update({ status: 'canceled', updated_at: now })
           .eq('organization_id', orgId)
@@ -106,7 +107,7 @@ export async function POST(req: Request) {
 
     // 3. Pagamento Atrasado
     if (event === 'PAYMENT_OVERDUE') {
-      await supabase
+      await db
         .from('subscriptions')
         .update({ status: 'overdue', updated_at: now })
         .eq('organization_id', orgId)
