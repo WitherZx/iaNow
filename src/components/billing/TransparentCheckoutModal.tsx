@@ -187,18 +187,18 @@ export function TransparentCheckoutModal({ demandId, demandType, value, descript
   }
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm overflow-y-auto">
-      <Card className="w-full max-w-xl bg-white border-0 shadow-2xl rounded-[32px] overflow-hidden flex flex-col relative my-auto">
-        
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-slate-900/40 backdrop-blur-sm overflow-y-auto">
+      <Card className="w-full max-w-xl bg-white border-0 shadow-2xl rounded-[24px] md:rounded-[32px] overflow-hidden flex flex-col relative my-auto">
+
         {/* Header Yampi Style */}
-        <div className="bg-slate-50 border-b border-slate-100 p-6 flex flex-col gap-4">
+        <div className="bg-slate-50 border-b border-slate-100 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2">
               <Lock size={18} className="text-emerald-500" /> Checkout Seguro
             </h3>
             <button onClick={onClose} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Fechar ✕</button>
           </div>
-          
+
           {/* Progress Bar */}
           {(step !== 'SUCCESS' && step !== 'PIX_CODE') && (
             <div className="flex items-center gap-2 pt-2">
@@ -210,11 +210,11 @@ export function TransparentCheckoutModal({ demandId, demandType, value, descript
         </div>
 
         {/* Content Area */}
-        <div className="p-6 md:p-8 flex flex-col gap-6">
-          
+        <div className="flex flex-col gap-6">
+
           {/* STEP 1: IDENTIFICATION */}
           {step === 'IDENTIFICATION' && (
-            <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-right-4">
+            <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-right-4 mt-4">
               <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary"><User size={16} /></div>
                 <div>
@@ -224,10 +224,10 @@ export function TransparentCheckoutModal({ demandId, demandType, value, descript
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input label="Nome Completo / Razão" value={customer.name} onChange={e => setCustomer({...customer, name: e.target.value})} placeholder="Seu nome completo" required />
-                <Input label="E-mail" type="email" value={customer.email} onChange={e => setCustomer({...customer, email: e.target.value})} placeholder="seu@email.com" required />
-                <Input label="CPF/CNPJ" value={customer.cpfCnpj} onChange={e => setCustomer({...customer, cpfCnpj: formatCpfCnpj(e.target.value)})} placeholder="000.000.000-00" maxLength={18} required />
-                <Input label="WhatsApp" value={customer.mobilePhone} onChange={e => setCustomer({...customer, mobilePhone: formatPhone(e.target.value)})} placeholder="(00) 00000-0000" maxLength={15} required />
+                <Input label="Nome Completo / Razão" value={customer.name} onChange={e => setCustomer({ ...customer, name: e.target.value })} placeholder="Seu nome completo" required />
+                <Input label="E-mail" type="email" value={customer.email} onChange={e => setCustomer({ ...customer, email: e.target.value })} placeholder="seu@email.com" required />
+                <Input label="CPF/CNPJ" value={customer.cpfCnpj} onChange={e => setCustomer({ ...customer, cpfCnpj: formatCpfCnpj(e.target.value) })} placeholder="000.000.000-00" maxLength={18} required />
+                <Input label="WhatsApp" value={customer.mobilePhone} onChange={e => setCustomer({ ...customer, mobilePhone: formatPhone(e.target.value) })} placeholder="(00) 00000-0000" maxLength={15} required />
               </div>
 
               <Button disabled={!canGoToAddress} onClick={() => setStep('ADDRESS')} className="w-full h-14 rounded-2xl bg-slate-900 text-white font-black text-[11px] uppercase tracking-widest mt-2 flex items-center justify-center gap-2 group">
@@ -238,7 +238,7 @@ export function TransparentCheckoutModal({ demandId, demandType, value, descript
 
           {/* STEP 2: ADDRESS */}
           {step === 'ADDRESS' && (
-            <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-right-4">
+            <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-right-4 mt-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary"><MapPin size={16} /></div>
@@ -252,17 +252,17 @@ export function TransparentCheckoutModal({ demandId, demandType, value, descript
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="md:col-span-1">
-                  <Input label="CEP" value={address.postalCode} onChange={e => setAddress({...address, postalCode: e.target.value.replace(/\D/g, '')})} placeholder="00000-000" maxLength={8} required />
+                  <Input label="CEP" value={address.postalCode} onChange={e => setAddress({ ...address, postalCode: e.target.value.replace(/\D/g, '') })} placeholder="00000-000" maxLength={8} required />
                   {isLoadingCep && <span className="text-[9px] text-primary font-bold mt-1 block">Buscando...</span>}
                 </div>
                 <div className="md:col-span-2">
                   <Input label="Rua / Logradouro" value={address.street} disabled className="bg-slate-50" placeholder="..." />
                 </div>
                 <div className="md:col-span-1">
-                  <Input label="Número" value={address.addressNumber} onChange={e => setAddress({...address, addressNumber: e.target.value})} placeholder="Ex: 123" required />
+                  <Input label="Número" value={address.addressNumber} onChange={e => setAddress({ ...address, addressNumber: e.target.value })} placeholder="Ex: 123" required />
                 </div>
                 <div className="md:col-span-2">
-                  <Input label="Complemento (Opcional)" value={address.addressComplement} onChange={e => setAddress({...address, addressComplement: e.target.value})} placeholder="Apto, Sala, Bloco..." />
+                  <Input label="Complemento (Opcional)" value={address.addressComplement} onChange={e => setAddress({ ...address, addressComplement: e.target.value })} placeholder="Apto, Sala, Bloco..." />
                 </div>
               </div>
 
@@ -274,7 +274,7 @@ export function TransparentCheckoutModal({ demandId, demandType, value, descript
 
           {/* STEP 3: PAYMENT */}
           {step === 'PAYMENT' && (
-            <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-right-4">
+            <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-right-4 mt-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary"><CreditCardIcon size={16} /></div>
@@ -297,21 +297,23 @@ export function TransparentCheckoutModal({ demandId, demandType, value, descript
               </div>
 
               {billingType === 'CREDIT_CARD' && (
-                <div className="bg-slate-50 border border-slate-100 p-5 rounded-2xl flex flex-col gap-4 animate-in fade-in">
-                  <Input label="Número do Cartão" value={card.number} onChange={e => setCard({...card, number: formatCardNumber(e.target.value)})} placeholder="0000 0000 0000 0000" maxLength={19} />
-                  <Input label="Nome no Cartão" value={card.holderName} onChange={e => setCard({...card, holderName: e.target.value.toUpperCase()})} placeholder="NOME IMPRESSO NO CARTÃO" />
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl flex flex-col gap-4 animate-in fade-in">
+                  <Input label="Número do Cartão" value={card.number} onChange={e => setCard({ ...card, number: formatCardNumber(e.target.value) })} placeholder="0000 0000 0000 0000" maxLength={19} />
+                  <Input label="Nome no Cartão" value={card.holderName} onChange={e => setCard({ ...card, holderName: e.target.value.toUpperCase() })} placeholder="NOME IMPRESSO NO CARTÃO" />
                   <div className="grid grid-cols-2 gap-4">
-                    <Input label="Validade" value={card.expiryDate} onChange={e => setCard({...card, expiryDate: formatExpiry(e.target.value)})} placeholder="MM/AA" maxLength={5} />
-                    <Input label="CVV" value={card.ccv} onChange={e => setCard({...card, ccv: e.target.value.replace(/\D/g, '')})} placeholder="123" maxLength={4} type="password" />
+                    <Input label="Validade" value={card.expiryDate} onChange={e => setCard({ ...card, expiryDate: formatExpiry(e.target.value) })} placeholder="MM/AA" maxLength={5} />
+                    <Input label="CVV" value={card.ccv} onChange={e => setCard({ ...card, ccv: e.target.value.replace(/\D/g, '') })} placeholder="123" maxLength={4} type="password" />
                   </div>
                 </div>
               )}
 
               {billingType === 'PIX' && (
-                <div className="bg-emerald-50 border border-emerald-100 p-5 rounded-2xl flex flex-col gap-2 animate-in fade-in text-center items-center">
-                  <QrCode size={32} className="text-emerald-500 mb-2" />
-                  <h4 className="text-sm font-black text-emerald-900 uppercase">Pague via PIX</h4>
-                  <p className="text-xs text-emerald-700/80 font-bold mb-2">Liberação instantânea após o pagamento pelo QRCode.</p>
+                <div className="bg-emerald-50 border border-emerald-100 p-5 rounded-2xl flex flex-col gap-3 animate-in fade-in text-center items-center">
+                  <QrCode size={32} className="text-emerald-500" />
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-sm font-black text-emerald-900 uppercase">Pague via PIX</h4>
+                    <p className="text-xs text-emerald-700/80 font-bold">Liberação instantânea após o pagamento pelo QRCode.</p>
+                  </div>
                 </div>
               )}
 
@@ -323,33 +325,33 @@ export function TransparentCheckoutModal({ demandId, demandType, value, descript
 
           {/* STEP 4: PIX CODE */}
           {step === 'PIX_CODE' && pixData && (
-            <div className="flex flex-col gap-6 animate-in fade-in zoom-in-95 items-center text-center py-4">
-              <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-500 mb-2">
+            <div className="flex flex-col gap-6 animate-in fade-in zoom-in-95 items-center text-center">
+              <div className="w-16 h-16 shrink-0 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-500">
                 <QrCode size={32} />
               </div>
-              <div>
-                <h3 className="text-xl font-black text-slate-900">Finalize seu Pagamento</h3>
-                <p className="text-sm text-slate-500 font-bold mt-1">Escaneie o QRCode abaixo com o app do seu banco.</p>
+              <div className="flex flex-col gap-1">
+                <h3 className="text-xl font-black text-slate-900 leading-tight">Finalize seu Pagamento</h3>
+                <p className="text-sm text-slate-500 font-bold">Escaneie o QRCode abaixo com o app do seu banco.</p>
               </div>
 
-              <div className="p-2 bg-white border-2 border-slate-100 rounded-[28px] overflow-hidden">
-                <Image src={`data:image/jpeg;base64,${pixData.encodedImage}`} alt="QRCode PIX" width={200} height={200} className="w-48 h-48" />
+              <div className="p-2 bg-white border-2 border-slate-100 rounded-[24px] overflow-hidden shrink-0">
+                <Image src={`data:image/jpeg;base64,${pixData.encodedImage}`} alt="QRCode PIX" width={200} height={200} className="w-40 h-40 md:w-48 md:h-48" />
               </div>
 
-              <div className="w-full space-y-3">
+              <div className="w-full flex flex-col gap-3">
                 <p className="text-[11px] font-black uppercase text-slate-400 tracking-widest text-left px-2">Ou copie o código (Pix Copia e Cola)</p>
-                <div className="relative group">
-                  <div className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-[10px] text-slate-400 font-mono break-all line-clamp-2 max-h-16 overflow-hidden pr-32">
+                <div className="flex flex-col sm:flex-row gap-3 w-full">
+                  <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 text-[11px] text-slate-500 font-mono break-all line-clamp-2 max-h-[3.5rem] overflow-hidden text-left">
                     {pixData.payload}
                   </div>
-                  <Button onClick={copyPixLine} className="absolute right-1 top-1 bottom-1 h-auto rounded-lg text-[10px] uppercase font-black tracking-widest px-4 bg-emerald-500 text-white">
+                  <Button onClick={copyPixLine} className="w-full sm:w-auto h-12 sm:h-14 shrink-0 rounded-xl text-[11px] uppercase font-black tracking-widest px-6 bg-emerald-500 hover:bg-emerald-600 text-white">
                     Copiar Código
                   </Button>
                 </div>
               </div>
 
-              <p className="text-[10px] text-amber-500 font-bold bg-amber-50 px-4 py-2 rounded-xl flex items-center gap-2 mt-4">
-                <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              <p className="text-[10px] text-amber-500 font-bold bg-amber-50 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 w-full">
+                <span className="w-2 h-2 shrink-0 rounded-full bg-amber-500 animate-pulse" />
                 Aguardando verificação do pagamento...
               </p>
             </div>
@@ -357,17 +359,17 @@ export function TransparentCheckoutModal({ demandId, demandType, value, descript
 
           {/* STEP 5: SUCCESS */}
           {step === 'SUCCESS' && (
-            <div className="flex flex-col gap-6 animate-in fade-in zoom-in-95 items-center text-center py-10">
-              <div className="w-24 h-24 rounded-full bg-emerald-500 flex items-center justify-center text-white mb-4 shadow-2xl shadow-emerald-500/40">
+            <div className="flex flex-col gap-6 animate-in fade-in zoom-in-95 items-center text-center py-4">
+              <div className="w-24 h-24 shrink-0 rounded-full bg-emerald-500 flex items-center justify-center text-white shadow-2xl shadow-emerald-500/40">
                 <CheckCircle2 size={48} />
               </div>
-              <div className="space-y-2">
-                <h3 className="text-2xl font-black text-slate-900 tracking-tight">Pagamento Aprovado!</h3>
-                <p className="text-sm font-bold text-slate-500 leading-relaxed max-w-[280px]">
+              <div className="flex flex-col gap-2">
+                <h3 className="text-2xl font-black text-slate-900 tracking-tight leading-none">Pagamento Aprovado!</h3>
+                <p className="text-sm font-bold text-slate-500 leading-relaxed max-w-[280px] mx-auto">
                   Sua demanda foi desbloqueada com sucesso e já está disponível para acesso.
                 </p>
               </div>
-              <div className="w-10 h-10 rounded-full border-4 border-slate-100 border-t-emerald-500 animate-spin mt-4" />
+              <div className="w-10 h-10 shrink-0 rounded-full border-4 border-slate-100 border-t-emerald-500 animate-spin" />
             </div>
           )}
 
