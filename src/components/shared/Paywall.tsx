@@ -11,11 +11,15 @@ import {
   Zap,
   ShieldCheck,
   ArrowRight,
-  TrendingUp
+  TrendingUp,
+  Microscope,
+  Clock
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
 import { TransparentCheckoutModal } from '../billing/TransparentCheckoutModal'
+import { simulatePurchaseAction } from '@/app/actions/justice-actions'
+import { toast } from 'sonner'
 
 interface PaywallProps {
   demandId: string
@@ -23,6 +27,7 @@ interface PaywallProps {
   onUnlockSuccess: () => void
   fullscreen?: boolean
   onBack?: () => void
+  isTestMode?: boolean
 }
 
 const PRICING = {
@@ -49,11 +54,27 @@ const PRICING = {
   }
 }
 
-export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, onBack }: PaywallProps) {
+export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, onBack, isTestMode }: PaywallProps) {
   const current = PRICING[type]
   const Icon = current.icon
   const [activeTab, setActiveTab] = useState<'avulso' | 'premium'>('avulso')
   const [checkoutMode, setCheckoutMode] = useState<'avulso' | 'premium' | null>(null)
+  const [simulating, setSimulating] = useState(false)
+
+  const handleSimulate = async () => {
+    try {
+      setSimulating(true)
+      const res = await simulatePurchaseAction(demandId, type)
+      if (res.error) throw new Error(res.error)
+
+      toast.success('Simulação de compra concluída!')
+      onUnlockSuccess()
+    } catch (err: any) {
+      toast.error(err.message || 'Falha na simulação')
+    } finally {
+      setSimulating(false)
+    }
+  }
 
   return (
     <div
@@ -122,14 +143,28 @@ export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, o
               activeTab === 'avulso' ? "flex" : "hidden lg:flex"
             )}>
               <div className="flex flex-col gap-6 flex-1">
-                <div className="flex items-center gap-4">
-                  <div className={cn("shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center bg-slate-100 shadow-inner", current.color)}>
-                    <Icon size={24} strokeWidth={2.5} />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className={cn("shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center bg-slate-100 shadow-inner", current.color)}>
+                      <Icon size={24} strokeWidth={2.5} />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.25em]">Liberação imediata</span>
+                      <h3 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight leading-none">{current.label}</h3>
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.25em]">Liberação imediata</span>
-                    <h3 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight leading-none">{current.label}</h3>
-                  </div>
+
+                  {/* Dev Simulation Button */}
+                  {isTestMode && (
+                    <Button
+                      onClick={handleSimulate}
+                      disabled={simulating}
+                      className="bg-amber-500 hover:bg-amber-600 text-white border-none h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-amber-500/20"
+                    >
+                      {simulating ? <Clock className="w-3.5 h-3.5 animate-spin" /> : <Microscope className="w-3.5 h-3.5" />}
+                      {simulating ? 'Simulando...' : 'Liberar (Dev)'}
+                    </Button>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-5">

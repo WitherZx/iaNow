@@ -66,46 +66,12 @@ export default function EstrategiaPage() {
         const guestId = localStorage.getItem('ianow_guest_id')
         const { data: { session: currentSession } } = await supabase.auth.getSession()
         
-        let allStrats: any[] = []
+        const { getStrategiesAction } = await import('@/app/actions/strategy-actions')
+        const { data: allStrats, error } = await getStrategiesAction(guestId, currentSession?.user?.id)
 
-        // 1. Buscas se estiver logado (pela organização)
-        if (currentSession) {
-          const { data: membershipData } = await supabase
-            .from('memberships')
-            .select('organization_id')
-            .eq('user_id', currentSession.user.id)
-            .maybeSingle() as any
-
-          if (membershipData) {
-            const { data: orgStrats } = await supabase
-              .from('strategies')
-              .select('*')
-              .eq('organization_id', membershipData.organization_id)
-              .order('created_at', { ascending: false })
-            
-            if (orgStrats) allStrats = [...orgStrats]
-          }
-        }
-
-        // 2. Buscas pelo Guest ID (Usando Server Action para contornar RLS)
-        if (guestId) {
-          const { getGuestStrategiesAction } = await import('@/app/actions/strategy-actions')
-          const { data: guestStrats } = await getGuestStrategiesAction(guestId)
-
-          if (guestStrats) {
-            const existingIds = new Set(allStrats.map(s => s.id))
-            guestStrats.forEach((s: any) => {
-              if (!existingIds.has(s.id)) {
-                allStrats.push(s)
-              }
-            })
-          }
-        }
-
-        // Re-ordenar por data de criação após merge
-        allStrats.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        if (error) throw new Error(error)
         
-        setStrategies(allStrats.map(s => ({
+        setStrategies((allStrats || []).map((s: any) => ({
           id: s.id,
           title: s.title,
           description: s.description,

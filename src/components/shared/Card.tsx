@@ -13,16 +13,16 @@ interface CardProps {
 const paddings = {
   none: '',
   sm: 'p-4',
-  md: 'p-6',
-  lg: 'p-8'
+  md: 'p-4',
+  lg: 'p-4'
 }
 
 const variants = {
-  default:  'bg-white border border-[#E5E5E5] shadow-sm',
+  default: 'bg-white border border-[#E5E5E5] shadow-sm',
   bordered: 'bg-white border-2 border-primary',
   elevated: 'bg-white shadow-lg border-transparent',
-  accent:   'bg-gradient-to-br from-slate-900 via-slate-900 to-primary text-white border-transparent',
-  ghost:    'bg-transparent border-transparent shadow-none'
+  accent: 'bg-gradient-to-br from-slate-900 via-slate-900 to-primary text-white border-transparent',
+  ghost: 'bg-transparent border-transparent shadow-none'
 }
 
 export function Card({ children, variant = 'default', padding = 'md', className, style }: CardProps) {

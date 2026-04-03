@@ -31,14 +31,26 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
   const [searchTerm, setSearchTerm] = useState('')
   const [partners, setPartners] = useState<Partner[]>([])
   const [loading, setLoading] = useState(false)
+  const [hasSession, setHasSession] = useState(false)
   const supabase = createClient()
+
+  useEffect(() => {
+    async function checkSession() {
+      const { data: { session } } = await supabase.auth.getSession()
+      setHasSession(!!session)
+    }
+    checkSession()
+  }, [supabase])
 
   useEffect(() => {
     async function loadPartners() {
       try {
         setLoading(true)
         const { data: { session } } = await supabase.auth.getSession()
-        if (!session) return
+        if (!session) {
+          setLoading(false)
+          return
+        }
 
         // 1. Fetch Membership
         const { data: membership } = await supabase
@@ -109,7 +121,7 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
     }
 
     if (isOpen) loadPartners()
-  }, [isOpen, supabase])
+  }, [isOpen, hasSession, supabase])
 
   const filteredPartners = partners.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -153,25 +165,27 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
 
       {isOpen && (
         <div className="absolute top-[calc(100%+8px)] left-0 w-full bg-white border border-slate-200 rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] z-[150] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="p-3 bg-slate-50/50 border-b border-slate-100">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input 
-                autoFocus
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Pesquisar contato..."
-                className="w-full h-11 pl-11 pr-4 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all placeholder:text-slate-300"
-              />
+          {hasSession && (
+            <div className="p-3 bg-slate-50/50 border-b border-slate-100">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <input 
+                  autoFocus
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Pesquisar contato..."
+                  className="w-full h-11 pl-11 pr-4 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all placeholder:text-slate-300"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="max-h-[280px] overflow-y-auto custom-scrollbar p-2">
             {loading ? (
               <div className="p-8 text-center text-slate-400 font-bold text-xs uppercase tracking-widest animate-pulse">Buscando contatos...</div>
             ) : (
               <div className="space-y-1">
-                {filteredPartners.length > 0 && filteredPartners.map(partner => (
+                {hasSession && filteredPartners.length > 0 && filteredPartners.map(partner => (
                   <button
                     key={partner.id}
                     type="button"
@@ -208,13 +222,13 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
                   </button>
                 ))}
                 
-                {filteredPartners.length === 0 && (
+                {hasSession && filteredPartners.length === 0 && (
                   <div className="py-4 text-center">
                     <p className="text-slate-400 font-bold text-xs">Nenhum contato encontrado.</p>
                   </div>
                 )}
 
-                <div className="pt-2 mt-2 border-t border-slate-100">
+                <div className={cn("pt-2 mt-2", hasSession && "border-t border-slate-100")}>
                   <button
                     type="button"
                     onClick={() => {

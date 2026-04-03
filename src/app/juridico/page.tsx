@@ -67,11 +67,18 @@ export default function JuridicoPage() {
 
         // Busca unificada via Server Action (Bypassa RLS e Merges Guest/Org)
         // Passamos o userId como 'hint' para garantir identificação se o getUser do server falhar.
-        const { data: allDocs, error } = await getJuridicoDocumentsAction(guestId, currentSession?.user?.id)
+        const { data: allDocs, config, error } = await getJuridicoDocumentsAction(guestId, currentSession?.user?.id)
         
         if (error) {
           console.error('[JuridicoPage] Fetch error:', error)
           throw new Error(error)
+        }
+
+        // Sincroniza o modo de teste para exibir botões Dev se ativo
+        if (config && typeof config.isTestMode !== 'undefined') {
+          // Se precisar usar na lista, podemos adicionar um state, 
+          // mas o Paywall é mostrado na página de DETALHE ([id]/page.tsx).
+          // No entanto, vamos garantir que a action enviou os dados.
         }
 
         const docs = allDocs || []

@@ -34,9 +34,11 @@ interface Message {
 interface MinervaAssistantProps {
   userName: string
   onToggleView: () => void
+  initialPrompt?: string
+  defaultModule?: 'justica' | 'juridico' | 'estrategia'
 }
 
-export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantProps) {
+export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaultModule }: MinervaAssistantProps) {
   const ACTIVE_SESSION_KEY = 'minerva_active_session_id'
 
   const [sessionId, setSessionId] = useState<string>(() => {
@@ -119,7 +121,22 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
     return response
   }
 
+  const wizardStep = (() => {
+    // 1. Verificar se a ÚLTIMA mensagem do bot foi de sucesso
+    const lastBotMsg = [...messages].reverse().find(m => m.role === 'bot')
+    if (lastBotMsg?.content.includes('processado com sucesso')) return 5
+
+    if (isProcessing) return 4
+
+    const keys = Object.keys(wizardData)
+    if (keys.length >= 5) return 3
+    if (keys.length > 0 || defaultModule) return 2
+    return 1
+  })()
+
   const activeModule = (() => {
+    if (defaultModule) return defaultModule
+    
     // Tentar detectar o módulo ativo baseado no histórico recente e wizardData
     const lastContextMsg = [...messages].reverse().find(m =>
       m.role === 'bot' && (m.content.includes('[FORM:') || m.content.includes('[ACTION:'))
@@ -131,19 +148,6 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
     if (content.includes('estrategia') || content.includes('diagnostico') || content.includes('crescimento')) return 'estrategia'
 
     return 'general'
-  })()
-
-  const wizardStep = (() => {
-    // 1. Verificar se a ÚLTIMA mensagem do bot foi de sucesso
-    const lastBotMsg = [...messages].reverse().find(m => m.role === 'bot')
-    if (lastBotMsg?.content.includes('processado com sucesso')) return 5
-
-    if (isProcessing) return 4
-
-    const keys = Object.keys(wizardData)
-    if (keys.length >= 5) return 3
-    if (keys.length > 0) return 2
-    return 1
   })()
 
   const stepperLabels = (() => {
@@ -190,10 +194,19 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
       }
 
       setGuestId(getOrCreateGuestId())
+
+      // Auto-trigger initial prompt if provided and chat is empty
+      if (initialPrompt && messages.length === 0 && !isProcessing) {
+        // Find existing session or use current
+        const saved = localStorage.getItem(`minerva_messages_${sessionId}`)
+        if (!saved || JSON.parse(saved).length === 0) {
+           handleSendMessage(initialPrompt)
+        }
+      }
     } catch (e) {
       console.error('Failed to load history', e)
     }
-  }, [sessionId])
+  }, [sessionId, initialPrompt])
 
   // Save/Update current session in history
   const updateHistory = (firstUserMsg: string) => {

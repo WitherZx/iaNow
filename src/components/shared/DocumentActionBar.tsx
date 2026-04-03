@@ -6,11 +6,11 @@ import { Button } from '@/components/shared/Button'
 import { cn } from '@/utils/cn'
 
 interface DocumentActionBarProps {
-  onEdit: () => void
-  isEditing: boolean
-  onSave: () => void
+  onEdit?: () => void
+  isEditing?: boolean
+  onSave?: () => void
   isSaving?: boolean
-  onCancel: () => void
+  onCancel?: () => void
   onCopy?: () => void
   onDownload?: () => void
   onPrint?: () => void
@@ -35,7 +35,7 @@ export function DocumentActionBar({
       "flex items-center gap-2 group/actions bg-white p-2 rounded-2xl border border-slate-200 shadow-md transition-all hover:shadow-lg",
       className
     )}>
-      {!isEditing ? (
+      {onEdit && !isEditing && (
         <Button 
           onClick={onEdit} 
           variant="outline" 
@@ -45,7 +45,9 @@ export function DocumentActionBar({
         >
           <Pencil size={18} />
         </Button>
-      ) : (
+      )}
+
+      {onEdit && isEditing && onCancel && onSave && (
         <div className="flex items-center gap-1.5 bg-emerald-500/10 p-1 rounded-xl border border-emerald-500/20">
           <Button 
             onClick={onCancel} 

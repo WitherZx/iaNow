@@ -58,6 +58,7 @@ export default function ViewDocumentPage() {
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
   const [activeToken, setActiveToken] = useState<string | null>(null)
   const [showPaywall, setShowPaywall] = useState(false)
+  const [configParams, setConfigParams] = useState({ isTestMode: false })
 
   const getOrCreateGuestId = () => {
     if (typeof window === 'undefined') return ''
@@ -123,7 +124,7 @@ export default function ViewDocumentPage() {
         
         // 1. Usar a nova Server Action para buscar o documento (com suporte a Guest)
         const { getJuridicoDocumentAction } = await import('@/app/actions/juridico-actions')
-        const { data, error } = await getJuridicoDocumentAction(id as string, guestId)
+        const { data, config, error } = await getJuridicoDocumentAction(id as string, guestId)
 
         if (error) {
           // Fallback para API tradicional se houver erro na Action (segurança extra)
@@ -131,7 +132,13 @@ export default function ViewDocumentPage() {
             method: 'GET',
             headers: { 'X-Guest-Id': guestId }
           })
-          const payload = await response.json()
+          
+          let payload: any = null
+          try {
+            payload = await response.json()
+          } catch (jsonErr) {
+            console.warn('Falha ao interpretar resposta do Fallback (pode HTML inesperado):', jsonErr)
+          }
 
           if (response.status === 402 && payload?.paywall) {
             setShowPaywall(true)
@@ -140,7 +147,9 @@ export default function ViewDocumentPage() {
             if (interval) clearInterval(interval)
             return
           }
-          throw new Error(error || 'Falha ao carregar documento')
+          // Apenas encerra silênciosamente em vez de dar throw para evitar crash do Next
+          if (interval) clearInterval(interval)
+          return
         }
 
         // --- Lógica de Paywall Estrita ---
@@ -148,7 +157,9 @@ export default function ViewDocumentPage() {
         const isGuestDoc = data.metadata?.guest_id === guestId
         const isUnlocked = data.metadata?.unlocked === true
         
-        if (isUnlocked) {
+        if (config?.isAllAccess) {
+          setShowPaywall(false)
+        } else if (isUnlocked) {
           setShowPaywall(false)
         } else if (!session) {
           // Guest mode
@@ -192,6 +203,11 @@ export default function ViewDocumentPage() {
 
         setDoc(data)
         setEditContent(data?.content || '')
+        
+        // Sincroniza o isTestMode vindo da Action (App Configs)
+        if (config && typeof config.isTestMode !== 'undefined') {
+          setConfigParams({ isTestMode: config.isTestMode })
+        }
 
         // Stop polling if no longer generating
         if (data.status !== 'generating' && interval) {
@@ -199,7 +215,8 @@ export default function ViewDocumentPage() {
           interval = null
         }
       } catch (err) {
-        console.error('Erro ao carregar documento:', err)
+        // Usa console.warn ao invés de error para não triggar o Overlay do Next.js
+        console.warn('Aviso esperado: acesso bloqueado ou documento não encontrado.', err)
         if (interval) clearInterval(interval)
       } finally {
         setLoading(false)
@@ -241,18 +258,11 @@ export default function ViewDocumentPage() {
   const handleDelete = async () => {
     if (!id || !window.confirm('Excluir este documento?')) return
     try {
-      const { error: upError } = await supabase
-        .from('generated_documents')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id as string)
+      const guestId = getOrCreateGuestId()
+      const { deleteJuridicoDocumentAction } = await import('@/app/actions/juridico-actions')
+      const res = await deleteJuridicoDocumentAction(id as string, guestId)
       
-      if (upError) {
-        const { error: delError } = await supabase
-          .from('generated_documents')
-          .delete()
-          .eq('id', id as string)
-        if (delError) throw delError
-      }
+      if (res.error) throw new Error(res.error)
       
       toast.success('Documento excluído!')
       router.push('/juridico')
@@ -271,9 +281,13 @@ export default function ViewDocumentPage() {
     const toastId = toast.loading('Processando ajustes com IA...')
 
     try {
+      const guestHeader = getOrCreateGuestId()
       const response = await fetch('/api/juridico/gerar', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Guest-Id': guestHeader 
+        },
         body: JSON.stringify({
           refineContent: doc.content,
           prompt: promptToUse,
@@ -302,9 +316,13 @@ export default function ViewDocumentPage() {
     setRefining(true)
     const toastId = toast.loading('Reavaliando blindagem jurídica...')
     try {
+      const guestHeader = getOrCreateGuestId()
       const response = await fetch('/api/juridico/gerar', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Guest-Id': guestHeader 
+        },
         body: JSON.stringify({
           refineContent: doc.content,
           prompt: "Mantenha o texto EXATAMENTE como está, mas execute uma nova auditoria de compliance completa e retorne o score e sugestões atualizadas.",
@@ -342,6 +360,7 @@ export default function ViewDocumentPage() {
             demandId={id as string}
             type="contrato"
             fullscreen
+            isTestMode={configParams.isTestMode}
             onBack={() => router.back()}
             onUnlockSuccess={async () => {
               const toastId = toast.loading('Processando liberação...')
@@ -566,7 +585,7 @@ export default function ViewDocumentPage() {
     >
       <div className="min-w-0 flex flex-col">
         {!isGenerating && !isFailed && (
-          <Card className="min-h-[600px] border-none shadow-2xl shadow-slate-200/50 rounded-[20px] md:rounded-[32px] overflow-hidden bg-white flex flex-col relative print:min-h-0 print:h-auto print:shadow-none print:border-none print:rounded-none print:p-0">
+          <Card className="min-h-[600px] border-none shadow-2xl shadow-slate-200/50 rounded-[20px] md:rounded-[32px] overflow-hidden bg-white flex flex-col relative print:min-h-0 print:h-auto print:block print:overflow-visible print:shadow-none print:border-none print:rounded-none print:p-0">
             {isEditing ? (
               <div className="flex-1">
                 <textarea

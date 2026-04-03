@@ -105,6 +105,9 @@ export async function POST(req: Request) {
 
         const adminApi = adminClient as any
         
+        // BUSCAR O DOCUMENTO ATUAL PARA NAO PERDER METADATA
+        const { data: currentDoc } = await adminApi.from('generated_documents').select('metadata').eq('id', documentId).single();
+        
         // CONSTRUIR O UPDATE
         const updateData: any = {
           content: parsedData.contract.trim(),
@@ -113,11 +116,14 @@ export async function POST(req: Request) {
         // SÓ ATUALIZA O AUDIT SE NÃO FOR 'skipAudit'
         if (!skipAudit) {
            updateData.metadata = {
-              ...body, // preserva o que veio no body (metadados originais)
+              ...(currentDoc?.metadata || {}), // preserva os metadados MANTENDO O GUEST_ID, parties, etc
+              ...body, // adiciona os do body
               audit: parsedData.audit,
               refinedAt: new Date().toISOString(),
-              guest_id: guestId,
-              is_guest: !user
+           }
+           
+           if (!currentDoc?.metadata?.guest_id && guestId) {
+             updateData.metadata.guest_id = guestId;
            }
         }
 

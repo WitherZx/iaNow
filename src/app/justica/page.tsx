@@ -8,26 +8,26 @@ import {
   PlusCircle, 
   Loader2, 
   AlertCircle,
-  FileText,
   Clock,
   CheckCircle2,
-  Scale,
-  FileSignature,
-  Sparkles,
   Search,
+  Scale,
   Zap,
+  FileSignature,
   ArrowRight
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { CTAButton } from '@/components/shared/CTAButton'
-import { DocumentCard } from '@/components/shared/DocumentCard'
 import { Card } from '@/components/shared/Card'
 import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/utils/cn'
 import { Button } from '@/components/shared/Button'
+import { TrackProcessModal } from '@/components/justica/TrackProcessModal'
+import { createJusticeDemandAction, getGuestJusticeDemandsAction } from '@/app/actions/justice-actions'
+import { DocumentCard } from '@/components/shared/DocumentCard'
 
 interface Demand {
   id: string
@@ -35,6 +35,7 @@ interface Demand {
   status: 'draft' | 'ready' | 'filed' | 'timeout'
   valor_causa: number
   created_at: string
+  metadata?: any
 }
 
 export default function JusticaPage() {
@@ -44,7 +45,62 @@ export default function JusticaPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState<'all' | 'ready' | 'generating'>('all')
   const [loading, setLoading] = useState(true)
+  const [isTrackModalOpen, setIsTrackModalOpen] = useState(false)
   const { needsOnboarding } = useOnboardingGuard()
+
+  const loadDemands = async () => {
+    try {
+      setLoading(true)
+      const guestId = localStorage.getItem('ianow_guest_id')
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      let allDemands: any[] = []
+
+      // 1. Buscas se estiver logado (pela organização)
+      if (session) {
+        const { data: membership } = await supabase
+          .from('memberships')
+          .select('organization_id')
+          .eq('user_id', session.user.id)
+          .single() as any
+
+        if (membership) {
+          const { data: orgDemands } = await supabase
+            .from('justice_demands')
+            .select('*')
+            .eq('organization_id', membership.organization_id)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+          
+          if (orgDemands) allDemands = [...orgDemands]
+        }
+      }
+
+      // 2. Buscas pelo Guest ID (Usando Server Action para contornar RLS)
+      if (guestId) {
+        const { data: guestDemands } = await getGuestJusticeDemandsAction(guestId)
+        if (guestDemands) {
+          const guestIds = new Set(allDemands.map(d => d.id))
+          guestDemands.forEach((d: any) => {
+            if (!guestIds.has(d.id)) {
+              allDemands.push(d)
+            }
+          })
+        }
+      }
+
+      allDemands.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      setDemands(allDemands)
+    } catch (err) {
+      console.error('Erro ao carregar demandas:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadDemands()
+  }, [])
 
   const handleNewProtocol = () => {
     if (needsOnboarding) {
@@ -54,115 +110,28 @@ export default function JusticaPage() {
     }
   }
 
-  useEffect(() => {
-    async function loadDemands() {
-      try {
-        setLoading(true)
-        const guestId = localStorage.getItem('ianow_guest_id')
-        const { data: { session } } = await supabase.auth.getSession()
-        
-        let allDemands: any[] = []
-
-        // 1. Buscas se estiver logado (pela organização)
-        if (session) {
-          const { data: membership } = await supabase
-            .from('memberships')
-            .select('organization_id')
-            .eq('user_id', session.user.id)
-            .single() as any
-
-          if (membership) {
-            const { data: orgDemands } = await supabase
-              .from('justice_demands')
-              .select('*')
-              .eq('organization_id', membership.organization_id)
-              .is('deleted_at', null)
-              .order('created_at', { ascending: false })
-            
-            if (orgDemands) allDemands = [...orgDemands]
-          }
-        }
-
-        // 2. Buscas pelo Guest ID (Usando Server Action para contornar RLS)
-        if (guestId) {
-          const { getGuestJusticeDemandsAction } = await import('@/app/actions/justice-actions')
-          const { data: guestDemands } = await getGuestJusticeDemandsAction(guestId)
-
-          if (guestDemands) {
-            // Merge e remove duplicatas (caso o processo já tenha sido migrado para a conta do usuário)
-            const guestIds = new Set(allDemands.map(d => d.id))
-            guestDemands.forEach((d: any) => {
-              if (!guestIds.has(d.id)) {
-                allDemands.push(d)
-              }
-            })
-          }
-        }
-
-        // Re-ordenar por data de criação após merge
-        allDemands.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-
-        setDemands(allDemands)
-      } catch (err) {
-        console.error('Erro ao carregar demandas:', err)
-      } finally {
-        setLoading(false)
-      }
+  const handleTrackProcess = async (processNumber: string) => {
+    const guestId = !localStorage.getItem('sb-auth-token') 
+      ? (localStorage.getItem('ianow_guest_id') || crypto.randomUUID()) 
+      : null
+    
+    if (guestId && !localStorage.getItem('ianow_guest_id')) {
+      localStorage.setItem('ianow_guest_id', guestId)
     }
 
-    loadDemands()
-  }, [supabase])
-
-  const handleTrackExternal = async (processNumber: string) => {
-    try {
-      const guestId = !localStorage.getItem('sb-auth-token') 
-        ? (localStorage.getItem('ianow_guest_id') || crypto.randomUUID()) 
-        : null
-      
-      if (guestId && !localStorage.getItem('ianow_guest_id')) {
-        localStorage.setItem('ianow_guest_id', guestId)
+    const { data: newDemand, error } = await createJusticeDemandAction({
+      status: 'ready',
+      tipo_acao: 'Acompanhamento Externo',
+      metadata: {
+        process_number: processNumber,
+        description: 'Processo adicionado para acompanhamento de movimentações.',
+        is_external: true,
+        guest_id: guestId
       }
+    })
 
-      const { data: { session } } = await supabase.auth.getSession()
-      let orgId: string | null = null
-
-      if (session) {
-        const { data: membership } = await supabase
-          .from('memberships')
-          .select('organization_id')
-          .eq('user_id', session.user.id)
-          .single() as any
-        orgId = membership?.organization_id
-      } else {
-        // Guest mode fallback org
-        const { data: sandbox } = await supabase.from('organizations').select('id').limit(1).single() as any
-        orgId = sandbox?.id
-      }
-
-      if (!orgId) return
-
-      const { data: newDemand, error } = await supabase
-        .from('justice_demands')
-        .insert({
-          organization_id: orgId,
-          user_id: session?.user.id || null,
-          status: 'ready',
-          tipo_acao: 'Acompanhamento Externo',
-          metadata: {
-            process_number: processNumber,
-            description: 'Processo adicionado para acompanhamento de movimentações.',
-            is_external: true,
-            guest_id: guestId
-          }
-        } as any)
-        .select().single() as any
-
-      if (error) throw error
-      router.push(`/justica/${newDemand.id}`)
-    } catch (err) {
-      console.error('Erro ao adicionar processo para acompanhamento:', err)
-      alert('Erro ao adicionar processo.')
-    }
+    if (error) throw new Error(error)
+    router.push(`/justica/${newDemand.id}`)
   }
 
   const [metrics, setMetrics] = useState({
@@ -184,8 +153,6 @@ export default function JusticaPage() {
 
   const filteredDemands = demands.filter(d => {
     const matchesSearch = (d.tipo_acao || '').toLowerCase().includes(searchTerm.toLowerCase())
-    const isGenerating = d.status === 'draft'
-    const isStale = isGenerating && (new Date().getTime() - new Date(d.created_at).getTime() > 180000)
     
     let matchesFilter = filter === 'all'
     if (filter === 'generating') matchesFilter = d.status === 'draft'
@@ -193,20 +160,6 @@ export default function JusticaPage() {
     
     return matchesSearch && matchesFilter
   })
-
-  const getStatusBadge = (status: Demand['status']) => {
-    switch (status) {
-      case 'draft':
-        return { label: 'Rascunho', className: 'bg-slate-100 text-slate-600 border-slate-200', icon: <Clock size={10} /> }
-      case 'ready':
-      case 'filed':
-        return { label: 'Concluído', className: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: <CheckCircle2 size={10} /> }
-      case 'timeout':
-        return { label: 'Timeout', className: 'bg-amber-100 text-amber-700 border-amber-200', icon: <AlertCircle size={10} /> }
-      default:
-        return { label: status, className: 'bg-slate-100 text-slate-600 border-slate-200', icon: <AlertCircle size={10} /> }
-    }
-  }
 
   return (
     <DashboardLayout>
@@ -217,10 +170,7 @@ export default function JusticaPage() {
           <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
             <Button 
               variant="outline"
-              onClick={() => {
-                const num = window.prompt('Digite o número do processo para acompanhar (CNJ):')
-                if (num) handleTrackExternal(num)
-              }}
+              onClick={() => setIsTrackModalOpen(true)}
               className="h-12 px-6 rounded-2xl border-slate-200 bg-white text-slate-700 font-black text-[11px] uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center gap-2 group"
             >
               <Search size={16} className="text-primary group-hover:scale-110 transition-transform" />
@@ -232,154 +182,124 @@ export default function JusticaPage() {
           </div>
         }
       >
-        <div className="flex flex-col gap-y-8">
-          
-          {/* Métricas */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="bg-white border-slate-100 flex flex-col items-center justify-center gap-y-4 p-8 group hover:border-primary/20 transition-all text-center animate-in slide-in-from-bottom-[10px] fade-in">
-              <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all duration-500">
-                <Scale size={28} />
-              </div>
-              <div className="flex flex-col gap-y-1">
-                <span className="text-3xl font-black text-slate-900">{metrics.total}</span>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Processos Ativos</span>
-              </div>
-            </Card>
-            
-            <Card className="bg-white border-slate-100 flex flex-col items-center justify-center gap-y-4 p-8 group hover:border-emerald-500/20 transition-all text-center animate-in slide-in-from-bottom-[10px] fade-in delay-100">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-500 group-hover:text-white transition-all duration-500">
-                <Gavel size={28} />
-              </div>
-              <div className="flex flex-col gap-y-1">
-                <span className="text-2xl font-black text-slate-900 overflow-hidden text-ellipsis whitespace-nowrap px-2">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(metrics.totalValue)}
-                </span>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Valor em Causa</span>
-              </div>
-            </Card>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <Card className="p-10 bg-white border-none shadow-sm flex flex-col items-center justify-center text-center gap-4 group hover:translate-y-[-4px] transition-all duration-300">
+            <div className="w-16 h-16 rounded-[24px] bg-blue-50 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors duration-300">
+              <Scale size={28} />
+            </div>
+            <div>
+              <p className="text-4xl font-black text-slate-900 leading-none mb-2">{metrics.total}</p>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Processos Ativos</p>
+            </div>
+          </Card>
 
-            <Card className="bg-white border-slate-100 flex flex-col items-center justify-center gap-y-4 p-8 group hover:border-blue-500/20 transition-all text-center animate-in slide-in-from-bottom-[10px] fade-in delay-200">
-              <div className="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-600 group-hover:bg-blue-500 group-hover:text-white transition-all duration-500">
-                <Zap size={28} />
-              </div>
-              <div className="flex flex-col gap-y-1">
-                <span className="text-3xl font-black text-slate-900">{metrics.efficiency}</span>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Eficiência da IA</span>
-              </div>
-            </Card>
+          <Card className="p-10 bg-white border-none shadow-sm flex flex-col items-center justify-center text-center gap-4 group hover:translate-y-[-4px] transition-all duration-300">
+            <div className="w-16 h-16 rounded-[24px] bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors duration-300">
+              <Gavel size={28} />
+            </div>
+            <div>
+              <p className="text-4xl font-black text-slate-900 leading-none mb-2">
+                R$ {metrics.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
+              </p>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Valor em Causa</p>
+            </div>
+          </Card>
+
+          <Card className="p-10 bg-white border-none shadow-sm flex flex-col items-center justify-center text-center gap-4 group hover:translate-y-[-4px] transition-all duration-300">
+            <div className="w-16 h-16 rounded-[24px] bg-indigo-50 flex items-center justify-center text-indigo-500 group-hover:bg-indigo-500 group-hover:text-white transition-colors duration-300">
+              <Zap size={28} fill="currentColor" />
+            </div>
+            <div>
+              <p className="text-4xl font-black text-slate-900 leading-none mb-2">{metrics.efficiency}</p>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Eficiência da IA</p>
+            </div>
+          </Card>
+        </div>
+
+        <div className="mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-4 rounded-[24px] shadow-sm">
+          <div className="flex items-center gap-2 p-1.5 bg-slate-50 rounded-2xl w-fit">
+            <button 
+              onClick={() => setFilter('all')}
+              className={cn(
+                "px-6 h-10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                filter === 'all' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+              )}
+            >Todas</button>
+            <button 
+              onClick={() => setFilter('ready')}
+              className={cn(
+                "px-6 h-10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                filter === 'ready' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+              )}
+            >Prontas</button>
+            <button 
+              onClick={() => setFilter('generating')}
+              className={cn(
+                "px-6 h-10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                filter === 'generating' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+              )}
+            >Em Fila</button>
           </div>
 
-          <div className="flex flex-col space-y-6">
-            <div className="flex flex-col space-y-8">
-              {/* Filters and Search - Padrão iaNow */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/30 p-2 rounded-[22px] border border-slate-100 shadow-inner-sm">
-          <div className="relative flex items-center p-1 bg-slate-100/50 rounded-2xl w-full sm:w-auto">
-                  <div 
-                    className={cn(
-                      "absolute h-[34px] transition-all duration-300 ease-out bg-white rounded-xl shadow-sm border border-slate-200/50",
-                      filter === 'all' && "w-[calc(33.33%-4px)] left-1 sm:w-[80px] sm:left-1",
-                      filter === 'ready' && "w-[calc(33.33%-4px)] left-[33.33%] sm:w-[94px] sm:left-[88px]",
-                      filter === 'generating' && "w-[calc(33.33%-4px)] left-[calc(66.66%+2px)] sm:w-[94px] sm:left-[186px]"
-                    )}
-                  />
-                  
-                  <button onClick={() => setFilter('all')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[80px]", filter === 'all' ? 'text-primary' : 'text-slate-400 hover:text-slate-600')}>Todas</button>
-                  <button onClick={() => setFilter('ready')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[94px]", filter === 'ready' ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600')}>Prontas</button>
-                  <button onClick={() => setFilter('generating')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[94px]", filter === 'generating' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600')}>Em Fila</button>
-                </div>
-
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+          <div className="relative group w-full md:w-80">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-primary transition-colors" />
             <input 
-              type="text" 
+              type="text"
+              placeholder="Buscar processo..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar processo..."
-              className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-semibold text-slate-700 placeholder:text-slate-400"
+              className="w-full h-12 pl-12 pr-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-600 placeholder:text-slate-300 focus:ring-4 focus:ring-primary/5 transition-all outline-none"
             />
           </div>
         </div>
 
-        {loading ? (
-          <div className="flex h-full w-full items-center justify-center min-h-[400px]">
-            <Loader2 className="w-8 h-8 text-primary animate-spin" />
-          </div>
-        ) : filteredDemands.length === 0 ? (
-          <div className="mt-8">
+        <div className="space-y-4">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-32 space-y-4">
+              <Loader2 className="w-12 h-12 text-primary animate-spin" />
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Escaneando Tribunal...</p>
+            </div>
+          ) : filteredDemands.length > 0 ? (
+            filteredDemands.map((demand) => (
+              <DocumentCard
+                key={demand.id}
+                id={demand.id}
+                href={`/justica/${demand.id}`}
+                title={demand.tipo_acao || 'Acompanhamento Estratégico'}
+                subtitle={demand.valor_causa ? `Valor da Causa: R$ ${demand.valor_causa.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : (demand.metadata?.process_number ? `Processo nº ${demand.metadata.process_number}` : 'Valor não informado')}
+                date={new Date(demand.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                isGenerating={demand.status === 'draft'}
+                badge={{
+                  label: demand.status === 'ready' || demand.status === 'filed' ? 'CONCLUÍDO' : 'GERANDO',
+                  icon: demand.status === 'ready' || demand.status === 'filed' ? <CheckCircle2 size={10} /> : <Clock size={10} />,
+                  className: demand.status === 'ready' || demand.status === 'filed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-blue-50 text-blue-600 border-blue-100'
+                }}
+                moduleLabel="MINERVA • JUSTIÇA GRATUITA"
+                icon={<Scale size={24} />}
+                generatingIcon={<Loader2 size={24} className="animate-spin" />}
+                footerTags={[
+                  { icon: <CheckCircle2 size={12} className="text-emerald-500" />, label: 'Processo Gratuito' },
+                  { icon: <FileSignature size={12} className="text-slate-400" />, label: 'Pronto para Protocolar' }
+                ]}
+              />
+            ))
+          ) : (
             <EmptyState 
               icon={Gavel}
-              title="Nenhuma demanda encontrada"
-              description={searchTerm || filter !== 'all' ? "Tente ajustar seus filtros de busca." : "Você ainda não iniciou nenhum protocolo via Jus Postulandi."}
-              actionText="Iniciar Primeiro Caso"
+              title="Sua Prateleira de Justiça está Vazia"
+              description="Você ainda não gerou petições ou iniciou o acompanhamento de processos."
+              actionText="Iniciar Novo Caso"
               onClick={handleNewProtocol}
-              className="mt-8"
             />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {filteredDemands.map((demand) => {
-              const isGenerating = demand.status === 'draft'
-              const isStale = isGenerating && (new Date().getTime() - new Date(demand.created_at).getTime() > 180000)
-              const badge = getStatusBadge(isStale ? 'timeout' : demand.status)
-              const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(demand.valor_causa)
-              
-              return (
-                <DocumentCard
-                   key={demand.id}
-                   id={demand.id}
-                   href={`/justica/${demand.id}`}
-                   title={demand.tipo_acao || 'Ação não classificada'}
-                   subtitle={`Valor da Causa: ${valorFormatado}`}
-                   date={new Date(demand.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                   isGenerating={isGenerating}
-                   isTimeout={isStale}
-                   icon={<Scale size={22} />}
-                   generatingIcon={<Clock size={16} className="animate-spin" />}
-                   timeoutIcon={<AlertCircle size={22} />}
-                   moduleLabel="Minerva · Justiça Gratuita"
-                   badge={badge}
-                   footerTags={[
-                     {
-                       icon: <div className="flex -space-x-1.5 mr-1">{[1,2,3].map(i => <div key={i} className="w-5 h-5 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center"><Scale size={8} className="text-primary" /></div>)}</div>,
-                       label: 'Processo Gratuito'
-                     },
-                     {
-                       icon: <FileSignature size={11} className="text-primary/70" />,
-                       label: 'Pronto para Protocolar'
-                     }
-                   ]}
-                />
-              )
-            })}
-          </div>
-        )}
-        </div>
-        </div>
-
-        {/* Linha 5: Cards Informativos - Padrão iaNow */}
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
-           <Card className="bg-emerald-50/50 border-emerald-100 p-6 rounded-3xl">
-              <h4 className="text-emerald-800 font-black text-xs uppercase tracking-widest mb-2">Limite do JEC</h4>
-              <p className="text-emerald-700/80 text-sm leading-relaxed">
-                Você pode protocolar ações de até 20 salários mínimos sem advogado. Acima disso, será necessário acompanhamento profissional.
-              </p>
-           </Card>
-           <Card className="bg-amber-50/50 border-amber-100 p-6 rounded-3xl">
-              <h4 className="text-amber-800 font-black text-xs uppercase tracking-widest mb-2">Justiça Gratuita</h4>
-              <p className="text-amber-700/80 text-sm leading-relaxed">
-                No primeiro grau dos Juizados Especiais, não há cobrança de custas processuais ou honorários para ingressar com a ação.
-              </p>
-           </Card>
-           <Card className="bg-blue-50/50 border-blue-100 p-6 rounded-3xl">
-              <h4 className="text-blue-800 font-black text-xs uppercase tracking-widest mb-2">Documentação</h4>
-              <p className="text-blue-700/80 text-sm leading-relaxed">
-                Tenha em mãos CPF/CNPJ, comprovante de endereço e todas as provas (conversas, prints, notas fiscais) organizadas.
-              </p>
-           </Card>
-        </div>
-
+          )}
         </div>
       </PageContainer>
+
+      <TrackProcessModal 
+        isOpen={isTrackModalOpen}
+        onClose={() => setIsTrackModalOpen(false)}
+        onSuccess={handleTrackProcess}
+      />
     </DashboardLayout>
   )
 }

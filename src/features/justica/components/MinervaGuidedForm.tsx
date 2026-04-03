@@ -46,22 +46,26 @@ export function MinervaGuidedForm({ onComplete, initialUser }: MinervaGuidedForm
     evidenceFiles: [] as any[]
   })
   
+  const initialLoadRef = useRef(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [messages, isTyping])
-
-  useEffect(() => {
+    if (initialLoadRef.current) return
+    initialLoadRef.current = true
+    
     // Initial message
-    addBotMessage("Olá! Sou a Minerva. Vou te ajudar a estruturar sua petição do JEC (Pequenas Causas) de forma simples e rápida.")
+    addBotMessage("Olá! Sou a Minerva. Vou te ajudar a estruturar sua petição do JEC de forma simples e rápida.")
     setTimeout(() => {
       addBotMessage("Para começar, me conte em poucas palavras: o que aconteceu? Qual é o seu problema hoje?")
       setCurrentStep('describe_problem')
-    }, 1000)
+    }, 1500)
   }, [])
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+    }
+  }, [messages, isTyping])
 
   const addBotMessage = (content: string | React.ReactNode, type: Message['type'] = 'text') => {
     setIsTyping(true)

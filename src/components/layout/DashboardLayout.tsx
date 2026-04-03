@@ -37,7 +37,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen print:h-auto overflow-hidden print:overflow-visible bg-slate-200" suppressHydrationWarning>
+    <div className="flex h-screen print:h-auto overflow-hidden print:overflow-visible bg-slate-200 print:bg-white" suppressHydrationWarning>
       {/* Sidebar - Controlada internamente para mobile e desktop */}
       <div className="print:hidden">
         <Sidebar 

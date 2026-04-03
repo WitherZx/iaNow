@@ -33,18 +33,18 @@ TONALIDADE:
 - Transmita inteligência, autoridade jurídica e confiança.
 
 DADOS DO PROCESSO:
-Número: \${processData.number}
-Status: \${processData.status}
-Tribunal: \${processData.court}
-Movimentações: \${JSON.stringify(processData.movements)}
+Número: ${processData.number}
+Status: ${processData.status}
+Tribunal: ${processData.court}
+Movimentações: ${JSON.stringify(processData.movements)}
 
-FORMATO DE RESPOSTA (JSON):
+FORMATO DE RESPOSTA (JSON estrito, sem markdown):
 {
   "resumo": "Breve parágrafo resumindo a situação atual do processo.",
   "traducao_leigo": "Explicação detalhada e simples para uma pessoa comum entender exatamente o que está acontecendo e o que as últimas movimentações significam na prática.",
   "insights": ["Insight 1", "Insight 2", "Insight 3"],
   "proximos_passos": ["Ação recomendada 1", "Ação recomendada 2"],
-  "alerta_risco": "Se houver algum risco imediato (prazos, decisões desfavoráveis), destaque aqui."
+  "alerta_risco": "Se houver algum risco imediato (prazos, decisões desfavoráveis), destaque aqui. Se não houver risco, retorne null."
 }`
 
     const userPrompt = `Analise as movimentações recentes deste processo e forneça sua orientação estratégica como Minerva.`
