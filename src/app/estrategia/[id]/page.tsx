@@ -58,83 +58,90 @@ export default function EstrategiaDetalhePage() {
   }, [strategy])
 
   useEffect(() => {
-    async function checkUser() {
+    async function loadAndCheck() {
+      if (!id) return
       try {
-        const singleUnlockKey = `ianow_unlock_estrategia_${id as string}`
-        const hasLocalUnlock =
-          localStorage.getItem(singleUnlockKey) === 'true' ||
-          localStorage.getItem('ianow_unlock_plan_monthly') === 'true'
+        setLoading(true)
+        const guestId = localStorage.getItem('ianow_guest_id')
 
-        if (hasLocalUnlock) {
-          setShowPaywall(false)
+        // 1. Buscar a estratégia via Server Action (com suporte a Guest)
+        const { getStrategyAction } = await import('@/app/actions/strategy-actions')
+        const { data, error } = await getStrategyAction(id as string, guestId)
+
+        if (error || !data) {
+          // Fallback para API pública se houver erro
+          const response = await fetch(`/api/strategy/public?id=${id as string}`)
+          if (!response.ok) throw new Error('Falha ao carregar estratégia')
+          const fallbackData = await response.json()
+          setStrategy(fallbackData)
+          setLoading(false)
+          return
         }
 
-        const { data: { user } } = await supabase.auth.getUser()
-        console.log('Auth Check - User:', user ? user.email : 'No user')
-        if (user) {
+        setStrategy(data)
+
+        // --- Lógica de Paywall & Auth ---
+        const { data: { session } } = await supabase.auth.getSession()
+        const isGuestDoc = data.metadata?.guest_id === guestId
+        const isUnlocked = data.metadata?.unlocked === true
+
+        // 1. Se estiver desbloqueado explicitamente (avulso), libera
+        if (isUnlocked) {
+          setShowPaywall(false)
+          setIsGuest(false)
+        } 
+        // 2. Se for Guest e não estiver desbloqueado, bloqueia
+        else if (isGuestDoc && !session) {
+          setShowPaywall(true)
+          setIsGuest(true)
+        }
+        // 3. Se estiver logado, verifica plano Pro
+        else if (session) {
           setIsGuest(false)
           const { data: membership } = await supabase
             .from('memberships')
             .select('organization_id')
-            .eq('user_id', user.id)
+            .eq('user_id', session.user.id)
             .eq('status', 'active')
-            .limit(1)
             .maybeSingle()
 
-          if (membership?.organization_id) {
-            const { data: organization } = await supabase
+          if (!membership) {
+            setShowPaywall(true)
+          } else {
+            const { data: org } = await supabase
               .from('organizations')
               .select('plan_id')
               .eq('id', membership.organization_id)
               .single()
 
-            if (organization?.plan_id) {
+            if (org?.plan_id) {
               const { data: plan } = await supabase
                 .from('plans')
                 .select('slug')
-                .eq('id', organization.plan_id)
+                .eq('id', org.plan_id)
                 .maybeSingle()
-              if (plan?.slug === 'pro') setShowPaywall(false)
-              else if (!hasLocalUnlock) setShowPaywall(true)
-            } else if (!hasLocalUnlock) {
+
+              if (plan?.slug === 'pro') {
+                setShowPaywall(false)
+              } else {
+                setShowPaywall(true)
+              }
+            } else {
               setShowPaywall(true)
             }
-          } else if (!hasLocalUnlock) {
-            setShowPaywall(true)
           }
         } else {
-          setIsGuest(true)
-          if (!hasLocalUnlock) setShowPaywall(true)
+          setShowPaywall(true)
         }
       } catch (err) {
-        console.error('Auth Check Error:', err)
-        setIsGuest(true)
-        setShowPaywall(true)
-      }
-    }
-    checkUser()
-  }, [id])
-
-  useEffect(() => {
-    async function fetchStrategy() {
-      if (!id) return
-      try {
-        const response = await fetch(`/api/strategy/public?id=${id as string}`)
-        
-        if (!response.ok) {
-          throw new Error('Falha ao carregar estratégia')
-        }
-        
-        const data = await response.json()
-        setStrategy(data)
-      } catch (err) {
-        console.error('Erro ao buscar estratégia:', err)
+        console.error('Error loading strategy:', err)
+        toast.error('Ocorreu um erro ao carregar os dados.')
       } finally {
         setLoading(false)
       }
     }
 
-    if (id) fetchStrategy()
+    loadAndCheck()
   }, [id])
 
   const handleRefine = async () => {

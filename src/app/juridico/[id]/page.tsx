@@ -119,27 +119,77 @@ export default function ViewDocumentPage() {
     async function loadDocument() {
       if (!id) return
       try {
-        const response = await fetch(`/api/juridico/document/${id as string}`, {
-          method: 'GET',
-          headers: { 'X-Guest-Id': getOrCreateGuestId() }
-        })
-        const payload = await response.json()
+        const guestId = getOrCreateGuestId()
+        
+        // 1. Usar a nova Server Action para buscar o documento (com suporte a Guest)
+        const { getJuridicoDocumentAction } = await import('@/app/actions/juridico-actions')
+        const { data, error } = await getJuridicoDocumentAction(id as string, guestId)
 
-        if (response.status === 402 && payload?.paywall) {
-          setShowPaywall(true)
-          setDoc(payload.document || null)
-          setLoading(false)
-          if (interval) {
-            clearInterval(interval)
-            interval = null
+        if (error) {
+          // Fallback para API tradicional se houver erro na Action (segurança extra)
+          const response = await fetch(`/api/juridico/document/${id as string}`, {
+            method: 'GET',
+            headers: { 'X-Guest-Id': guestId }
+          })
+          const payload = await response.json()
+
+          if (response.status === 402 && payload?.paywall) {
+            setShowPaywall(true)
+            setDoc(payload.document || null)
+            setLoading(false)
+            if (interval) clearInterval(interval)
+            return
           }
-          return
+          throw new Error(error || 'Falha ao carregar documento')
         }
 
-        if (!response.ok) throw new Error(payload?.error || 'Falha ao carregar documento')
+        // --- Lógica de Paywall Estrita ---
+        const { data: { session } } = await supabase.auth.getSession()
+        const isGuestDoc = data.metadata?.guest_id === guestId
+        const isUnlocked = data.metadata?.unlocked === true
+        
+        if (isUnlocked) {
+          setShowPaywall(false)
+        } else if (!session) {
+          // Guest mode
+          if (isGuestDoc) setShowPaywall(true)
+          else setShowPaywall(true) // Se não é dono nem tá logado, bloqueia
+        } else {
+          // Registered user mode - check plan
+          const { data: membership } = await supabase
+            .from('memberships')
+            .select('organization_id')
+            .eq('user_id', session.user.id)
+            .eq('status', 'active')
+            .maybeSingle()
+          
+          if (!membership) {
+            setShowPaywall(true)
+          } else {
+            const { data: org } = await supabase
+              .from('organizations')
+              .select('plan_id')
+              .eq('id', membership.organization_id)
+              .single()
+            
+            if (org?.plan_id) {
+              const { data: plan } = await supabase
+                .from('plans')
+                .select('slug')
+                .eq('id', org.plan_id)
+                .maybeSingle()
+              
+              if (plan?.slug === 'pro') {
+                setShowPaywall(false)
+              } else {
+                setShowPaywall(true)
+              }
+            } else {
+              setShowPaywall(true)
+            }
+          }
+        }
 
-        const data = payload.document
-        setShowPaywall(false)
         setDoc(data)
         setEditContent(data?.content || '')
 

@@ -5,12 +5,28 @@ import { Topbar } from './Topbar'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/utils/cn'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { linkGuestDataToUserAction } from '@/app/actions/auth-actions'
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, loading } = useAuth()
+  const { isAuthenticated, user, loading } = useAuth()
   const [isSidebarOpen, setSidebarOpen] = useState(false)
   const router = useRouter()
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const gid = localStorage.getItem('ianow_guest_id')
+      if (user && gid) {
+        linkGuestDataToUserAction(user.id, gid).then((res) => {
+          if (!res?.error) {
+            localStorage.removeItem('ianow_guest_id')
+          }
+        }).catch(err => {
+          console.error('Migration failed:', err)
+        })
+      }
+    }
+  }, [isAuthenticated, user])
 
   if (loading) {
     return (

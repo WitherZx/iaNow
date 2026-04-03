@@ -50,6 +50,7 @@ import { ProcessTrackingSection } from '@/components/shared/ProcessTrackingSecti
 import { ProcessAnalysisSection } from '@/components/shared/ProcessAnalysisSection'
 import { legalApi } from '@/lib/services/legal-api'
 import { getMonthlyPaymentLink, getSinglePaymentLink } from '@/lib/monetization'
+import { getJusticeDemandAction } from '@/app/actions/justice-actions'
 
 export default function DemandDetailPage() {
   const { id } = useParams()
@@ -122,74 +123,84 @@ export default function DemandDetailPage() {
   }
 
   useEffect(() => {
-    async function loadDemand() {
+    async function loadAndCheck() {
       if (!id) return
       try {
         setLoading(true)
-        const { data, error } = await supabase
-          .from('justice_demands')
-          .select('*')
-          .eq('id', id)
-          .single()
+        const guestId = localStorage.getItem('ianow_guest_id')
+        const result = await getJusticeDemandAction(id as string, guestId)
 
-        if (error) throw error
+        if (!result.success || !result.data) {
+          setDemand(null)
+          setLoading(false)
+          return
+        }
+
+        const data = result.data
         setDemand(data)
         setEditContent(data.metadata?.petition_content || '')
+
+        // --- Lógica de Paywall ---
+        const { data: { session } } = await supabase.auth.getSession()
+        const isGuestDoc = data.metadata?.guest_id === guestId
+        const isUnlocked = data.metadata?.unlocked === true
+
+        // 1. Se estiver desbloqueado explicitamente (avulso), libera
+        if (isUnlocked) {
+          setShowPaywall(false)
+        } 
+        // 2. Se for Guest e não estiver desbloqueado, bloqueia
+        else if (isGuestDoc && !session) {
+          setShowPaywall(true)
+        }
+        // 3. Se estiver logado, verifica plano Pro
+        else if (session) {
+          const { data: membership } = await supabase
+            .from('memberships')
+            .select('organization_id')
+            .eq('user_id', session.user.id)
+            .eq('status', 'active')
+            .maybeSingle()
+
+          if (!membership) {
+            setShowPaywall(true)
+          } else {
+            // Buscar plano da organização
+            const { data: org } = await supabase
+              .from('organizations')
+              .select('plan_id')
+              .eq('id', membership.organization_id)
+              .single()
+
+            if (org?.plan_id) {
+              const { data: plan } = await supabase
+                .from('plans')
+                .select('slug')
+                .eq('id', org.plan_id)
+                .maybeSingle()
+
+              if (plan?.slug === 'pro') {
+                setShowPaywall(false)
+              } else {
+                setShowPaywall(true)
+              }
+            } else {
+              setShowPaywall(true)
+            }
+          }
+        } else {
+          // Fallback final
+          setShowPaywall(true)
+        }
       } catch (err) {
-        toast.error('Ocorreu um erro ao carregar a demanda.')
+        console.error('Error loading demand:', err)
+        toast.error('Erro ao carregar os dados.')
       } finally {
         setLoading(false)
       }
     }
 
-    loadDemand()
-
-    // Check auth for paywall
-    async function checkAuth() {
-      const singleUnlockKey = `ianow_unlock_processo_${id as string}`
-      const hasLocalUnlock =
-        localStorage.getItem(singleUnlockKey) === 'true' ||
-        localStorage.getItem('ianow_unlock_plan_monthly') === 'true'
-      if (hasLocalUnlock) {
-        setShowPaywall(false)
-      }
-
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        const { data: membership } = await supabase
-          .from('memberships')
-          .select('organization_id')
-          .eq('user_id', session.user.id)
-          .eq('status', 'active')
-          .limit(1)
-          .maybeSingle()
-
-        if (membership?.organization_id) {
-          const { data: organization } = await supabase
-            .from('organizations')
-            .select('plan_id')
-            .eq('id', membership.organization_id)
-            .single()
-
-          if (organization?.plan_id) {
-            const { data: plan } = await supabase
-              .from('plans')
-              .select('slug')
-              .eq('id', organization.plan_id)
-              .maybeSingle()
-            if (plan?.slug === 'pro') setShowPaywall(false)
-            else if (!hasLocalUnlock) setShowPaywall(true)
-          } else if (!hasLocalUnlock) {
-            setShowPaywall(true)
-          }
-        } else if (!hasLocalUnlock) {
-          setShowPaywall(true)
-        }
-      } else if (!hasLocalUnlock) {
-        setShowPaywall(true)
-      }
-    }
-    checkAuth()
+    loadAndCheck()
   }, [id, supabase])
 
   const handleSave = async () => {

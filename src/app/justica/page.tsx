@@ -58,29 +58,51 @@ export default function JusticaPage() {
     async function loadDemands() {
       try {
         setLoading(true)
+        const guestId = localStorage.getItem('ianow_guest_id')
         const { data: { session } } = await supabase.auth.getSession()
-        if (!session) {
-          setDemands([])
-          return
+        
+        let allDemands: any[] = []
+
+        // 1. Buscas se estiver logado (pela organização)
+        if (session) {
+          const { data: membership } = await supabase
+            .from('memberships')
+            .select('organization_id')
+            .eq('user_id', session.user.id)
+            .single() as any
+
+          if (membership) {
+            const { data: orgDemands } = await supabase
+              .from('justice_demands')
+              .select('*')
+              .eq('organization_id', membership.organization_id)
+              .is('deleted_at', null)
+              .order('created_at', { ascending: false })
+            
+            if (orgDemands) allDemands = [...orgDemands]
+          }
         }
 
-        const { data: membership } = await supabase
-          .from('memberships')
-          .select('organization_id')
-          .eq('user_id', session.user.id)
-          .single() as any
+        // 2. Buscas pelo Guest ID (Usando Server Action para contornar RLS)
+        if (guestId) {
+          const { getGuestJusticeDemandsAction } = await import('@/app/actions/justice-actions')
+          const { data: guestDemands } = await getGuestJusticeDemandsAction(guestId)
 
-        if (!membership) return
+          if (guestDemands) {
+            // Merge e remove duplicatas (caso o processo já tenha sido migrado para a conta do usuário)
+            const guestIds = new Set(allDemands.map(d => d.id))
+            guestDemands.forEach((d: any) => {
+              if (!guestIds.has(d.id)) {
+                allDemands.push(d)
+              }
+            })
+          }
+        }
 
-        const { data, error } = await supabase
-          .from('justice_demands')
-          .select('*')
-          .eq('organization_id', membership.organization_id)
-          .is('deleted_at', null)
-          .order('created_at', { ascending: false })
+        // Re-ordenar por data de criação após merge
+        allDemands.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
-        if (error) throw error
-        setDemands(data || [])
+        setDemands(allDemands)
       } catch (err) {
         console.error('Erro ao carregar demandas:', err)
       } finally {

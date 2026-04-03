@@ -63,43 +63,62 @@ export default function EstrategiaPage() {
     async function fetchStrategies() {
       try {
         setLoading(true)
-        if (!session?.user?.id) {
-          setStrategies([])
-          return
-        }
-        // Pegar a organização do usuário
-        const { data: membershipData } = await supabase
-          .from('memberships')
-          .select('organization_id')
-          .eq('user_id', session.user.id)
-          .eq('status', 'active')
-          .limit(1)
-          .single() as any
+        const guestId = localStorage.getItem('ianow_guest_id')
+        const { data: { session: currentSession } } = await supabase.auth.getSession()
+        
+        let allStrats: any[] = []
 
-        if (membershipData) {
-          const { data, error } = await supabase
-            .from('strategies')
-            .select('*')
-            .eq('organization_id', membershipData.organization_id)
-            .order('created_at', { ascending: false })
-          
-          if (data) {
-            setStrategies((data as any[]).map(s => ({
-              id: s.id,
-              title: s.title,
-              description: s.description,
-              status: s.status === 'active' ? 'ready' : s.status === 'processing' ? 'generating' : s.status,
-              created_at: new Date(s.created_at).toLocaleDateString('pt-BR', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric'
-              }),
-              raw_created_at: s.created_at,
-              version: s.version || 1,
-              ai_model: s.ai_model || 'Minerva'
-            })))
+        // 1. Buscas se estiver logado (pela organização)
+        if (currentSession) {
+          const { data: membershipData } = await supabase
+            .from('memberships')
+            .select('organization_id')
+            .eq('user_id', currentSession.user.id)
+            .maybeSingle() as any
+
+          if (membershipData) {
+            const { data: orgStrats } = await supabase
+              .from('strategies')
+              .select('*')
+              .eq('organization_id', membershipData.organization_id)
+              .order('created_at', { ascending: false })
+            
+            if (orgStrats) allStrats = [...orgStrats]
           }
         }
+
+        // 2. Buscas pelo Guest ID (Usando Server Action para contornar RLS)
+        if (guestId) {
+          const { getGuestStrategiesAction } = await import('@/app/actions/strategy-actions')
+          const { data: guestStrats } = await getGuestStrategiesAction(guestId)
+
+          if (guestStrats) {
+            const existingIds = new Set(allStrats.map(s => s.id))
+            guestStrats.forEach((s: any) => {
+              if (!existingIds.has(s.id)) {
+                allStrats.push(s)
+              }
+            })
+          }
+        }
+
+        // Re-ordenar por data de criação após merge
+        allStrats.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        
+        setStrategies(allStrats.map(s => ({
+          id: s.id,
+          title: s.title,
+          description: s.description,
+          status: s.status === 'active' ? 'ready' : s.status === 'processing' ? 'generating' : s.status,
+          created_at: new Date(s.created_at).toLocaleDateString('pt-BR', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+          }),
+          raw_created_at: s.created_at,
+          version: s.version || 1,
+          ai_model: s.ai_model || 'Minerva'
+        })))
       } catch (err) {
         console.error('Erro ao buscar estratégias:', err)
       } finally {

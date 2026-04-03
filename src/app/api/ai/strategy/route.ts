@@ -60,6 +60,7 @@ Gere o plano estratégico em JSON agora.`
       .single() as any : { data: null }
 
     let orgId = membership?.organization_id
+    let userId = user?.id
 
     if (!orgId) {
       if (user) {
@@ -90,11 +91,23 @@ Gere o plano estratégico em JSON agora.`
           } as any)
 
         if (memError) throw memError
+        userId = user.id
       } else {
         // Support Guest Mode
         const { data: sandbox } = await adminClient.from('organizations').select('id').limit(1).single() as any
         orgId = sandbox?.id
         
+        if (orgId) {
+          // Fallback user_id: Pegar um admin da organização sandbox
+          const { data: adminMember } = await adminClient
+            .from('memberships')
+            .select('user_id')
+            .eq('organization_id', orgId)
+            .limit(1)
+            .single() as any
+          userId = adminMember?.user_id
+        }
+
         if (!orgId) {
            return NextResponse.json({ error: 'Organização não encontrada para convidados' }, { status: 404 })
         }
@@ -106,7 +119,7 @@ Gere o plano estratégico em JSON agora.`
       .from('diagnostics')
       .insert({
         organization_id: orgId,
-        created_by: user?.id || null,
+        created_by: userId || null,
         title: `Diagnóstico: ${diagnosticData.companyName}`,
         sector: diagnosticData.sector,
         company_size: diagnosticData.size,
@@ -126,7 +139,7 @@ Gere o plano estratégico em JSON agora.`
       .insert({
         organization_id: orgId,
         diagnostic_id: diagnostic.id,
-        created_by: user?.id || null,
+        created_by: userId || null,
         title: 'Gerando Estratégia...',
         description: 'A Inteligência Artificial está processando seu diagnóstico e construindo seu plano de atuação imediato.',
         ai_model: aiModel,

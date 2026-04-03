@@ -30,11 +30,24 @@ export async function POST(req: Request) {
     }
 
     let orgId = membership?.organization_id
+    let userId = user?.id
+
     if (!orgId) {
       if (!user) {
-         // Guest Mode: Assign to the first available organization as sandbox
-         const { data: sandbox } = await adminClient.from('organizations').select('id').limit(1).single() as any
-         orgId = sandbox?.id
+        // Guest Mode: Assign to the first available organization as sandbox
+        const { data: sandbox } = await adminClient.from('organizations').select('id').limit(1).single() as any
+        orgId = sandbox?.id
+
+        if (orgId) {
+          // Fallback user_id: Pegar um admin da organização para persistir o documento sem violar o NOT NULL
+          const { data: adminMember } = await adminClient
+            .from('memberships')
+            .select('user_id')
+            .eq('organization_id', orgId)
+            .limit(1)
+            .single() as any
+          userId = adminMember?.user_id
+        }
       }
       
       if (!orgId) {
@@ -102,7 +115,9 @@ export async function POST(req: Request) {
            updateData.metadata = {
               ...body, // preserva o que veio no body (metadados originais)
               audit: parsedData.audit,
-              refinedAt: new Date().toISOString()
+              refinedAt: new Date().toISOString(),
+              guest_id: guestId,
+              is_guest: !user
            }
         }
 
@@ -212,12 +227,14 @@ ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
 
     const aiModel = 'Minerva'
 
+    console.log('[JuridicoGerar] Process starting...', { userId, guestId, orgId })
+
     // 1. INSERTS PLACEHOLDER FIRST for immediate visibility
     const { data: document, error: docError } = await adminClient
       .from('generated_documents')
       .insert({
         organization_id: orgId,
-        created_by: user?.id || null,
+        created_by: userId || null,
         title: `${tipoContrato}`,
         document_type: 'custom',
         ai_model: aiModel,
@@ -230,7 +247,12 @@ ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
       } as any)
       .select().single() as any
 
-    if (docError) throw docError
+    if (docError) {
+      console.error('[JuridicoGerar] INSERT ERROR:', docError)
+      throw docError
+    }
+
+    console.log('[JuridicoGerar] Document placeholder created successfully:', document.id)
 
     try {
       const aiResponse = await askAI(aiPrompt, systemPrompt)
@@ -238,26 +260,38 @@ ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
       if (rawResponse.includes('```json')) rawResponse = rawResponse.split('```json')[1].split('```')[0].trim()
       else if (rawResponse.startsWith('```')) rawResponse = rawResponse.replace(/^```/, '').replace(/```$/, '').trim()
 
-      let parsedData: { contract: string; audit: any }
+      let parsedData: any
       try {
         parsedData = JSON.parse(rawResponse)
       } catch (e) {
         parsedData = { 
           contract: rawResponse, 
-          audit: { score: 50, risk_level: 'médio', suggestions: ['IA falhou ao gerar metadados de auditoria.'] }
+          audit: { risk_level: 'médio', points: [] } 
         }
       }
 
       const adminApi = adminClient as any
-      await adminApi.from('generated_documents').update({
-        content: parsedData.contract.trim(),
-        status: 'ready',
-        metadata: {
-          ...body,
-          audit: parsedData.audit,
-          generated_at: new Date().toISOString()
+      try {
+        console.log(`[JuridicoGerar] AI Generation finished. Updating doc ${document.id}...`)
+        const { error: updateError } = await adminApi.from('generated_documents').update({
+          content: parsedData.contract.trim(),
+          status: 'ready',
+          metadata: {
+            ...document.metadata,
+            audit: parsedData.audit || parsedData.auditoria || null,
+            title: parsedData.title || document.title,
+            updated_at: new Date().toISOString()
+          }
+        }).eq('id', document.id)
+
+        if (updateError) {
+          console.error('[JuridicoGerar] UPDATE ERROR:', updateError)
+          throw updateError
         }
-      }).eq('id', document.id)
+        console.log('[JuridicoGerar] Document updated successfully to READY.')
+      } catch (dbErr) {
+        console.error('[JuridicoGerar] Catch block - DB Update Error:', dbErr)
+      }
 
       if (user) {
         await adminApi.from('activity_logs').insert({

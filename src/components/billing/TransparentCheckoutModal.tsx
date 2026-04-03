@@ -5,13 +5,16 @@ import { Card } from '@/components/shared/Card'
 import { Input } from '@/components/shared/Input'
 import { Button } from '@/components/shared/Button'
 import { Label } from '@/components/shared/Label'
-import { Lock, CreditCard as CreditCardIcon, QrCode, ArrowRight, ArrowLeft, ShieldCheck, CheckCircle2, User, MapPin } from 'lucide-react'
+import { Lock, CreditCard as CreditCardIcon, QrCode, ArrowRight, ArrowLeft, ShieldCheck, CheckCircle2, User, MapPin, Sparkles } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { toast } from 'sonner'
 import { createTransparentChargeAction } from '@/app/actions/asaas-actions'
 import Image from 'next/image'
+import { createClient } from '@/lib/supabase/client'
+import { createGuestAccountAction } from '@/app/actions/auth-actions'
+import { useRouter } from 'next/navigation'
 
-type CheckoutStep = 'IDENTIFICATION' | 'ADDRESS' | 'PAYMENT' | 'PIX_CODE' | 'SUCCESS'
+type CheckoutStep = 'IDENTIFICATION' | 'ADDRESS' | 'PAYMENT' | 'PIX_CODE' | 'SUCCESS' | 'CONVERSION'
 
 interface TransparentCheckoutProps {
   demandId: string
@@ -25,6 +28,8 @@ interface TransparentCheckoutProps {
 export function TransparentCheckoutModal({ demandId, demandType, value, description, onSuccess, onClose }: TransparentCheckoutProps) {
   const [step, setStep] = useState<CheckoutStep>('IDENTIFICATION')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const supabase = createClient()
+  const router = useRouter()
 
   // Dados Pessoais
   const [customer, setCustomer] = useState({
@@ -161,10 +166,15 @@ export function TransparentCheckoutModal({ demandId, demandType, value, descript
         setStep('PIX_CODE')
       } else {
         // Sucesso no Cartão de Crédito
-        setStep('SUCCESS')
-        setTimeout(() => {
-          onSuccess()
-        }, 2000)
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          setStep('CONVERSION')
+        } else {
+          setStep('SUCCESS')
+          setTimeout(() => {
+            onSuccess()
+          }, 2000)
+        }
       }
 
     } catch (err: any) {
@@ -179,9 +189,14 @@ export function TransparentCheckoutModal({ demandId, demandType, value, descript
       navigator.clipboard.writeText(pixData.payload)
       toast.success('Código PIX copiado!')
       // Mock de verificação (em um ambiente real, deve haver Webhook)
-      setTimeout(() => {
-        setStep('SUCCESS')
-        setTimeout(() => onSuccess(), 2000)
+      setTimeout(async () => {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          setStep('CONVERSION')
+        } else {
+          setStep('SUCCESS')
+          setTimeout(() => onSuccess(), 2000)
+        }
       }, 5000)
     }
   }
@@ -370,6 +385,64 @@ export function TransparentCheckoutModal({ demandId, demandType, value, descript
                 </p>
               </div>
               <div className="w-10 h-10 shrink-0 rounded-full border-4 border-slate-100 border-t-emerald-500 animate-spin" />
+            </div>
+          )}
+
+          {/* STEP 6: CONVERSION (GUESTS ONLY) */}
+          {step === 'CONVERSION' && (
+            <div className="flex flex-col gap-6 animate-in fade-in zoom-in-95 items-center text-center mt-4">
+              <div className="w-20 h-20 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary shadow-xl shadow-primary/5">
+                <Sparkles size={32} className="fill-current" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <h3 className="text-xl font-black text-slate-900 tracking-tight leading-tight">Pagamento Confirmado!</h3>
+                <p className="text-[13px] font-bold text-slate-500 leading-relaxed max-w-[320px] mx-auto">
+                  Sua demanda foi liberada. Como você ainda não possui conta, escolha como deseja prosseguir para não perder seu acesso.
+                </p>
+              </div>
+
+              <div className="w-full flex flex-col gap-3 py-4">
+                <Button 
+                  onClick={() => router.push('/signup')}
+                  className="w-full h-14 rounded-2xl bg-primary text-white font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-primary/20 flex items-center justify-center gap-2 group hover:bg-slate-900 transition-all"
+                >
+                  Criar Conta Premium <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                </Button>
+                
+                <div className="flex items-center gap-4 py-2">
+                  <div className="h-[1px] flex-1 bg-slate-100" />
+                  <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Ou</span>
+                  <div className="h-[1px] flex-1 bg-slate-100" />
+                </div>
+
+                <Button 
+                   variant="ghost"
+                   isLoading={isSubmitting}
+                   onClick={async () => {
+                     const gid = localStorage.getItem('ianow_guest_id')
+                     if (!gid) return
+                     setIsSubmitting(true)
+                     const res = await createGuestAccountAction(gid)
+                     if (res.success && res.credentials) {
+                        await supabase.auth.signInWithPassword({
+                          email: res.credentials.email,
+                          password: res.credentials.password
+                        })
+                        setStep('SUCCESS')
+                        setTimeout(() => onSuccess(), 2000)
+                     } else {
+                        toast.error('Erro ao gerar acesso de visitante.')
+                     }
+                     setIsSubmitting(false)
+                   }}
+                   className="w-full h-14 rounded-2xl border-2 border-slate-100 text-slate-500 hover:text-slate-900 hover:border-slate-200 font-black text-xs uppercase tracking-[0.2em] transition-all"
+                >
+                  Continuar como Visitante (Sem Senha)
+                </Button>
+                <p className="text-[10px] text-slate-400 font-bold px-4">
+                  Criaremos um acesso temporário salvo em seu navegador.
+                </p>
+              </div>
             </div>
           )}
 

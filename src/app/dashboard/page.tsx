@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react'
 import { ExecutionShield } from '@/components/dashboard/ExecutionShield'
 import { MinervaAssistant } from '@/components/dashboard/MinervaAssistant'
 import { cn } from '@/utils/cn'
+import { getDashboardDataAction } from '@/app/actions/dashboard-actions'
 
 // Tipagens para o Dashboard
 interface Metric {
@@ -62,68 +63,31 @@ export default function DashboardPage() {
   useEffect(() => {
     async function fetchDashboardData() {
       try {
-        if (!session?.user?.id) {
-          setData({
-            metrics: [
-              { label: 'Estratégias Ativas', value: 0, icon: <Lightbulb size={22} />, change: undefined },
-              { label: 'Documentos Jurídicos', value: 0, icon: <Scale size={22} />, change: undefined },
-              { label: 'Jus Postulandi', value: 0, icon: <Gavel size={22} />, change: undefined },
-            ],
-            strategies: [],
-            legalDocs: [],
-            justiceDemands: [],
-            insightsCount: 0
-          })
+        setLoading(true)
+        const guestId = typeof window !== 'undefined' ? localStorage.getItem('ianow_guest_id') : null
+        
+        console.log('[DashboardPage] Fetching unified data. Session:', !!session)
+        
+        // Busca unificada via Server Action (Bypassa RLS e Merges Guest/Org)
+        const { data: dashboard, error } = await getDashboardDataAction(guestId, session?.user?.id)
+        
+        if (error) {
+          console.error('[DashboardPage] Error:', error)
           return
         }
 
-        const { data: membership } = await supabase
-          .from('memberships')
-          .select('organization_id')
-          .eq('user_id', session.user.id)
-          .eq('status', 'active')
-          .limit(1)
-          .single() as any
+        const stats = dashboard || { strategies: [], legalDocs: [], justiceDemands: [] }
 
-        if (!membership) {
-          setLoading(false)
-          return
-        }
-
-        const orgId = membership.organization_id
-
-        const [
-          { count: activeStratsCount },
-          { count: legalDocsCount },
-          { count: jusPostulandiCount }
-        ] = await Promise.all([
-          supabase.from('strategies').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'active').is('deleted_at', null),
-          supabase.from('generated_documents').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'ready').is('deleted_at', null),
-          supabase.from('justice_demands').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).is('deleted_at', null)
-        ])
-
-        const [
-          { data: strats },
-          { data: legalDocs },
-          { data: justiceDocs },
-          { data: allStrategiesForInsights }
-        ] = await Promise.all([
-          supabase.from('strategies').select('*').eq('organization_id', orgId).is('deleted_at', null).order('created_at', { ascending: false }).limit(4),
-          supabase.from('generated_documents').select('*').eq('organization_id', orgId).is('deleted_at', null).order('created_at', { ascending: false }).limit(4),
-          supabase.from('justice_demands').select('*').eq('organization_id', orgId).is('deleted_at', null).order('created_at', { ascending: false }).limit(3),
-          supabase.from('strategies').select('content').eq('organization_id', orgId).is('deleted_at', null).eq('status', 'active')
-        ])
-
-        const totalInsights = allStrategiesForInsights?.reduce((acc: number, curr: any) => acc + (curr.content?.aiInsights?.length || 0), 0) || 0
+        // Mapeamento de Métricas
+        const metrics = [
+          { label: 'Estratégias Ativas', value: stats.strategies.filter((s: any) => s.status === 'active').length, icon: <Lightbulb size={22} />, change: undefined },
+          { label: 'Documentos Jurídicos', value: stats.legalDocs.filter((d: any) => d.status === 'ready').length, icon: <Scale size={22} />, change: undefined },
+          { label: 'Jus Postulandi', value: stats.justiceDemands.length, icon: <Gavel size={22} />, change: undefined },
+        ]
 
         setData({
-          metrics: [
-            { label: 'Estratégias Ativas', value: activeStratsCount || 0, icon: <Lightbulb size={22} />, change: undefined },
-            { label: 'Documentos Jurídicos', value: legalDocsCount || 0, icon: <Scale size={22} />, change: undefined },
-            { label: 'Jus Postulandi', value: jusPostulandiCount || 0, icon: <Gavel size={22} />, change: undefined },
-          ],
-
-          strategies: (strats || []).map((s: any) => ({
+          metrics,
+          strategies: (stats.strategies || []).slice(0, 4).map((s: any) => ({
             id: s.id,
             title: s.title,
             description: s.description || '',
@@ -132,7 +96,7 @@ export default function DashboardPage() {
             rawDate: s.created_at,
             href: `/estrategia/${s.id}`
           })),
-          legalDocs: (legalDocs || []).map((d: any) => ({
+          legalDocs: (stats.legalDocs || []).slice(0, 4).map((d: any) => ({
             id: d.id,
             title: d.title || 'Documento jurídico',
             description: d.metadata?.description || 'Gerado via IA',
@@ -141,7 +105,7 @@ export default function DashboardPage() {
             rawDate: d.created_at,
             href: `/juridico/${d.id}`
           })),
-          justiceDemands: (justiceDocs || []).map((d: any) => ({
+          justiceDemands: (stats.justiceDemands || []).slice(0, 3).map((d: any) => ({
             id: d.id,
             title: d.tipo_acao || 'Ação não classificada',
             description: `Valor: ${(d.valor_causa || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`,
@@ -150,17 +114,17 @@ export default function DashboardPage() {
             rawDate: d.created_at,
             href: `/justica/${d.id}`
           })),
-          insightsCount: totalInsights
+          insightsCount: stats.strategies.reduce((acc: number, curr: any) => acc + (curr.content?.aiInsights?.length || 0), 0)
         })
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error)
+      } catch (err) {
+        console.error('Erro ao carregar Dashboard:', err)
       } finally {
         setLoading(false)
       }
     }
 
     fetchDashboardData()
-  }, [session, supabase, userName])
+  }, [session])
 
   // Persistência simples da preferência de view
   useEffect(() => {

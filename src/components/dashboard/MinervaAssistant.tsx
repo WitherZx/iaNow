@@ -17,7 +17,8 @@ import {
   ChevronRight,
   ChevronLeft,
   Clock,
-  ChevronDown
+  ChevronDown,
+  Check
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useRouter } from 'next/navigation'
@@ -36,26 +37,56 @@ interface MinervaAssistantProps {
 }
 
 export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantProps) {
-  const [messages, setMessages] = useState<Message[]>([])
+  const ACTIVE_SESSION_KEY = 'minerva_active_session_id'
+
+  const [sessionId, setSessionId] = useState<string>(() => {
+    if (typeof window === 'undefined') return `session-${Date.now()}`
+    const active = localStorage.getItem('minerva_active_session_id')
+    if (active) return active
+    const historyStr = localStorage.getItem('minerva_chat_history')
+    if (historyStr) {
+      try {
+        const hist = JSON.parse(historyStr)
+        if (hist.length > 0) return hist[0].id
+      } catch (e) { }
+    }
+    return `session-${Date.now()}`
+  })
+
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window === 'undefined' || !sessionId) return []
+    const saved = localStorage.getItem(`minerva_messages_${sessionId}`)
+    if (saved) {
+      try { return JSON.parse(saved) } catch (e) { return [] }
+    }
+    return []
+  })
+
+  // Restore accidentally removed state
   const [isTyping, setIsTyping] = useState(false)
   const [inputValue, setInputValue] = useState('')
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
-  const [sessionId, setSessionId] = useState<string>(() => `session-${Date.now()}`)
+
   const [history, setHistory] = useState<{ id: string, title: string, date: string }[]>([])
   const [wizardData, setWizardData] = useState<Record<string, any>>({})
   const [isProcessing, setIsProcessing] = useState(false)
-  const [guestId, setGuestId] = useState<string>('')
+  const [guestId, setGuestId] = useState<string>(() => {
+    if (typeof window === 'undefined') return ''
+    const current = localStorage.getItem('ianow_guest_id')
+    if (current) return current
+    const generated = `guest-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    localStorage.setItem('ianow_guest_id', generated)
+    return generated
+  })
+
   const [latestResultPath, setLatestResultPath] = useState<string | null>(null)
-  const ACTIVE_SESSION_KEY = 'minerva_active_session_id'
   const scrollRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
 
-  const getOrCreateGuestId = (forceNew = false) => {
+  const getOrCreateGuestId = () => {
     if (typeof window === 'undefined') return ''
-    if (!forceNew) {
-      const current = localStorage.getItem('ianow_guest_id')
-      if (current) return current
-    }
+    const current = localStorage.getItem('ianow_guest_id')
+    if (current) return current
     const generated = `guest-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
     localStorage.setItem('ianow_guest_id', generated)
     return generated
@@ -73,7 +104,7 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
     let response = await fetch(url, { ...options, headers })
 
     if (retryOn401 && response.status === 401) {
-      const renewedGuestId = getOrCreateGuestId(true)
+      const renewedGuestId = getOrCreateGuestId()
       setGuestId(renewedGuestId)
       toast.error('Sessao de visitante expirada. Reconectando...')
       response = await fetch(url, {
@@ -88,34 +119,81 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
     return response
   }
 
+  const activeModule = (() => {
+    // Tentar detectar o módulo ativo baseado no histórico recente e wizardData
+    const lastContextMsg = [...messages].reverse().find(m =>
+      m.role === 'bot' && (m.content.includes('[FORM:') || m.content.includes('[ACTION:'))
+    )
+    const content = lastContextMsg?.content.toLowerCase() || ''
+
+    if (content.includes('justica') || content.includes('processo') || content.includes('demanda') || content.includes('jus postulandi')) return 'justica'
+    if (content.includes('juridico') || content.includes('contrato') || content.includes('prestação de serviço')) return 'juridico'
+    if (content.includes('estrategia') || content.includes('diagnostico') || content.includes('crescimento')) return 'estrategia'
+
+    return 'general'
+  })()
+
   const wizardStep = (() => {
-    if (messages.some((m) => m.role === 'bot' && m.content.includes('processado com sucesso'))) return 5
+    // 1. Verificar se a ÚLTIMA mensagem do bot foi de sucesso
+    const lastBotMsg = [...messages].reverse().find(m => m.role === 'bot')
+    if (lastBotMsg?.content.includes('processado com sucesso')) return 5
+
     if (isProcessing) return 4
+
     const keys = Object.keys(wizardData)
     if (keys.length >= 5) return 3
     if (keys.length > 0) return 2
     return 1
   })()
 
-  // Load history from localStorage
+  const stepperLabels = (() => {
+    switch (activeModule) {
+      case 'justica':
+        return ['DEMANDA', 'FATOS', 'DADOS', 'ANÁLISE', 'PROTOCOLO']
+      case 'estrategia':
+        return ['NEGÓCIO', 'DADOS', 'METAS', 'ANÁLISE', 'PLANO']
+      case 'juridico':
+      default:
+        return ['CONTRATO', 'DADOS', 'REVISÃO', 'ANÁLISE', 'RESULTADO']
+    }
+  })()
+
+  // Initialize history and metadata
   useEffect(() => {
     try {
-      const storedHistory = localStorage.getItem('minerva_chat_history')
-      if (storedHistory) {
-        setHistory(JSON.parse(storedHistory))
+      const savedHistory = localStorage.getItem('minerva_chat_history')
+      if (savedHistory) {
+        setHistory(JSON.parse(savedHistory))
       }
-      setGuestId(getOrCreateGuestId())
 
-      // Retoma a conversa ativa para não perder o “final” ao navegar/voltar.
-      const storedActiveSessionId = localStorage.getItem(ACTIVE_SESSION_KEY)
-      if (storedActiveSessionId) {
-        setSessionId(storedActiveSessionId)
-        loadMessagesFromStorage(storedActiveSessionId)
+      // Carregar dados extras da sessão (wizard, result)
+      if (sessionId) {
+        localStorage.setItem(ACTIVE_SESSION_KEY, sessionId)
+
+        const savedWizard = localStorage.getItem(`minerva_wizard_${sessionId}`)
+        if (savedWizard) {
+          try { setWizardData(JSON.parse(savedWizard)) } catch (e) { setWizardData({}) }
+        }
+
+        const handleNewChat = () => {
+          localStorage.removeItem(ACTIVE_SESSION_KEY)
+          const newSessionId = `session-${Date.now()}`
+          setSessionId(newSessionId)
+          setMessages([])
+          setWizardData({})
+          setIsHistoryOpen(false)
+          const newGuestId = getOrCreateGuestId()
+        }
+
+        const savedResult = localStorage.getItem(`minerva_result_${sessionId}`)
+        setLatestResultPath(savedResult || null)
       }
+
+      setGuestId(getOrCreateGuestId())
     } catch (e) {
       console.error('Failed to load history', e)
     }
-  }, [])
+  }, [sessionId])
 
   // Save/Update current session in history
   const updateHistory = (firstUserMsg: string) => {
@@ -138,8 +216,11 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
     })
   }
 
-  const saveMessagesToStorage = (currSessionId: string, currMessages: Message[]) => {
+  const saveMessagesToStorage = (currSessionId: string, currMessages: Message[], resultPath?: string | null) => {
     localStorage.setItem(`minerva_messages_${currSessionId}`, JSON.stringify(currMessages))
+    if (resultPath !== undefined) {
+      localStorage.setItem(`minerva_result_${currSessionId}`, resultPath || '')
+    }
   }
 
   const loadMessagesFromStorage = (targetSessionId: string) => {
@@ -150,7 +231,7 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
       const greeting = `Olá, ${userName}. Sou a Minerva, sua inteligência estratégica e jurídica. Como posso te auxiliar hoje?`
       setMessages([{ role: 'bot', content: greeting }])
     }
-    
+
     const savedWizard = localStorage.getItem(`minerva_wizard_${targetSessionId}`)
     if (savedWizard) {
       try {
@@ -161,6 +242,9 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
     } else {
       setWizardData({})
     }
+
+    const savedResult = localStorage.getItem(`minerva_result_${targetSessionId}`)
+    setLatestResultPath(savedResult || null)
   }
 
   // Auto-scroll logic
@@ -170,18 +254,28 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
     }
   }, [messages, isTyping])
 
-  // Initial greeting
+  // Initial greeting if session is fresh
   useEffect(() => {
     if (messages.length === 0) {
       const greeting = `Olá, ${userName}. Sou a Minerva, sua inteligência estratégica e jurídica. Como posso te auxiliar na sua blindagem institucional hoje?`
-      setMessages([{ role: 'bot', content: greeting }])
+      const initialMsgs = [{ role: 'bot', content: greeting }] as Message[]
+      setMessages(initialMsgs)
+      saveMessagesToStorage(sessionId, initialMsgs)
     }
-  }, [userName, messages.length])
+  }, [userName, messages.length, sessionId])
 
   const handleSendMessage = async (text: string = inputValue) => {
     if (!text.trim()) return
 
     const userMsg: Message = { role: 'user', content: text }
+
+    // Reset do Wizard e Banner se o usuário puxar outro assunto após finalizar um fluxo
+    if (wizardStep === 5) {
+      setLatestResultPath(null)
+      localStorage.removeItem(`minerva_result_${sessionId}`)
+      setWizardData({})
+      localStorage.removeItem(`minerva_wizard_${sessionId}`)
+    }
 
     // Update history on first user message
     if (messages.filter(m => m.role === 'user').length === 0) {
@@ -247,11 +341,12 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
       const id = parts[0]
       const label = parts[1] || id
       const optionsStr = parts[2]
-      
+      const defaultValue = parts[3]
+
       const isContact = optionsStr === 'CONTACT'
       const options = optionsStr && !isContact ? optionsStr.split(';').map(o => o.trim()) : undefined
-      
-      return { id, label, options, isContact }
+
+      return { id, label, options, isContact, defaultValue }
     })
 
     return {
@@ -274,14 +369,29 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
       if (data[`${f.id}_name`]) val = data[`${f.id}_name`] // Use descriptive name instead of UUID or 'manual'
       return `**${f.label}**: ${val || '-'}`
     }).join(' • ')
-    
+
     const submissionText = `Informações de **${fields[0]?.label || 'dados'}** enviadas: ${formattedData}`
     handleSendMessage(submissionText)
   }
 
   const handleAction = async (path: string) => {
     // Check if it's a creation action that should be handled in background
-    if (path.includes('/novo') && (path.includes('estrategia') || path.includes('juridico') || path.includes('justica'))) {
+    if (path.includes('/novo')) {
+      // 1. Limpar o botão clicado do histórico (para não mostrar duplicado depois)
+      setMessages(prev => {
+        const updated = prev.map(m => {
+          if (m.role === 'bot' && m.content.includes(`[ACTION: ${path}]`)) {
+            return {
+              ...m,
+              content: m.content.replace(`[ACTION: ${path}]`, '').trim()
+            }
+          }
+          return m
+        })
+        saveMessagesToStorage(sessionId, updated)
+        return updated
+      })
+
       setIsProcessing(true)
 
       try {
@@ -313,8 +423,8 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
             perfilPartes: wizardData.perfil || wizardData.perfil_partes || 'Amigável',
             objetivo: wizardData.objetivo || wizardData.resumo_objeto || 'Formalizar relação entre as partes',
             foro: wizardData.foro || wizardData.comarca || wizardData.foro_eleicao || 'São Paulo - SP',
-            partyA: { 
-              name: wizardData.partyA_name || wizardData.parteA_name || wizardData.parte1_name || wizardData.partea_name || 'Nome não qualificado', 
+            partyA: {
+              name: wizardData.partyA_name || wizardData.parteA_name || wizardData.parte1_name || wizardData.partea_name || 'Nome não qualificado',
               document: wizardData.partyA_doc || wizardData.parteA_doc || wizardData.parte1_doc || wizardData.partea_doc || 'Documento não informado',
               address: wizardData.partyA_address || wizardData.parteA_address || wizardData.parte1_address || wizardData.partea_address,
               type: wizardData.partyA_type || wizardData.parteA_type || wizardData.parte1_type || wizardData.partea_type || 'PF',
@@ -326,8 +436,8 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
               maritalStatus: wizardData.partyA_maritalStatus || wizardData.parteA_maritalStatus || wizardData.parte1_maritalStatus || wizardData.partea_maritalStatus,
               profession: wizardData.partyA_profession || wizardData.parteA_profession || wizardData.parte1_profession || wizardData.partea_profession
             },
-            partyB: { 
-              name: wizardData.partyB_name || wizardData.parteB_name || wizardData.parte2_name || wizardData.parteb_name || 'Nome não qualificado', 
+            partyB: {
+              name: wizardData.partyB_name || wizardData.parteB_name || wizardData.parte2_name || wizardData.parteb_name || 'Nome não qualificado',
               document: wizardData.partyB_doc || wizardData.parteB_doc || wizardData.parte2_doc || wizardData.parteb_doc || 'Documento não informado',
               address: wizardData.partyB_address || wizardData.parteB_address || wizardData.parte2_address || wizardData.parteb_address,
               type: wizardData.partyB_type || wizardData.parteB_type || wizardData.parte2_type || wizardData.parteb_type || 'PF',
@@ -378,10 +488,16 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
         const resolvedResultPath = `${path.replace('/novo', '')}${resultId ? '/' + resultId : ''}`
         setLatestResultPath(resolvedResultPath)
 
-        setMessages(prev => [...prev, {
+        const finalMsg: Message = {
           role: 'bot',
           content: `✅ **${moduleName} processado com sucesso!**\n\nA execução foi finalizada em segundo plano com base nos dados fornecidos. Você já pode visualizar o resultado completo.\n\n[ACTION: ${resolvedResultPath}]`
-        }])
+        }
+
+        setMessages(prev => {
+          const updated = [...prev, finalMsg]
+          saveMessagesToStorage(sessionId, updated, resolvedResultPath)
+          return updated
+        })
       } catch (error: any) {
         console.error('Action processing error:', error)
         setIsProcessing(false)
@@ -456,35 +572,75 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
             </button>
           </div>
         </div>
-        <div className="px-4 sm:px-6 py-3 border-b border-slate-100 bg-white">
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Status da sessao:</span>
-            <span className="text-[10px] font-black uppercase tracking-wider rounded-full px-2 py-1 bg-slate-100 text-slate-700">
-              {isProcessing ? 'Processando' : wizardStep >= 2 ? 'Em coleta' : 'Visitante'}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-            {[
-              '1. Contexto',
-              '2. Dados',
-              '3. Revisao',
-              '4. Processamento',
-              '5. Resultado'
-            ].map((label, idx) => {
-              const stepNumber = idx + 1
-              const active = wizardStep >= stepNumber
-              return (
-                <div
-                  key={label}
-                  className={cn(
-                    'text-[10px] px-2 py-1 rounded-lg font-bold border',
-                    active ? 'bg-primary/10 text-primary border-primary/20' : 'bg-slate-50 text-slate-400 border-slate-100'
-                  )}
-                >
-                  {label}
-                </div>
-              )
-            })}
+        <div className="px-4 sm:px-8 py-4 border-b border-slate-100 bg-white/50 backdrop-blur-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            {/* Session Status */}
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Sessão</span>
+              <div className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm border",
+                isProcessing
+                  ? "bg-emerald-50 text-emerald-600 border-emerald-100/50"
+                  : wizardStep >= 2
+                    ? "bg-blue-50 text-blue-600 border-blue-100/50"
+                    : "bg-slate-50 text-slate-500 border-slate-100"
+              )}>
+                {isProcessing && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+                {!isProcessing && wizardStep >= 2 && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                {!isProcessing && wizardStep < 2 && <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />}
+                {isProcessing ? 'Processando' : wizardStep >= 2 ? 'Em coleta' : 'Visitante'}
+              </div>
+            </div>
+
+            {/* Stepper */}
+            <div className="flex items-center gap-1 sm:gap-2 flex-grow sm:flex-grow-0 sm:justify-end">
+              {stepperLabels.map((label, idx, arr) => {
+                const stepNum = idx + 1
+                const isActive = wizardStep === stepNum
+                const isCompleted = wizardStep > stepNum
+                const isPending = wizardStep < stepNum
+
+                return (
+                  <React.Fragment key={stepNum}>
+                    <div className="flex flex-col items-center gap-1.5 relative group">
+                      <div className={cn(
+                        "w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-[10px] font-black transition-all duration-500 shadow-sm border-2 relative z-10",
+                        isActive
+                          ? "bg-primary border-primary text-white scale-110 ring-4 ring-primary/10"
+                          : isCompleted
+                            ? "bg-emerald-500 border-emerald-500 text-white"
+                            : "bg-white border-slate-100 text-slate-300"
+                      )}>
+                        {isCompleted ? <Check size={12} strokeWidth={4} /> : stepNum}
+
+                        {/* Glow for Active */}
+                        {isActive && (
+                          <div className="absolute inset-0 rounded-full bg-primary animate-ping opacity-20 pointer-events-none" />
+                        )}
+                      </div>
+                      <span className={cn(
+                        "hidden sm:block text-[8px] font-black uppercase tracking-widest transition-colors",
+                        isActive ? "text-primary" : "text-slate-300"
+                      )}>
+                        {label}
+                      </span>
+                    </div>
+
+                    {/* Connector Line */}
+                    {idx < arr.length - 1 && (
+                      <div className="flex-1 min-w-[8px] sm:min-w-[20px] h-[2px] bg-slate-100 self-center -translate-y-2 sm:-translate-y-2.5 rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full transition-all duration-700 ease-in-out",
+                            wizardStep > stepNum ? "w-full bg-emerald-500" : "w-0 bg-slate-100"
+                          )}
+                        />
+                      </div>
+                    )}
+                  </React.Fragment>
+                )
+              })}
+            </div>
           </div>
         </div>
 
@@ -533,6 +689,7 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
                             fields={fields}
                             onSubmit={(data) => handleFormSubmit(fields, data)}
                             isLastMessage={i === messages.length - 1}
+                            isGuest={userName === 'Visitante'}
                           />
                         )}
                       </div>
@@ -600,20 +757,6 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
         {/* Input de Mensagem */}
         <div className="p-3 sm:p-8 bg-white border-t border-slate-100 shrink-0">
           <div className="w-full">
-            {wizardStep === 5 && (
-              <div className="mb-3 sm:mb-5 p-3 sm:p-4 rounded-xl border border-amber-200 bg-amber-50 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-amber-700">Resultado pronto</p>
-                  <p className="text-[12px] sm:text-sm font-bold text-amber-900">Seu resultado foi processado. Continue para visualizar o documento completo.</p>
-                </div>
-                <button
-                  onClick={() => router.push(latestResultPath || '/dashboard')}
-                  className="px-3 py-2 rounded-lg bg-amber-500 text-white text-[10px] font-black uppercase tracking-widest hover:bg-amber-600 transition-colors"
-                >
-                  Ver resultado
-                </button>
-              </div>
-            )}
             <div className="relative flex items-center">
               <div className="absolute left-6 text-slate-300 hidden sm:block">
                 <Sparkles size={20} />
@@ -642,7 +785,7 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
       </div>
 
       {/* History Sidebar Backdrop for Mobile */}
-      <div 
+      <div
         className={cn(
           "fixed inset-0 bg-slate-900/40 z-[90] lg:hidden backdrop-blur-sm transition-opacity duration-300",
           isHistoryOpen ? "opacity-100" : "opacity-0 pointer-events-none"
@@ -652,99 +795,117 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
 
       {/* History Sidebar - Right Side */}
       <aside className={cn(
-        "fixed inset-y-0 right-0 z-[100] bg-slate-50 border-l border-slate-100 shadow-2xl lg:shadow-none lg:static transition-all duration-300 flex flex-col group h-[100dvh] lg:h-full overflow-hidden",
+        "fixed inset-y-0 right-0 z-[100] bg-slate-200 border-l border-slate-100 shadow-2xl lg:shadow-none lg:static transition-all duration-300 flex flex-col group h-[100dvh] lg:h-full overflow-hidden",
         isHistoryOpen ? "translate-x-0 w-[85vw] sm:w-80 lg:opacity-100" : "translate-x-full w-[85vw] sm:w-80 lg:w-0 lg:translate-x-0 lg:opacity-0 lg:pointer-events-none"
       )}>
-        <div className="flex flex-col h-full w-[85vw] sm:w-80">
-          <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-white shrink-0">
-            <h4 className="font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
-              <Clock size={16} className="text-primary" />
+        <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-white/80 backdrop-blur-md shrink-0">
+          <div className="flex flex-col gap-0.5">
+            <h4 className="font-black text-slate-900 uppercase tracking-tight flex items-center gap-2 text-sm">
+              <Clock size={14} className="text-primary" />
               Histórico
             </h4>
-            <div className="flex items-center gap-2">
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sessões Recentes</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsHistoryOpen(false)}
+              className="p-2 text-slate-400 hover:text-slate-900 lg:hidden transition-colors"
+            >
+              <ChevronRight size={18} />
+            </button>
+            <button
+              onClick={() => {
+                const newId = `session-${Date.now()}`
+                setSessionId(newId)
+                localStorage.setItem('minerva_active_session_id', newId)
+                setWizardData({}) // Clear the wizard buffer for the new chat
+                const greeting = `Olá, ${userName}. Sou a Minerva, sua inteligência estratégica e jurídica. Como posso te auxiliar hoje?`
+                const initialMsg: Message = { role: 'bot', content: greeting }
+                setMessages([initialMsg])
+                saveMessagesToStorage(newId, [initialMsg])
+                if (window.innerWidth < 1024) setIsHistoryOpen(false) // auto-close on mobile
+              }}
+              className="group relative flex items-center justify-center p-2.5 bg-primary text-white rounded-xl hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20 overflow-hidden"
+              title="Nova Conversa"
+            >
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+              <Plus size={20} className="relative z-10" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar bg-slate-50/50">
+          {history.map((item) => (
+            <div
+              key={item.id}
+              onClick={() => {
+                setSessionId(item.id)
+                localStorage.setItem('minerva_active_session_id', item.id)
+                loadMessagesFromStorage(item.id)
+                if (window.innerWidth < 1024) setIsHistoryOpen(false) // auto-close on mobile
+              }}
+              className={cn(
+                "p-3 rounded-xl border transition-all cursor-pointer group/item relative flex items-start gap-3",
+                sessionId === item.id
+                  ? "bg-white border-slate-200 shadow-sm ring-1 ring-primary/5"
+                  : "border-transparent hover:bg-white/60 hover:border-slate-100"
+              )}
+            >
+              {/* Active Indicator Bar */}
+              {sessionId === item.id && (
+                <div className="absolute left-0 top-2 bottom-2 w-1 bg-primary rounded-r-full" />
+              )}
+
+              <div className={cn(
+                "w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                sessionId === item.id ? "bg-primary/10 text-primary" : "bg-slate-100 text-slate-400 group-hover/item:bg-primary/5 group-hover/item:text-primary/60"
+              )}>
+                <MessageSquare size={16} />
+              </div>
+
+              <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2 mr-6">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{item.date}</span>
+                </div>
+                <h5 className={cn(
+                  "text-[13px] font-bold leading-tight line-clamp-2 transition-colors",
+                  sessionId === item.id ? "text-slate-900" : "text-slate-600 group-hover/item:text-slate-900"
+                )}>
+                  {item.title}
+                </h5>
+              </div>
+
               <button
-                onClick={() => setIsHistoryOpen(false)}
-                className="p-2 text-slate-400 hover:text-slate-900 lg:hidden transition-colors"
-              >
-                <ChevronRight size={18} />
-              </button>
-              <button
-                onClick={() => {
-                  const newId = `session-${Date.now()}`
-                  setSessionId(newId)
-                  localStorage.setItem('minerva_active_session_id', newId)
-                  setWizardData({}) // Clear the wizard buffer for the new chat
-                  const greeting = `Olá, ${userName}. Sou a Minerva, sua inteligência estratégica e jurídica. Como posso te auxiliar hoje?`
-                  const initialMsg: Message = { role: 'bot', content: greeting }
-                  setMessages([initialMsg])
-                  saveMessagesToStorage(newId, [initialMsg])
-                  if (window.innerWidth < 1024) setIsHistoryOpen(false) // auto-close on mobile
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const newHistory = history.filter(h => h.id !== item.id)
+                  setHistory(newHistory)
+                  localStorage.setItem('minerva_chat_history', JSON.stringify(newHistory))
+                  localStorage.removeItem(`minerva_messages_${item.id}`)
+                  localStorage.removeItem(`minerva_wizard_${item.id}`)
+
+                  if (sessionId === item.id) {
+                    const newId = `session-${Date.now()}`
+                    setSessionId(newId)
+                    localStorage.setItem('minerva_active_session_id', newId)
+                    loadMessagesFromStorage(newId)
+                  }
                 }}
-                className="p-2 bg-primary/5 text-primary rounded-lg hover:bg-primary hover:text-white transition-all shadow-sm"
-                title="Nova Conversa"
+                className="absolute top-3 right-3 text-slate-300 hover:text-rose-500 opacity-0 group-hover/item:opacity-100 transition-all p-1 bg-white rounded-md shadow-sm border border-slate-100"
               >
-                <Plus size={18} />
+                <Trash2 size={12} />
               </button>
             </div>
-          </div>
+          ))}
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-            {history.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => {
-                  setSessionId(item.id)
-                  localStorage.setItem('minerva_active_session_id', item.id)
-                  loadMessagesFromStorage(item.id)
-                  if (window.innerWidth < 1024) setIsHistoryOpen(false) // auto-close on mobile
-                }}
-                className={cn(
-                  "p-4 rounded-2xl bg-white border transition-all cursor-pointer group/item relative overflow-hidden shrink-0",
-                  sessionId === item.id ? "border-primary/40 shadow-md ring-1 ring-primary/10" : "border-slate-100 hover:border-primary/20 hover:shadow-md"
-                )}
-              >
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover/item:scale-y-100 transition-transform origin-top" />
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs font-black text-slate-400 uppercase tracking-widest">{item.date}</span>
-                  <span className="text-sm font-bold text-slate-800 line-clamp-2">{item.title}</span>
-                </div>
-                <div className="mt-3 flex items-center justify-between opacity-0 group-hover/item:opacity-100 transition-opacity">
-                  <span className="text-[10px] font-bold text-primary flex items-center gap-1">
-                    Retomar Chat <ArrowRight size={10} />
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      const newHistory = history.filter(h => h.id !== item.id)
-                      setHistory(newHistory)
-                      localStorage.setItem('minerva_chat_history', JSON.stringify(newHistory))
-                      localStorage.removeItem(`minerva_messages_${item.id}`)
-                      localStorage.removeItem(`minerva_wizard_${item.id}`)
-
-                      if (sessionId === item.id) {
-                        const newId = `session-${Date.now()}`
-                        setSessionId(newId)
-                        localStorage.setItem('minerva_active_session_id', newId)
-                        loadMessagesFromStorage(newId)
-                      }
-                    }}
-                    className="text-slate-300 hover:text-rose-500 transition-colors p-1"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
+          {history.length === 0 && (
+            <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4 opacity-40">
+              <div className="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center">
+                <MessageSquare size={32} className="text-slate-400" />
               </div>
-            ))}
-
-            {history.length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4 opacity-40">
-                <div className="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center">
-                  <MessageSquare size={32} className="text-slate-400" />
-                </div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest leading-relaxed">Nenhum histórico encontrado ainda</p>
-              </div>
-            )}
-          </div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest leading-relaxed">Nenhum histórico encontrado ainda</p>
+            </div>
+          )}
         </div>
       </aside>
     </div>
@@ -754,13 +915,23 @@ export function MinervaAssistant({ userName, onToggleView }: MinervaAssistantPro
 function ChatForm({
   fields,
   onSubmit,
-  isLastMessage
+  isLastMessage,
+  isGuest
 }: {
-  fields: { id: string, label: string, options?: string[], isContact?: boolean }[],
+  fields: { id: string, label: string, options?: string[], isContact?: boolean, defaultValue?: string }[],
   onSubmit: (data: Record<string, string>) => void,
-  isLastMessage: boolean
+  isLastMessage: boolean,
+  isGuest?: boolean
 }) {
-  const [formData, setFormData] = useState<Record<string, string>>({})
+  const [formData, setFormData] = useState<Record<string, string>>(() => {
+    const initials: Record<string, string> = {}
+    fields.forEach(f => {
+      if (f.defaultValue) initials[f.id] = f.defaultValue
+      // Se for visitante e for um campo de contato, inicia como manual
+      if (isGuest && f.isContact) initials[f.id] = 'manual'
+    })
+    return initials
+  })
   const [isSubmitted, setIsSubmitted] = useState(false)
 
   const formatCpf = (value: string) => {
@@ -799,29 +970,36 @@ function ChatForm({
           <div key={field.id} className="space-y-1.5 flex flex-col">
             {field.isContact ? (
               <div className="space-y-3">
-                <PartnerSelector
-                  label={field.label}
-                  selectedId={formData[`${field.id}`]}
-                  onSelect={(partner) => {
-                    setFormData(prev => ({
-                      ...prev,
-                      [field.id]: partner.id, 
-                      [`${field.id}_name`]: partner.name,
-                      [`${field.id}_doc`]: partner.document,
-                      [`${field.id}_address`]: partner.address || '',
-                      [`${field.id}_contact`]: partner.email || partner.phone || '',
-                      [`${field.id}_rg`]: partner.metadata?.rg || '',
-                      [`${field.id}_nationality`]: partner.metadata?.nacionalidade || partner.metadata?.nationality || '',
-                      [`${field.id}_maritalStatus`]: partner.metadata?.estado_civil || partner.metadata?.maritalStatus || '',
-                      [`${field.id}_profession`]: partner.metadata?.profissao || partner.metadata?.profession || '',
-                    }))
-                  }}
-                  className={cn(!isLastMessage && "opacity-60 pointer-events-none")}
-                />
-                
+                {!isGuest && (
+                  <PartnerSelector
+                    label={field.label}
+                    selectedId={formData[`${field.id}`]}
+                    onSelect={(partner) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        [field.id]: partner.id,
+                        [`${field.id}_name`]: partner.name,
+                        [`${field.id}_doc`]: partner.document,
+                        [`${field.id}_address`]: partner.address || '',
+                        [`${field.id}_contact`]: partner.email || partner.phone || '',
+                        [`${field.id}_rg`]: partner.metadata?.rg || '',
+                        [`${field.id}_nationality`]: partner.metadata?.nacionalidade || partner.metadata?.nationality || '',
+                        [`${field.id}_maritalStatus`]: partner.metadata?.estado_civil || partner.metadata?.maritalStatus || '',
+                        [`${field.id}_profession`]: partner.metadata?.profissao || partner.metadata?.profession || '',
+                      }))
+                    }}
+                    className={cn(!isLastMessage && "opacity-60 pointer-events-none")}
+                  />
+                )}
+
                 {formData[field.id] === 'manual' && (
-                  <div className={cn("flex flex-col gap-4 p-5 bg-amber-50/50 border border-amber-100 rounded-2xl animate-in fade-in duration-300", !isLastMessage && "opacity-60 pointer-events-none")}>
-                    
+                  <div className={cn("flex flex-col gap-4 p-5 bg-amber-50/50 border border-amber-100 rounded-2xl animate-in fade-in duration-300", !isLastMessage && "opacity-60 pointer-events-none", isGuest && "mt-2")}>
+                    {isGuest && (
+                      <div className="text-[10px] font-black uppercase text-amber-700/50 tracking-widest mb-1">
+                        Dados da {field.label}
+                      </div>
+                    )}
+
                     {/* Tipo de Pessoa Toggle */}
                     <div className="flex bg-white rounded-xl p-1 border border-amber-200/50 shadow-sm self-start">
                       <button
@@ -829,10 +1007,10 @@ function ChatForm({
                         onClick={() => setFormData(prev => {
                           const isCurrentlyPf = (!prev[`${field.id}_type`] || prev[`${field.id}_type`] === 'PF')
                           if (!isCurrentlyPf) return prev // already PF
-                          return { 
-                            ...prev, 
-                            [`${field.id}_type`]: 'PF', 
-                            [`${field.id}_doc`]: formatDoc(prev[`${field.id}_doc`] || '', 'PF') 
+                          return {
+                            ...prev,
+                            [`${field.id}_type`]: 'PF',
+                            [`${field.id}_doc`]: formatDoc(prev[`${field.id}_doc`] || '', 'PF')
                           }
                         })}
                         className={cn(
@@ -849,8 +1027,8 @@ function ChatForm({
                         onClick={() => setFormData(prev => {
                           const isCurrentlyPj = prev[`${field.id}_type`] === 'PJ'
                           if (isCurrentlyPj) return prev // already PJ
-                          return { 
-                            ...prev, 
+                          return {
+                            ...prev,
                             [`${field.id}_type`]: 'PJ',
                             [`${field.id}_doc`]: formatDoc(prev[`${field.id}_doc`] || '', 'PJ')
                           }
@@ -880,7 +1058,7 @@ function ChatForm({
                           disabled={!isLastMessage}
                         />
                       </div>
-                      
+
                       <div className="space-y-1.5 flex flex-col">
                         <label className="text-[10px] font-black uppercase text-amber-700/70 tracking-wider ml-1">
                           {formData[`${field.id}_type`] === 'PJ' ? 'CNPJ' : 'CPF'}
@@ -889,7 +1067,7 @@ function ChatForm({
                           type="text"
                           value={formData[`${field.id}_doc`] || ''}
                           onChange={(e) => setFormData(prev => {
-                            const pType = prev[`${field.id}_type`] as 'PF'|'PJ' || 'PF'
+                            const pType = prev[`${field.id}_type`] as 'PF' | 'PJ' || 'PF'
                             return {
                               ...prev,
                               [`${field.id}_doc`]: formatDoc(e.target.value, pType)
@@ -904,23 +1082,23 @@ function ChatForm({
                       {formData[`${field.id}_type`] === 'PJ' && (
                         <>
                           <div className="space-y-1.5 flex flex-col">
-                            <label className="text-[10px] font-black uppercase text-amber-700/70 tracking-wider ml-1">Nome do Rep. Legal</label>
+                            <label className="text-[10px] font-black uppercase text-amber-700/70 tracking-wider ml-1">Nome do Rep. Legal (Opcional)</label>
                             <input
                               type="text"
                               value={formData[`${field.id}_rep_name`] || ''}
                               onChange={(e) => setFormData(prev => ({ ...prev, [`${field.id}_rep_name`]: e.target.value }))}
-                              placeholder="Nome do Sócio/Diretor..."
+                              placeholder="Nome do Sócio/Diretor (Se souber)..."
                               className="px-4 py-3 bg-white border border-amber-200/60 rounded-xl text-slate-900 font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all placeholder:text-slate-300"
                               disabled={!isLastMessage}
                             />
                           </div>
                           <div className="space-y-1.5 flex flex-col">
-                            <label className="text-[10px] font-black uppercase text-amber-700/70 tracking-wider ml-1">CPF do Representante</label>
+                            <label className="text-[10px] font-black uppercase text-amber-700/70 tracking-wider ml-1">CPF do Representante (Opcional)</label>
                             <input
                               type="text"
                               value={formData[`${field.id}_rep_doc`] || ''}
                               onChange={(e) => setFormData(prev => ({ ...prev, [`${field.id}_rep_doc`]: formatCpf(e.target.value) }))}
-                              placeholder="000.000.000-00"
+                              placeholder="000.000.000-00 (Se souber)"
                               className="px-4 py-3 bg-white border border-amber-200/60 rounded-xl text-slate-900 font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all placeholder:text-slate-300"
                               disabled={!isLastMessage}
                             />
@@ -996,10 +1174,6 @@ function ChatForm({
           if (formData[f.id] === 'manual') {
             const missingBasic = !formData[`${f.id}_name`]?.trim() || !formData[`${f.id}_doc`]?.trim()
             if (missingBasic) return true;
-            
-            if (formData[`${f.id}_type`] === 'PJ') {
-              return !formData[`${f.id}_rep_name`]?.trim() || !formData[`${f.id}_rep_doc`]?.trim()
-            }
           }
           return false;
         })}

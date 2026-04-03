@@ -18,6 +18,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { CTAButton } from '@/components/shared/CTAButton'
 import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
 import { useRouter } from 'next/navigation'
+import { getJuridicoDocumentsAction } from '@/app/actions/juridico-actions'
 
 interface LegalDocument {
   id: string
@@ -25,6 +26,7 @@ interface LegalDocument {
   document_type: string
   status: 'generating' | 'ready' | 'failed' | 'timeout'
   created_at: string
+  metadata?: any
 }
 
 export default function JuridicoPage() {
@@ -49,7 +51,7 @@ export default function JuridicoPage() {
   const [metrics, setMetrics] = useState({
     total: 0,
     generating: 0,
-    complianceStatus: '100% Protegido',
+    complianceStatus: 'Seguro',
   })
 
   useEffect(() => {
@@ -58,41 +60,27 @@ export default function JuridicoPage() {
     async function loadData() {
       try {
         setLoading(true)
-        if (!session?.user?.id) {
-          setDocuments([])
-          return
-        }
-
-        const { data: membership, error: memberError } = await supabase
-          .from('memberships')
-          .select('organization_id')
-          .eq('user_id', session.user.id)
-          .eq('status', 'active')
-          .limit(1)
-          .maybeSingle() as any
-
-        if (memberError || !membership) {
-          console.error('Membership error:', memberError)
-          setLoading(false)
-          return
-        }
-
-        const orgId = membership.organization_id
-
-        const { data: docs } = await supabase
-          .from('generated_documents')
-          .select('id, title, document_type, status, created_at, metadata')
-          .eq('organization_id', orgId)
-          .is('deleted_at', null)
-          .order('created_at', { ascending: false })
-
-        const parsedDocs = (docs || []) as any[]
+        const guestId = localStorage.getItem('ianow_guest_id')
+        const { data: { session: currentSession } } = await supabase.auth.getSession()
         
-        setDocuments(parsedDocs as LegalDocument[])
+        console.log('[JuridicoPage] Fetching repository. Session active:', !!currentSession)
+
+        // Busca unificada via Server Action (Bypassa RLS e Merges Guest/Org)
+        // Passamos o userId como 'hint' para garantir identificação se o getUser do server falhar.
+        const { data: allDocs, error } = await getJuridicoDocumentsAction(guestId, currentSession?.user?.id)
+        
+        if (error) {
+          console.error('[JuridicoPage] Fetch error:', error)
+          throw new Error(error)
+        }
+
+        const docs = allDocs || []
+        console.log(`[JuridicoPage] Received ${docs.length} documents.`, docs)
+        setDocuments(docs)
 
         // Cálculo dinâmico das métricas de compliance
-        const hasHighRisk = parsedDocs.some(d => d.metadata?.audit?.risk_level === 'alto')
-        const hasMediumRisk = parsedDocs.some(d => d.metadata?.audit?.risk_level === 'médio')
+        const hasHighRisk = docs.some(d => d.metadata?.audit?.risk_level === 'alto')
+        const hasMediumRisk = docs.some(d => d.metadata?.audit?.risk_level === 'médio')
         
         const complianceStatus = hasHighRisk 
           ? 'Risco Crítico' 
@@ -101,13 +89,13 @@ export default function JuridicoPage() {
             : 'Seguro'
 
         setMetrics({
-          total: parsedDocs.length,
-          generating: parsedDocs.filter(d => d.status === 'generating').length,
+          total: docs.length,
+          generating: docs.filter(d => d.status === 'generating').length,
           complianceStatus
         })
 
         // Se houver documentos gerando, ativa o polling
-        if (parsedDocs.some(d => d.status === 'generating')) {
+        if (docs.some(d => d.status === 'generating')) {
           if (!interval) {
             interval = setInterval(loadData, 5000)
           }

@@ -36,8 +36,10 @@ export async function middleware(request: NextRequest) {
     '/justica/novo',
     '/estrategia/novo',
     '/api/juridico/gerar',
+    '/api/justica/gerar',
     '/api/justica/analisar',
-    '/api/ai/strategy'
+    '/api/ai/strategy',
+    '/api/ai/chat'
   ].some(p => request.nextUrl.pathname.startsWith(p)) || 
   request.nextUrl.pathname.match(/^\/juridico\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/) ||
   request.nextUrl.pathname.match(/^\/justica\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/)

@@ -28,6 +28,8 @@ export async function POST(req: Request) {
     }
 
     let orgId = membership?.organization_id
+    let fallbackUserId = user?.id
+    
     if (!orgId) {
       if (!user) {
         const { data: sandbox } = await adminClient
@@ -40,6 +42,20 @@ export async function POST(req: Request) {
 
       if (!orgId) {
         return NextResponse.json({ error: 'Sua conta não possui uma organização vinculada. Complete o onboarding.' }, { status: 400 })
+      }
+    }
+
+    // Se for guest, precisamos de um user_id válido para não violar a constraint "not null" da tabela justice_demands
+    if (!user && orgId) {
+      const { data: adminMember } = await adminClient
+        .from('memberships')
+        .select('user_id')
+        .eq('organization_id', orgId)
+        .limit(1)
+        .maybeSingle() as any
+      
+      if (adminMember?.user_id) {
+        fallbackUserId = adminMember.user_id
       }
     }
 
@@ -155,7 +171,7 @@ Gere o JSON completo.`
         .from('justice_demands')
         .insert({
           organization_id: orgId,
-          user_id: user?.id || null,
+          user_id: fallbackUserId,
           status: 'ready',
           tipo_acao: parsedData.tipo_acao,
           descricao_fatos: diagnosticData.whatHappened,
