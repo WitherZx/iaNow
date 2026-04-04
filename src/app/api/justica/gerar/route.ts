@@ -120,11 +120,31 @@ Ajuste a petição e atualize a auditoria se necessário.`
       : `DADOS PARA GERAR PETIÇÃO:
 - Tipo: ${diagnosticData.problemType}
 - Comarca: ${diagnosticData.comarca || 'Deixar para o usuário preencher'}
-- Autor: ${diagnosticData.authorName}, CPF: ${diagnosticData.authorDocument}, Endereço: ${diagnosticData.authorAddress}
-- Réu: ${diagnosticData.defendantName}, CPF: ${diagnosticData.defendantDocument}, Endereço: ${diagnosticData.defendantAddress}
-- Fatos: ${diagnosticData.whatHappened} no dia ${diagnosticData.whenHappened}
-- Danos: R$ ${diagnosticData.materialDamage} (Material), R$ ${diagnosticData.moralDamage} (Moral)
-- Total: R$ ${diagnosticData.estimatedValue}
+
+QUALIFICAÇÃO DO AUTOR:
+- Nome: ${diagnosticData.authorName}
+- Tipo: ${diagnosticData.authorType === 'pj' ? 'Pessoa Jurídica' : 'Pessoa Física'}
+- Documento: ${diagnosticData.authorDocument}
+- E-mail: ${diagnosticData.authorEmail || 'Não informado'}
+- Telefone: ${diagnosticData.authorPhone || 'Não informado'}
+- Endereço: ${diagnosticData.authorAddress || 'Não informado'}
+
+QUALIFICAÇÃO DO RÉU:
+- Nome: ${diagnosticData.defendantName}
+- Tipo: ${diagnosticData.defendantType === 'pj' ? 'Pessoa Jurídica' : 'Pessoa Física'}
+- Documento: ${diagnosticData.defendantDocument || 'Não informado'}
+- E-mail: ${diagnosticData.defendantEmail || 'Não informado'}
+- Telefone: ${diagnosticData.defendantPhone || 'Não informado'}
+- Endereço: ${diagnosticData.defendantAddress || 'Não informado'}
+
+SOBRE OS FATOS:
+- Narrativa: ${diagnosticData.whatHappened}
+- Data do ocorrido: ${diagnosticData.whenHappened}
+
+VALORES DA CAUSA:
+- Dano Material: R$ ${diagnosticData.materialDamage}
+- Dano Moral: R$ ${diagnosticData.moralDamage}
+- Valor Total Estimado: R$ ${diagnosticData.estimatedValue}
 ${diagnosticData.jurisprudence ? `\n- JURISPRUDÊNCIA DE REFERÊNCIA (USE COMO BASE): ${diagnosticData.jurisprudence}` : ''}
 
 Gere o JSON completo.`

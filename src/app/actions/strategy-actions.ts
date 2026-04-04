@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createDocumentVersionAction } from './version-actions'
 
 export async function getStrategyAction(id: string, guestId?: string | null) {
   const supabase = createAdminClient()
@@ -250,6 +251,9 @@ export async function updateStrategyAction(id: string, content: any, guestId?: s
       .eq('id', id)
 
     if (updateError) throw updateError
+
+    // 4. Cria Versão Histórica (Time Travel)
+    await createDocumentVersionAction(id, 'strategy', content, guestId)
 
     return { success: true }
   } catch (err: any) {

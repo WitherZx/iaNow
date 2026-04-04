@@ -23,7 +23,9 @@ import {
   RefreshCcw,
   Clock,
   Trash2,
-  ExternalLink
+  ExternalLink,
+  History as HistoryIcon,
+  RotateCcw
 } from 'lucide-react'
 import { Button } from '@/components/shared/Button'
 import { Card } from '@/components/shared/Card'
@@ -41,6 +43,7 @@ import { TechnicalReportCard } from '@/components/shared/TechnicalReportCard'
 import { SidebarRefineSection } from '@/components/shared/SidebarRefineSection'
 import { Paywall } from '@/components/shared/Paywall'
 import { unlockDocumentMockAction } from '@/app/actions/asaas-actions'
+import { createDocumentVersionAction } from '@/app/actions/version-actions'
 
 export default function ViewDocumentPage() {
   const { id } = useParams()
@@ -59,6 +62,11 @@ export default function ViewDocumentPage() {
   const [activeToken, setActiveToken] = useState<string | null>(null)
   const [showPaywall, setShowPaywall] = useState(false)
   const [configParams, setConfigParams] = useState({ isTestMode: false })
+
+  const [versions, setVersions] = useState<any[]>([])
+  const [viewingVersion, setViewingVersion] = useState<any>(null)
+  const [loadingVersions, setLoadingVersions] = useState(false)
+  const [showHistoryDropdown, setShowHistoryDropdown] = useState(false)
 
   const getOrCreateGuestId = () => {
     if (typeof window === 'undefined') return ''
@@ -112,6 +120,43 @@ export default function ViewDocumentPage() {
       }
       return part
     })
+  }
+
+  const loadVersions = async () => {
+    try {
+      setLoadingVersions(true)
+      const guestId = getOrCreateGuestId()
+      const { getDocumentVersionsAction } = await import('@/app/actions/version-actions')
+      const res = await getDocumentVersionsAction(id as string, 'juridico', guestId)
+      if (res.success) setVersions(res.data)
+    } catch (err) {
+      console.error('Erro ao carregar versões:', err)
+    } finally {
+      setLoadingVersions(false)
+    }
+  }
+
+  const handleSelectVersion = async (v: any) => {
+    if (!v) {
+      setViewingVersion(null)
+      setEditContent(doc?.content || '')
+      return
+    }
+    try {
+      setLoading(true)
+      const { getVersionContentAction } = await import('@/app/actions/version-actions')
+      const res = await getVersionContentAction(v.id)
+      if (res.success) {
+        setViewingVersion(v)
+        setEditContent(res.data?.content || '')
+        toast.info(`Visualizando versão de ${new Date(v.created_at).toLocaleString('pt-BR')}`)
+      }
+    } catch (err) {
+      console.error('Erro ao carregar conteúdo da versão:', err)
+    } finally {
+      setLoading(false)
+      setShowHistoryDropdown(false)
+    }
   }
 
   useEffect(() => {
@@ -244,9 +289,14 @@ export default function ViewDocumentPage() {
 
       if (error) throw error
 
+      const guestId = getOrCreateGuestId()
+      await createDocumentVersionAction(id as string, 'juridico', { content: editContent }, guestId)
+
       setDoc({ ...doc, content: editContent })
       setIsEditing(false)
+      setViewingVersion(null) // Fork: volta para versão atual
       toast.success('Documento atualizado com sucesso!')
+      loadVersions()
     } catch (err) {
       console.error('Erro ao salvar:', err)
       toast.error('Erro ao salvar alterações.')
@@ -301,6 +351,13 @@ export default function ViewDocumentPage() {
 
       setDoc({ ...doc, content: data.content })
       setEditContent(data.content)
+      
+      const guestId = getOrCreateGuestId()
+      await createDocumentVersionAction(id as string, 'juridico', { content: data.content }, guestId)
+
+      setViewingVersion(null) // Fork/Update: volta para versão atual
+      loadVersions()
+
       if (!customPrompt) setRefinePrompt('')
 
       toast.success('Ajustes aplicados!', { id: toastId })
@@ -418,6 +475,73 @@ export default function ViewDocumentPage() {
           }}
           onDownload={() => window.print()}
           onDelete={handleDelete}
+          onViewHistory={
+            <div className="relative">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  if (!showHistoryDropdown) loadVersions()
+                  setShowHistoryDropdown(!showHistoryDropdown)
+                }}
+                title="Histórico de alterações"
+                className={cn(
+                  "h-10 w-10 rounded-xl border-slate-200 text-slate-900 transition-all hover:scale-105",
+                  viewingVersion ? "bg-amber-50 border-amber-200 text-amber-600" : "hover:text-primary hover:border-primary/30"
+                )}
+              >
+                <HistoryIcon size={18} />
+              </Button>
+
+              {showHistoryDropdown && (
+                <div className="absolute right-0 top-12 w-64 bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 p-2 animate-in fade-in slide-in-from-top-2">
+                  <div className="px-3 py-2 border-b border-slate-50 mb-1">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Histórico de Versões</p>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                    <button
+                      onClick={() => handleSelectVersion(null)}
+                      className={cn(
+                        "w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center justify-between group",
+                        !viewingVersion ? "bg-primary/10 text-primary" : "hover:bg-slate-50 text-slate-600"
+                      )}
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-[11px] font-black uppercase tracking-tight">Versão Atual (Live)</span>
+                        <span className="text-[9px] font-bold opacity-60">Conteúdo mais recente</span>
+                      </div>
+                      {!viewingVersion && <CheckCircle2 size={12} />}
+                    </button>
+
+                    {loadingVersions && (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 size={16} className="animate-spin text-slate-300" />
+                      </div>
+                    )}
+
+                    {!loadingVersions && versions.map((v) => (
+                      <button
+                        key={v.id}
+                        onClick={() => handleSelectVersion(v)}
+                        className={cn(
+                          "w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center justify-between group mt-1",
+                          viewingVersion?.id === v.id ? "bg-amber-50 text-amber-600" : "hover:bg-slate-50 text-slate-600"
+                        )}
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-[11px] font-black uppercase tracking-tight">
+                            {new Date(v.created_at).toLocaleDateString('pt-BR')} às {new Date(v.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          <span className="text-[9px] font-bold opacity-60">ID: {v.id.slice(0, 8)}...</span>
+                        </div>
+                        {viewingVersion?.id === v.id && <Clock size={12} />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          }
         />
       }
       hero={
@@ -585,7 +709,26 @@ export default function ViewDocumentPage() {
     >
       <div className="min-w-0 flex flex-col">
         {!isGenerating && !isFailed && (
-          <Card className="min-h-[600px] border-none shadow-2xl shadow-slate-200/50 rounded-[20px] md:rounded-[32px] overflow-hidden bg-white flex flex-col relative print:min-h-0 print:h-auto print:block print:overflow-visible print:shadow-none print:border-none print:rounded-none print:p-0">
+          <div className="mb-4">
+            {viewingVersion && (
+              <div className="flex items-center gap-2 px-6 py-3 bg-amber-500/10 border border-amber-500/20 rounded-3xl animate-pulse mb-4 justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock size={14} className="text-amber-600" />
+                  <span className="text-[11px] font-black text-amber-700 uppercase tracking-widest">
+                    Visualizando Histórico: {new Date(viewingVersion.created_at).toLocaleString('pt-BR')}
+                  </span>
+                </div>
+                <button 
+                  onClick={() => handleSelectVersion(null)}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 rounded-xl transition-all text-[10px] font-black uppercase tracking-tight"
+                  title="Voltar para versão atual"
+                >
+                  <RotateCcw size={12} />
+                  Sair do Histórico
+                </button>
+              </div>
+            )}
+            <Card className="min-h-[600px] border-none shadow-2xl shadow-slate-200/50 rounded-[20px] md:rounded-[32px] overflow-hidden bg-white flex flex-col relative print:min-h-0 print:h-auto print:block print:overflow-visible print:shadow-none print:border-none print:rounded-none print:p-0">
             {isEditing ? (
               <div className="flex-1">
                 <textarea
@@ -633,7 +776,7 @@ export default function ViewDocumentPage() {
               </div>
             )}
           </Card>
-
+          </div>
         )}
 
         {isGenerating && (

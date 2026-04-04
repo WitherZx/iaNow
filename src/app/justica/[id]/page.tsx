@@ -24,9 +24,12 @@ import {
   Zap,
   ChevronDown,
   Info,
-  Search
+  Search,
+  History,
+  RotateCcw
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { getDocumentVersionsAction, getVersionContentAction } from '@/app/actions/version-actions'
 import { Button } from '@/components/shared/Button'
 import { Card } from '@/components/shared/Card'
 import { DocumentAuditLayout } from '@/components/shared/DocumentAuditLayout'
@@ -62,6 +65,11 @@ export default function DemandDetailPage() {
 
   const [showPaywall, setShowPaywall] = useState(false)
   const [config, setConfig] = useState({ isAllAccess: false, isTestMode: false })
+
+  const [versions, setVersions] = useState<any[]>([])
+  const [viewingVersion, setViewingVersion] = useState<any>(null)
+  const [loadingVersions, setLoadingVersions] = useState(false)
+  const [showHistoryDropdown, setShowHistoryDropdown] = useState(false)
 
   const loadDemand = async () => {
     try {
@@ -105,9 +113,83 @@ export default function DemandDetailPage() {
     }
   }
 
+  const activeTokenRef = useRef<string | null>(null)
+
+  const scrollToToken = (token: string) => {
+    const tokenCleanup = token.replace(/[\[\]]/g, '')
+    const id = `token-${tokenCleanup}`
+    const el = document.getElementById(id)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('animate-pulse', 'ring-4', 'ring-primary/40', 'bg-primary/20')
+      setTimeout(() => {
+        el.classList.remove('animate-pulse', 'ring-4', 'ring-primary/40', 'bg-primary/20')
+      }, 3000)
+    }
+  }
+
+  const renderTextWithHighlights = (text: string) => {
+    if (!text) return null
+    const parts = text.split(/(\[.*?\])/g)
+    return parts.map((part, i) => {
+      if (part.startsWith('[') && part.endsWith(']')) {
+        const tokenCleanup = part.replace(/[\[\]]/g, '')
+        return (
+          <span
+            key={i}
+            id={`token-${tokenCleanup}`}
+            className="transition-all duration-500 rounded px-1 py-0.5 font-bold bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 cursor-help"
+            title={`Variável: ${tokenCleanup}`}
+          >
+            {part}
+          </span>
+        )
+      }
+      return part
+    })
+  }
+
+  const handleDateMask = (val: string) => {
+    const digits = val.replace(/\D/g, '').substring(0, 8)
+    if (digits.length <= 2) return digits
+    if (digits.length <= 4) return `${digits.substring(0, 2)}/${digits.substring(2)}`
+    return `${digits.substring(0, 2)}/${digits.substring(2, 4)}/${digits.substring(4)}`
+  }
+
   useEffect(() => {
     if (id) loadDemand()
   }, [id])
+
+  const loadVersions = async () => {
+    try {
+      setLoadingVersions(true)
+      const guestId = localStorage.getItem('ianow_guest_id')
+      const res = await getDocumentVersionsAction(id as string, 'justice', guestId)
+      if (res.success) setVersions(res.data)
+    } finally {
+      setLoadingVersions(false)
+    }
+  }
+
+  const handleSelectVersion = async (v: any) => {
+    if (!v) {
+      setViewingVersion(null)
+      setEditContent(demand.metadata?.petition_content || '')
+      return
+    }
+    try {
+      setLoading(true)
+      const res = await getVersionContentAction(v.id)
+      if (res.success) {
+        setViewingVersion(v)
+        setEditContent(res.data?.petition_content || '')
+        toast.info(`Visualizando versão de ${new Date(v.created_at).toLocaleString('pt-BR')}`)
+      }
+    } finally {
+      setLoading(false)
+      setShowHistoryDropdown(false)
+    }
+  }
 
   const handleFileUpload = async (file: File, label: string) => {
     try {
@@ -127,7 +209,7 @@ export default function DemandDetailPage() {
         const guestId = localStorage.getItem('ianow_guest_id')
         const { updateJusticeDemandMetadataAction } = await import('@/app/actions/justice-actions')
         const newMetadata = { ...demand.metadata, evidence_files: updatedEvidence }
-        
+
         const res = await updateJusticeDemandMetadataAction(id as string, newMetadata, guestId)
         if (res.error) throw new Error(res.error)
 
@@ -153,7 +235,9 @@ export default function DemandDetailPage() {
       if (res.error) throw new Error(res.error)
       setDemand({ ...demand, metadata: newMetadata })
       setIsEditing(false)
+      setViewingVersion(null) // Fork concluído: volta para a corrente principal
       toast.success('Petição salva com sucesso!')
+      loadVersions() // Atualiza lista de versões
     } catch (err) {
       console.error('Erro ao salvar:', err)
       toast.error('Erro ao salvar alterações.')
@@ -334,6 +418,73 @@ export default function DemandDetailPage() {
           isSaving={saving}
           onPrint={() => window.print()}
           onDelete={handleDelete}
+          onViewHistory={
+            <div className="relative">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  if (!showHistoryDropdown) loadVersions()
+                  setShowHistoryDropdown(!showHistoryDropdown)
+                }}
+                title="Histórico de alterações"
+                className={cn(
+                  "h-10 w-10 rounded-xl border-slate-200 text-slate-900 transition-all hover:scale-105",
+                  viewingVersion ? "bg-amber-50 border-amber-200 text-amber-600" : "hover:text-primary hover:border-primary/30"
+                )}
+              >
+                <History size={18} />
+              </Button>
+
+              {showHistoryDropdown && (
+                <div className="absolute right-0 top-12 w-64 bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 p-2 animate-in fade-in slide-in-from-top-2">
+                  <div className="px-3 py-2 border-b border-slate-50 mb-1">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Histórico de Versões</p>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                    <button
+                      onClick={() => handleSelectVersion(null)}
+                      className={cn(
+                        "w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center justify-between group",
+                        !viewingVersion ? "bg-primary/10 text-primary" : "hover:bg-slate-50 text-slate-600"
+                      )}
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-[11px] font-black uppercase tracking-tight">Versão Atual (Live)</span>
+                        <span className="text-[9px] font-bold opacity-60">Conteúdo mais recente</span>
+                      </div>
+                      {!viewingVersion && <CheckCircle2 size={12} />}
+                    </button>
+
+                    {loadingVersions && (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 size={16} className="animate-spin text-slate-300" />
+                      </div>
+                    )}
+
+                    {!loadingVersions && versions.map((v) => (
+                      <button
+                        key={v.id}
+                        onClick={() => handleSelectVersion(v)}
+                        className={cn(
+                          "w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center justify-between group mt-1",
+                          viewingVersion?.id === v.id ? "bg-amber-50 text-amber-600" : "hover:bg-slate-50 text-slate-600"
+                        )}
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-[11px] font-black uppercase tracking-tight">
+                            {new Date(v.created_at).toLocaleDateString('pt-BR')} às {new Date(v.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          <span className="text-[9px] font-bold opacity-60">ID: {v.id.slice(0, 8)}...</span>
+                        </div>
+                        {viewingVersion?.id === v.id && <Clock size={12} />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          }
         />
       }
       hero={
@@ -385,27 +536,68 @@ export default function DemandDetailPage() {
                   if (tokens.length === 0) return <p className="text-[10px] text-slate-400 font-bold text-center">Nenhum campo variável</p>
                   return (
                     <div className="space-y-4">
-                      {tokens.map(token => (
-                        <div key={token} className="space-y-1.5">
-                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">{token.slice(1, -1)}</label>
-                          <input
-                            type="text"
-                            value={fieldValues[token] || ''}
-                            onChange={(e) => setFieldValues(prev => ({ ...prev, [token]: e.target.value }))}
-                            className="w-full bg-white rounded-xl h-10 px-4 text-xs font-bold focus:ring-1 focus:ring-primary/20 transition-all border-slate-200 border-1"
-                          />
-                        </div>
-                      ))}
+                      {tokens.map(token => {
+                        const isDate = token.toUpperCase().includes('DATA')
+                        return (
+                          <div key={token} className="space-y-1.5 group/var">
+                            <button
+                              onClick={() => scrollToToken(token)}
+                              className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase ml-1 hover:text-primary transition-colors text-left"
+                            >
+                              {token.slice(1, -1)}
+                              <ExternalLink size={10} className="opacity-0 group-hover/var:opacity-100 transition-opacity" />
+                            </button>
+                            <input
+                              type="text"
+                              placeholder={isDate ? 'DD/MM/AAAA' : '...'}
+                              value={fieldValues[token] || ''}
+                              onChange={(e) => {
+                                let val = e.target.value
+                                if (isDate) val = handleDateMask(val)
+                                setFieldValues(prev => ({ ...prev, [token]: val }))
+                              }}
+                              className="w-full bg-white rounded-xl h-10 px-4 text-xs font-bold focus:ring-1 focus:ring-primary/20 transition-all border-slate-200 border-1"
+                            />
+                          </div>
+                        )
+                      })}
                       <Button
-                        onClick={() => {
+                        onClick={async () => {
                           let finalContent = editContent
                           Object.entries(fieldValues).forEach(([token, val]) => {
-                            finalContent = finalContent.replaceAll(token, val)
+                            if (val.trim()) {
+                              finalContent = finalContent.replaceAll(token, val)
+                            }
                           })
+
                           setEditContent(finalContent)
                           setFieldValues({})
-                          toast.success('Variáveis aplicadas!')
+
+                          // Persiste no banco imediatamente
+                          try {
+                            setSaving(true)
+                            const guestId = localStorage.getItem('ianow_guest_id')
+                            const { updateJusticeDemandMetadataAction } = await import('@/app/actions/justice-actions')
+                            const { createDocumentVersionAction } = await import('@/app/actions/version-actions')
+
+                            const newMetadata = { ...demand.metadata, petition_content: finalContent }
+                            const res = await updateJusticeDemandMetadataAction(id as string, newMetadata, guestId)
+
+                            if (res.error) throw new Error(res.error)
+
+                            setDemand({ ...demand, metadata: newMetadata })
+                            await createDocumentVersionAction(id as string, 'justice', newMetadata, guestId)
+
+                            toast.success('Variáveis aplicadas e salvas!')
+                            loadVersions()
+                          } catch (err) {
+                            console.error('Erro ao salvar após aplicar variáveis:', err)
+                            toast.error('Variáveis aplicadas localmente, mas houve erro ao salvar.')
+                          } finally {
+                            setSaving(false)
+                          }
                         }}
+                        isLoading={saving}
                         className="w-full bg-primary text-white font-black h-11 rounded-xl text-[10px]"
                       >Aplicar ao Texto</Button>
                     </div>
@@ -516,7 +708,7 @@ export default function DemandDetailPage() {
                     return !p.includes('rg') && !p.includes('cpf') && !p.includes('residencia') && !p.includes('cnh')
                   })
                   .concat(['Prints de conversas/WhatsApp', 'Faturas ou Notas Fiscais', 'E-mails de reclamação'])
-                  .slice(0, 3) 
+                  .slice(0, 3)
                   .filter((v: any, i: number, a: any[]) => a.indexOf(v) === i)
                   .map((prova: string, i: number) => {
                     const hasAnexo = uploadedEvidence.some(f => f.name === prova)
@@ -533,9 +725,9 @@ export default function DemandDetailPage() {
                             <Upload size={14} className="text-slate-300 group-hover:text-amber-500 transition-colors" />
                           )}
                         </div>
-                        <input 
-                          type="file" 
-                          className="absolute inset-0 opacity-0 cursor-pointer" 
+                        <input
+                          type="file"
+                          className="absolute inset-0 opacity-0 cursor-pointer"
                           onChange={(e) => {
                             const file = e.target.files?.[0]
                             if (file) handleFileUpload(file, prova)
@@ -568,7 +760,7 @@ export default function DemandDetailPage() {
             <div className="flex items-center gap-2 text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em] mb-8">
               <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" /> Relatório Técnico
             </div>
-            
+
             <div className="space-y-6 relative z-10">
               <div className="flex items-center justify-between border-b border-white/10 pb-4">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Modelo</span>
@@ -581,7 +773,7 @@ export default function DemandDetailPage() {
                 </span>
               </div>
             </div>
-            
+
             {/* Efeito visual de fundo */}
             <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-emerald-500/10 blur-3xl rounded-full" />
           </div>
@@ -589,48 +781,67 @@ export default function DemandDetailPage() {
       }
     >
       <div className="flex flex-col h-full bg-white rounded-[32px] overflow-hidden print:block print:h-auto print:overflow-visible border border-slate-100 shadow-sm transition-all duration-500 print:shadow-none print:border-none print:rounded-none print:bg-transparent">
-        <div className="flex items-center gap-2 p-3 bg-slate-50/50 border-b border-slate-100 print:hidden overflow-x-auto whitespace-nowrap custom-scrollbar">
-          {(['minuta', 'acompanhamento', 'analise'] as const).map((tab) => {
-            const isPetitionEmpty = tab === 'minuta' && !editContent
-            const labels: Record<string, string> = {
-              minuta: 'Petição IA',
-              acompanhamento: 'Processo CNJ',
-              analise: 'Análise Minerva'
-            }
-            return (
+        <div className="flex items-center gap-2 p-3 bg-slate-50/50 border-b border-slate-100 print:hidden overflow-x-auto whitespace-nowrap custom-scrollbar justify-between">
+          <div className="flex items-center gap-2">
+            {(['minuta', 'acompanhamento', 'analise'] as const).map((tab) => {
+              const isPetitionEmpty = tab === 'minuta' && !editContent
+              const labels: Record<string, string> = {
+                minuta: 'Petição IA',
+                acompanhamento: 'Processo CNJ',
+                analise: 'Análise Minerva'
+              }
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  disabled={isPetitionEmpty}
+                  title={isPetitionEmpty ? 'Petição gerada pela Minerva. Não disponível para processos de acompanhamento externo.' : undefined}
+                  className={cn(
+                    "px-6 h-10 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shrink-0",
+                    activeTab === tab
+                      ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                      : isPetitionEmpty
+                        ? "text-slate-200 cursor-not-allowed"
+                        : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  {labels[tab]}
+                  {isPetitionEmpty && <span className="ml-1.5 text-[8px] text-slate-300">· IA</span>}
+                </button>
+              )
+            })}
+          </div>
+
+          {viewingVersion && (
+            <div className="flex items-center gap-2 px-4 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-full animate-pulse mr-2">
+              <Clock size={12} className="text-amber-600" />
+              <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest">Visualizando Histórico: {new Date(viewingVersion.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                disabled={isPetitionEmpty}
-                title={isPetitionEmpty ? 'Petição gerada pela Minerva. Não disponível para processos de acompanhamento externo.' : undefined}
-                className={cn(
-                  "px-6 h-10 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shrink-0",
-                  activeTab === tab
-                    ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
-                    : isPetitionEmpty
-                      ? "text-slate-200 cursor-not-allowed"
-                      : "text-slate-400 hover:text-slate-600"
-                )}
+                onClick={() => handleSelectVersion(null)}
+                className="ml-1 hover:text-amber-900 transition-colors"
+                title="Voltar para versão atual"
               >
-                {labels[tab]}
-                {isPetitionEmpty && <span className="ml-1.5 text-[8px] text-slate-300">· IA</span>}
+                <RotateCcw size={12} />
               </button>
-            )
-          })}
+            </div>
+          )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 md:p-12 custom-scrollbar print:overflow-visible print:p-0 print:m-0">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar print:overflow-visible print:p-0 print:m-0">
           {activeTab === 'minuta' && (
             <div className="mx-auto space-y-8 animate-in fade-in duration-700 print:space-y-0">
               {isEditing ? (
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full min-h-[800px] p-8 bg-slate-50 border-none rounded-3xl font-serif text-lg leading-relaxed focus:ring-4 focus:ring-primary/5 transition-all outline-none resize-none print:p-0 print:bg-transparent"
-                />
+                <div className="flex-1">
+                  <textarea
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    className="w-full h-[800px] border-none focus:ring-0 text-base md:text-lg text-slate-700 leading-relaxed font-mono whitespace-pre-wrap outline-none resize-none p-4 md:p-8"
+                    placeholder="Edite o conteúdo da petição..."
+                  />
+                </div>
               ) : editContent ? (
-                <div className="whitespace-pre-wrap font-serif text-lg leading-relaxed text-slate-800 print:text-black">
-                  {editContent}
+                <div className="flex-1 print:p-0 text-slate-800 leading-[1.8] font-sans text-lg md:text-[17px] whitespace-pre-wrap selection:bg-primary/20">
+                  {renderTextWithHighlights(editContent)}
 
                   {/* ANEXOS DE PROVAS (SÓ PARA IMPRESSÃO) */}
                   {uploadedEvidence.length > 0 && (
@@ -641,7 +852,7 @@ export default function DemandDetailPage() {
                             <h2 className="text-xl font-bold uppercase tracking-widest text-slate-500">ANEXO {idx + 1}</h2>
                             <span className="text-sm font-medium text-slate-400">{file.name}</span>
                           </div>
-                          
+
                           <div className="flex items-center justify-center min-h-[800px]">
                             {file.type.startsWith('image/') ? (
                               <img src={file.url} alt={file.name} className="max-w-full max-h-[900px] object-contain" />

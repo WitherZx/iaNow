@@ -1017,15 +1017,11 @@ function ChatForm({
                     <div className="flex bg-white rounded-xl p-1 border border-amber-200/50 shadow-sm self-start">
                       <button
                         type="button"
-                        onClick={() => setFormData(prev => {
-                          const isCurrentlyPf = (!prev[`${field.id}_type`] || prev[`${field.id}_type`] === 'PF')
-                          if (!isCurrentlyPf) return prev // already PF
-                          return {
-                            ...prev,
-                            [`${field.id}_type`]: 'PF',
-                            [`${field.id}_doc`]: formatDoc(prev[`${field.id}_doc`] || '', 'PF')
-                          }
-                        })}
+                        onClick={() => setFormData(prev => ({
+                          ...prev,
+                          [`${field.id}_type`]: 'PF',
+                          [`${field.id}_doc`]: formatDoc(prev[`${field.id}_doc`] || '', 'PF')
+                        }))}
                         className={cn(
                           "px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all",
                           (!formData[`${field.id}_type`] || formData[`${field.id}_type`] === 'PF')
@@ -1037,15 +1033,11 @@ function ChatForm({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFormData(prev => {
-                          const isCurrentlyPj = prev[`${field.id}_type`] === 'PJ'
-                          if (isCurrentlyPj) return prev // already PJ
-                          return {
-                            ...prev,
-                            [`${field.id}_type`]: 'PJ',
-                            [`${field.id}_doc`]: formatDoc(prev[`${field.id}_doc`] || '', 'PJ')
-                          }
-                        })}
+                        onClick={() => setFormData(prev => ({
+                          ...prev,
+                          [`${field.id}_type`]: 'PJ',
+                          [`${field.id}_doc`]: formatDoc(prev[`${field.id}_doc`] || '', 'PJ')
+                        }))}
                         className={cn(
                           "px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all",
                           formData[`${field.id}_type`] === 'PJ'

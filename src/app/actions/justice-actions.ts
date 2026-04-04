@@ -3,6 +3,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { DataJudService } from '@/lib/services/datajud'
+import { createDocumentVersionAction } from './version-actions'
 
 /**
  * Busca os detalhes de uma demanda jurídica de forma segura.
@@ -269,7 +270,6 @@ export async function updateJusticeDemandMetadataAction(id: string, metadata: an
     if (!isOwner && !matchesGuest) {
       return { error: 'Você não tem permissão para atualizar esta demanda.' }
     }
-
     // 3. Atualiza o banco
     const { error: updateError } = await admin
       .from('justice_demands')
@@ -277,6 +277,9 @@ export async function updateJusticeDemandMetadataAction(id: string, metadata: an
       .eq('id', id)
 
     if (updateError) throw updateError
+
+    // 4. Cria Versão Histórica (Time Travel)
+    await createDocumentVersionAction(id, 'justice', metadata, guestId)
 
     return { success: true }
   } catch (err: any) {

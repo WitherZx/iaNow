@@ -15,6 +15,7 @@ interface DocumentActionBarProps {
   onDownload?: () => void
   onPrint?: () => void
   onDelete: () => void
+  onViewHistory?: React.ReactNode
   className?: string
 }
 
@@ -28,6 +29,7 @@ export function DocumentActionBar({
   onDownload,
   onPrint,
   onDelete,
+  onViewHistory,
   className
 }: DocumentActionBarProps) {
   return (
@@ -106,6 +108,8 @@ export function DocumentActionBar({
           <Printer size={18} />
         </Button>
       )}
+
+      {onViewHistory}
 
       <Button 
         onClick={onDelete} 
