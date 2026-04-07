@@ -8,10 +8,10 @@ import { cn } from '@/utils/cn'
 import { useState, useEffect } from 'react'
 import { linkGuestDataToUserAction } from '@/app/actions/auth-actions'
 
-export function DashboardLayout({ 
-  children, 
-  sidebar 
-}: { 
+export function DashboardLayout({
+  children,
+  sidebar
+}: {
   children: React.ReactNode,
   sidebar?: React.ReactNode
 }) {
@@ -57,7 +57,7 @@ export function DashboardLayout({
 
       {/* Main Layout Body */}
       <div className="flex flex-1 min-w-0 overflow-hidden print:overflow-visible relative">
-        
+
         {/* Optional Page Sidebar (Desktop) */}
         {sidebar && (
           <div className="hidden lg:block shrink-0 h-full print:hidden">
@@ -67,7 +67,7 @@ export function DashboardLayout({
 
         <main className={cn(
           "flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible font-montserrat px-6 py-8 md:px-8 md:py-10 print:p-0 print:bg-white print:border-none print:shadow-none",
-          !sidebar && "xl:px-12" // Extra padding if no sidebar
+          !sidebar && "xl:px-8" // Extra padding if no sidebar
         )}>
           {children}
         </main>

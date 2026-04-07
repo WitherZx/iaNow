@@ -120,16 +120,33 @@ export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Se
       }
     }
 
-    if (isOpen) loadPartners()
-  }, [isOpen, hasSession, supabase])
+    if (isOpen || (selectedId && selectedId !== 'manual')) loadPartners()
+  }, [isOpen, hasSession, supabase, selectedId])
 
   const filteredPartners = partners.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.document.includes(searchTerm)
   )
 
+  // Auto-resolve non-uuid names from AI predictions
+  useEffect(() => {
+    if (selectedId && selectedId !== 'manual' && partners.length > 0) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedId);
+      if (!isUuid) {
+        const match = partners.find(p => p.name.toLowerCase() === selectedId.toLowerCase() || p.name.toLowerCase().includes(selectedId.toLowerCase()));
+        if (match) {
+          // Wrap in slight timeout to prevent React update loops during render
+          setTimeout(() => onSelect(match), 0)
+        }
+      }
+    }
+  }, [selectedId, partners])
+
   let selectedPartner: Partner | undefined = partners.find(p => p.id === selectedId)
-  if (selectedId === 'manual') {
+  if (selectedId && selectedId !== 'manual' && !selectedPartner) {
+     // Se tiver um ID/Nome que ainda não foi carregado
+     selectedPartner = { id: selectedId, name: selectedId, document: 'Preenchendo via AI...', type: 'pf', email: '', phone: '', address: '' }
+  } else if (selectedId === 'manual') {
     selectedPartner = { id: 'manual', name: 'Inserção Manual', document: 'Preenchimento abaixo', type: 'pf', email: '', phone: '', address: '' }
   }
 

@@ -18,17 +18,32 @@ import {
   ChevronLeft,
   Clock,
   ChevronDown,
-  Check
+  Check,
+  Paperclip,
+  FileText,
+  Image as ImageIcon,
+  X as CloseIcon
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useRouter } from 'next/navigation'
 import { FormSelect } from '@/components/shared/FormSelect'
 import { PartnerSelector } from '@/components/shared/PartnerSelector'
 import { toast } from 'sonner'
+import {
+  createChatSession,
+  getChatMessages,
+  saveChatMessage,
+  getLatestSession,
+  updateSessionMetadata,
+  deleteChatSession
+} from '@/app/actions/chat-actions'
+import { addKnowledgeDocument } from '@/app/actions/kb-actions'
+import { transcribeDocument } from '@/app/actions/ai-actions'
 
 interface Message {
-  role: 'bot' | 'user'
+  role: 'bot' | 'user' | 'assistant' | 'system' | 'tool'
   content: string
+  toolCalls?: any[]
 }
 
 interface MinervaAssistantProps {
@@ -41,35 +56,27 @@ interface MinervaAssistantProps {
 export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaultModule }: MinervaAssistantProps) {
   const ACTIVE_SESSION_KEY = 'minerva_active_session_id'
 
-  const [sessionId, setSessionId] = useState<string>(() => {
-    if (typeof window === 'undefined') return `session-${Date.now()}`
-    const active = localStorage.getItem('minerva_active_session_id')
-    if (active) return active
-    const historyStr = localStorage.getItem('minerva_chat_history')
-    if (historyStr) {
-      try {
-        const hist = JSON.parse(historyStr)
-        if (hist.length > 0) return hist[0].id
-      } catch (e) { }
-    }
-    return `session-${Date.now()}`
-  })
-
-  const [messages, setMessages] = useState<Message[]>(() => {
-    if (typeof window === 'undefined' || !sessionId) return []
-    const saved = localStorage.getItem(`minerva_messages_${sessionId}`)
-    if (saved) {
-      try { return JSON.parse(saved) } catch (e) { return [] }
-    }
-    return []
-  })
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [isInitializing, setIsInitializing] = useState(true)
 
   // Restore accidentally removed state
   const [isTyping, setIsTyping] = useState(false)
   const [inputValue, setInputValue] = useState('')
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [attachedFiles, setAttachedFiles] = useState<{ name: string, type: string }[]>([])
+  const [isMultiline, setIsMultiline] = useState(false)
 
-  const [history, setHistory] = useState<{ id: string, title: string, date: string }[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const [history, setHistory] = useState<{ id: string, title: string, date: string }[]>(() => {
+    if (typeof window === 'undefined') return []
+    const saved = localStorage.getItem('minerva_chat_history')
+    return saved ? JSON.parse(saved) : []
+  })
+
   const [wizardData, setWizardData] = useState<Record<string, any>>({})
   const [isProcessing, setIsProcessing] = useState(false)
   const [guestId, setGuestId] = useState<string>(() => {
@@ -162,54 +169,94 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     }
   })()
 
-  // Initialize history and metadata
+  // Initialize session and history from Database
   useEffect(() => {
-    try {
-      const savedHistory = localStorage.getItem('minerva_chat_history')
-      if (savedHistory) {
-        setHistory(JSON.parse(savedHistory))
-      }
+    const initSession = async () => {
+      setIsInitializing(true)
+      try {
+        const resolvedGuestId = getOrCreateGuestId()
+        setGuestId(resolvedGuestId)
 
-      // Carregar dados extras da sessão (wizard, result)
-      if (sessionId) {
-        localStorage.setItem(ACTIVE_SESSION_KEY, sessionId)
+        // 1. Check if the user had a specific session open (last viewed/interacted)
+        const savedActiveSessionId = localStorage.getItem(ACTIVE_SESSION_KEY)
 
-        const savedWizard = localStorage.getItem(`minerva_wizard_${sessionId}`)
-        if (savedWizard) {
-          try { setWizardData(JSON.parse(savedWizard)) } catch (e) { setWizardData({}) }
+        // Helper to load a session by ID from the DB
+        // Returns true if the session exists in DB (even if it has 0 messages yet)
+        const loadSessionById = async (id: string) => {
+          const { messages: dbMessages, error } = await getChatMessages(id)
+          // If the call succeeded (null/undefined error), the session is valid
+          if (!error && dbMessages !== null && dbMessages !== undefined) {
+            setSessionId(id)
+            if (dbMessages.length > 0) {
+              setMessages(dbMessages.map((m: any) => ({
+                role: m.role === 'assistant' ? 'bot' : m.role,
+                content: m.content || '',
+                toolCalls: m.tool_calls
+              })))
+            }
+            return true
+          }
+          return false
         }
 
-        const handleNewChat = () => {
+        // 2. Try to restore the last active session first
+        if (savedActiveSessionId) {
+          const loaded = await loadSessionById(savedActiveSessionId)
+          if (loaded) {
+            setIsInitializing(false)
+            return
+          }
+          // Session no longer exists in DB — clear the stale key and fall through
           localStorage.removeItem(ACTIVE_SESSION_KEY)
-          const newSessionId = `session-${Date.now()}`
-          setSessionId(newSessionId)
-          setMessages([])
-          setWizardData({})
-          setIsHistoryOpen(false)
-          const newGuestId = getOrCreateGuestId()
         }
 
-        const savedResult = localStorage.getItem(`minerva_result_${sessionId}`)
-        setLatestResultPath(savedResult || null)
-      }
+        // 3. Fall back to most recent session from DB
+        const { session } = await getLatestSession(resolvedGuestId)
 
-      setGuestId(getOrCreateGuestId())
-
-      // Auto-trigger initial prompt if provided and chat is empty
-      if (initialPrompt && messages.length === 0 && !isProcessing) {
-        // Find existing session or use current
-        const saved = localStorage.getItem(`minerva_messages_${sessionId}`)
-        if (!saved || JSON.parse(saved).length === 0) {
-          handleSendMessage(initialPrompt)
+        if (session) {
+          setSessionId(session.id)
+          localStorage.setItem(ACTIVE_SESSION_KEY, session.id)
+          const { messages: dbMessages } = await getChatMessages(session.id)
+          if (dbMessages) {
+            setMessages(dbMessages.map((m: any) => ({
+              role: m.role === 'assistant' ? 'bot' : m.role,
+              content: m.content || '',
+              toolCalls: m.tool_calls
+            })))
+          }
+          if (session.metadata?.wizardData) {
+            setWizardData(session.metadata.wizardData)
+          }
+        } else {
+          // 4. Create a new session if none exists
+          const { session: newSession } = await createChatSession(resolvedGuestId)
+          if (newSession) {
+            setSessionId(newSession.id)
+            localStorage.setItem(ACTIVE_SESSION_KEY, newSession.id)
+            const greeting = `Olá, ${userName}. Sou a Minerva, sua inteligência estratégica e jurídica. Como posso te auxiliar na sua blindagem institucional hoje?`
+            const initialMsgs = [{ role: 'bot', content: greeting }] as Message[]
+            setMessages(initialMsgs)
+            await saveChatMessage({
+              sessionId: newSession.id,
+              role: 'assistant',
+              content: greeting
+            })
+          }
         }
+      } catch (e) {
+        console.error('Failed to initialize session', e)
+        toast.error('Erro ao conectar com a base de conhecimento.')
+      } finally {
+        setIsInitializing(false)
       }
-    } catch (e) {
-      console.error('Failed to load history', e)
     }
-  }, [sessionId, initialPrompt])
+
+    initSession()
+  }, [userName])
 
   // Save/Update current session in history
   const updateHistory = (firstUserMsg: string) => {
+    if (!sessionId) return
     setHistory(prev => {
       // Check if session already exists
       const exists = prev.find(h => h.id === sessionId)
@@ -269,7 +316,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
   // Initial greeting if session is fresh
   useEffect(() => {
-    if (messages.length === 0) {
+    if (messages.length === 0 && sessionId) {
       const greeting = `Olá, ${userName}. Sou a Minerva, sua inteligência estratégica e jurídica. Como posso te auxiliar na sua blindagem institucional hoje?`
       const initialMsgs = [{ role: 'bot', content: greeting }] as Message[]
       setMessages(initialMsgs)
@@ -278,9 +325,19 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
   }, [userName, messages.length, sessionId])
 
   const handleSendMessage = async (text: string = inputValue) => {
-    if (!text.trim()) return
+    if (!sessionId) return
 
     const userMsg: Message = { role: 'user', content: text }
+
+    // Mark this as the active session so the page restores it on next visit
+    localStorage.setItem(ACTIVE_SESSION_KEY, sessionId)
+
+    // Salvar no banco (async)
+    saveChatMessage({
+      sessionId: sessionId,
+      role: 'user',
+      content: text
+    })
 
     // Reset do Wizard e Banner se o usuário puxar outro assunto após finalizar um fluxo
     if (wizardStep === 5) {
@@ -291,7 +348,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     }
 
     // Update history on first user message
-    if (messages.filter(m => m.role === 'user').length === 0) {
+    if (sessionId && messages.filter(m => m.role === 'user').length === 0) {
       updateHistory(text)
     }
 
@@ -301,6 +358,10 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
       return updated
     })
     setInputValue('')
+    setIsMultiline(false)
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+    }
     setIsTyping(true)
 
     try {
@@ -310,7 +371,8 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
           messages: [...messages, userMsg].map(m => ({
             role: m.role === 'bot' ? 'assistant' : 'user',
             content: m.content
-          }))
+          })),
+          wizardData: wizardData
         })
       }, true)
 
@@ -321,6 +383,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
       const decoder = new TextDecoder()
       let accumulatedContent = ''
+      let toolCalls: any[] = []
 
       // Initialize the bot message placeholder
       setMessages(prev => [...prev, { role: 'bot', content: '' } as Message])
@@ -342,31 +405,76 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
           try {
             const data = JSON.parse(dataStr)
-            const content = data.choices[0]?.delta?.content || ''
+            const delta = data.choices[0]?.delta
+            const content = delta?.content || ''
+            const incomingToolCalls = delta?.tool_calls
+
             if (content) {
               accumulatedContent += content
-              setMessages(prev => {
-                const newMessages = [...prev]
-                if (newMessages.length > 0) {
-                  newMessages[newMessages.length - 1] = {
-                    role: 'bot',
-                    content: accumulatedContent
-                  } as Message
+            }
+
+            if (incomingToolCalls) {
+              incomingToolCalls.forEach((tc: any) => {
+                const index = tc.index ?? 0
+                if (!toolCalls[index]) {
+                  toolCalls[index] = {
+                    id: tc.id,
+                    type: 'function',
+                    function: { name: tc.function?.name, arguments: '' }
+                  }
                 }
-                return newMessages
+                if (tc.function?.arguments) {
+                  toolCalls[index].function.arguments += tc.function.arguments
+                }
               })
             }
+
+            setMessages(prev => {
+              const newMessages = [...prev]
+              if (newMessages.length > 0) {
+                newMessages[newMessages.length - 1] = {
+                  role: 'bot',
+                  content: accumulatedContent,
+                  toolCalls: toolCalls.length > 0 ? toolCalls : undefined
+                } as Message
+              }
+              return newMessages
+            })
           } catch (e) {
             // Ignore parse errors for partial chunks
           }
         }
       }
 
-      // Final save to storage after stream ends
+      // Process tool calls once finished if they exist
+      if (toolCalls.length > 0) {
+        toolCalls.forEach(tc => {
+          try {
+            const args = JSON.parse(tc.function.arguments)
+            if (tc.function.name === 'show_form') {
+              // The logic for forms is handled by the renderer, but we can set metadata here
+            } else if (tc.function.name === 'trigger_action') {
+              // Automatic trigger could go here if we want it fully agentic
+            }
+          } catch (e) { }
+        })
+      }
+
+      // Final save to storage and database after stream ends
       setMessages(prev => {
-        saveMessagesToStorage(sessionId, prev)
+        saveMessagesToStorage(sessionId!, prev)
         return prev
       })
+
+      // Persistir no banco apenas se houver conteúdo ou ferramentas
+      if (accumulatedContent || toolCalls.length > 0) {
+        await saveChatMessage({
+          sessionId: sessionId!,
+          role: 'assistant',
+          content: accumulatedContent,
+          toolCalls: toolCalls.length > 0 ? toolCalls : null
+        })
+      }
 
     } catch (error) {
       console.error('Chat Error:', error)
@@ -419,11 +527,16 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
   const handleFormSubmit = (fields: { id: string, label: string }[], data: Record<string, string>) => {
     // Update accumulated wizard data
-    setWizardData(prev => {
-      const updated = { ...prev, ...data }
-      localStorage.setItem(`minerva_wizard_${sessionId}`, JSON.stringify(updated))
-      return updated
-    })
+    const updatedData = { ...wizardData, ...data }
+    setWizardData(updatedData)
+
+    // Persistir no banco (metadata da sessão)
+    if (sessionId) {
+      updateSessionMetadata(sessionId, {
+        wizardData: updatedData,
+        last_active: new Date().toISOString()
+      })
+    }
 
     // Create a more professional, concise summary of data sent
     const formattedData = fields.map(f => {
@@ -450,7 +563,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
           }
           return m
         })
-        saveMessagesToStorage(sessionId, updated)
+        saveMessagesToStorage(sessionId!, updated)
         return updated
       })
 
@@ -466,7 +579,7 @@ Isso pode levar alguns segundos. Por favor, não feche esta janela.`
 
       setMessages(prev => {
         const updated = [...prev, processingMsg]
-        saveMessagesToStorage(sessionId, updated)
+        if (sessionId) saveMessagesToStorage(sessionId, updated)
         return updated
       })
 
@@ -496,8 +609,8 @@ Isso pode levar alguns segundos. Por favor, não feche esta janela.`
           payload = {
             tipoContrato: wizardData.tipo || wizardData.tipoContrato || wizardData.tipo_contrato || 'Contrato Genérico',
             nivel: wizardData.nivel || wizardData.nivel_blindagem || 'Básico',
-            perfilPartes: (wizardData.roleA && wizardData.roleB) 
-              ? `${wizardData.roleA} vs ${wizardData.roleB}` 
+            perfilPartes: (wizardData.roleA && wizardData.roleB)
+              ? `${wizardData.roleA} vs ${wizardData.roleB}`
               : (wizardData.perfil || wizardData.perfil_partes || 'Amigável'),
             objetivo: wizardData.objetivo || wizardData.resumo_objeto || 'Formalizar relação entre as partes',
             foro: wizardData.foro || wizardData.comarca || wizardData.foro_eleicao || 'São Paulo - SP',
@@ -577,8 +690,15 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
 
         setMessages(prev => {
           const updated = [...prev, finalMsg]
-          saveMessagesToStorage(sessionId, updated, resolvedResultPath)
+          saveMessagesToStorage(sessionId!, updated, resolvedResultPath)
           return updated
+        })
+
+        // Salvar mensagem de sucesso no banco
+        await saveChatMessage({
+          sessionId: sessionId!,
+          role: 'assistant',
+          content: finalMsg.content
         })
       } catch (error: any) {
         console.error('Action processing error:', error)
@@ -606,7 +726,72 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
     return "Acessar Módulo"
   }
 
-  const getActionIcon = (path: string) => {
+  // Helper to parse proactive suggestions
+  const parseSuggestions = (content: string) => {
+    const suggestions: string[] = []
+    const regex = /\[SUGGESTION:\s*(.*?)\]/g
+    let match
+    while ((match = regex.exec(content)) !== null) {
+      if (match[1]) suggestions.push(match[1])
+    }
+    const cleanText = content.replace(/\[SUGGESTION:\s*.*?\]/g, '').trim()
+    return { cleanText, suggestions }
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !sessionId) return
+
+    setIsUploading(true)
+    const toastId = toast.loading(`Minerva lendo ${file.name}...`)
+
+    try {
+      let extractedText = ''
+
+      if (file.type.startsWith('image/')) {
+        // AI-Powered OCR for images
+        const reader = new FileReader()
+        const base64 = await new Promise<string>((resolve) => {
+          reader.onload = () => resolve(reader.result as string)
+          reader.readAsDataURL(file)
+        })
+        extractedText = await transcribeDocument(base64)
+      } else if (file.type === 'application/pdf') {
+        // PDF Text Extraction Logic (Simplified for demonstration)
+        // Note: Real PDF parsing might need a helper function or worker
+        extractedText = `[CONTEÚDO DO PDF: ${file.name}] - O usuário anexou um PDF. Analise o contexto conforme necessário.`
+      } else {
+        extractedText = await file.text()
+      }
+
+      // Add to Session Knowledge Base
+      await addKnowledgeDocument({
+        title: `Documento: ${file.name}`,
+        content: extractedText,
+        category: 'geral',
+        tags: ['upload', 'sessao'],
+        sessionId: sessionId
+      })
+
+      setAttachedFiles(prev => [...prev, { name: file.name, type: file.type }])
+      toast.success(`Entendido! Minerva agora conhece o conteúdo de ${file.name}.`, { id: toastId })
+
+      // Proactive response
+      setMessages(prev => [...prev, {
+        role: 'bot',
+        content: `Li o seu arquivo **${file.name}**. Como posso te ajudar com as informações contidas nele?`
+      } as Message])
+
+    } catch (error) {
+      console.error('File processing error:', error)
+      toast.error('Erro ao ler o documento.', { id: toastId })
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const getActionIcon = (path: string | undefined) => {
+    if (!path) return null
     if (path.includes('/juridico/novo')) return <Scale size={16} />
     if (path.includes('/justica/novo')) return <ShieldCheck size={16} />
     if (path.includes('/estrategia/novo')) return <Zap size={16} />
@@ -729,18 +914,57 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
         {/* Chat Area */}
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-8 custom-scrollbar scroll-smooth"
+          className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-8 custom-scrollbar scroll-smooth bg-slate-50/40"
         >
           <div className="w-full space-y-8">
             {messages.map((msg, i) => {
-              const { text: textNoActions, actions } = parseActions(msg.content)
-              const { text, fields } = parseForm(textNoActions)
+              const { cleanText: textWithSuggestions, suggestions } = parseSuggestions(msg.content)
+              const { text: textNoActions, actions: legacyActions } = parseActions(textWithSuggestions)
+              const { text, fields: legacyFields } = parseForm(textNoActions)
+
+              const isLast = i === messages.length - 1
+              const isBot = msg.role === 'bot' || msg.role === 'assistant'
+
+              // Detect tool-based forms/actions
+              const toolForm = msg.toolCalls?.find(tc => tc.function?.name === 'show_form')
+              const toolAction = msg.toolCalls?.find(tc => tc.function?.name === 'trigger_action')
+
+              let formFields = legacyFields
+              let formTitle = ''
+              let actions = legacyActions
+
+              if (toolForm) {
+                try {
+                  const args = typeof toolForm.function.arguments === 'string'
+                    ? (toolForm.function.arguments.trim() ? JSON.parse(toolForm.function.arguments) : {})
+                    : (toolForm.function.arguments || {})
+
+                  formFields = (args.fields || []).map((f: any) => ({
+                    ...f,
+                    isContact: f.type === 'contact' // Mapear para o formato do ChatForm
+                  }))
+                  formTitle = args.title || ''
+                } catch (e) {
+                  console.error("Error parsing toolForm arguments:", e)
+                }
+              }
+
+              if (toolAction) {
+                try {
+                  const args = typeof toolAction.function.arguments === 'string'
+                    ? (toolAction.function.arguments.trim() ? JSON.parse(toolAction.function.arguments) : {})
+                    : (toolAction.function.arguments || {})
+                  if (!actions.includes(args.path)) {
+                    actions = [...actions, args.path]
+                  }
+                } catch (e) { }
+              }
 
               return (
                 <div
                   key={i}
                   className={cn(
-                    "flex w-full animate-in fade-in slide-in-from-bottom-2 duration-300",
+                    "flex w-full animate-in fade-in slide-in-from-bottom-2 duration-500",
                     msg.role === 'user' ? "justify-end" : "justify-start"
                   )}
                 >
@@ -748,7 +972,6 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
                     "max-w-[95%] sm:max-w-[85%] flex gap-3 sm:gap-4",
                     msg.role === 'user' ? "flex-row-reverse" : "flex-row"
                   )}>
-                    {/* ... icon logic ... */}
                     <div className={cn(
                       "w-8 h-8 sm:w-10 sm:h-10 rounded-xl shrink-0 flex items-center justify-center shadow-sm overflow-hidden",
                       msg.role === 'user' ? "bg-slate-950 text-white" : "bg-white border border-slate-100"
@@ -758,27 +981,56 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
 
                     <div className="space-y-4 flex-1">
                       <div className={cn(
-                        "p-4 text-sm sm:text-base font-medium leading-relaxed whitespace-pre-wrap",
+                        "p-5 text-sm sm:text-[15px] font-medium leading-relaxed whitespace-pre-wrap transition-all duration-300",
                         msg.role === 'user'
-                          ? "bg-slate-900 text-white rounded-[20px] rounded-tr-none"
-                          : "bg-slate-200 text-slate-800 rounded-[22px] rounded-tl-none border-b border-slate-300/50 shadow-sm"
+                          ? "bg-slate-900 text-white rounded-[24px] rounded-tr-none shadow-lg shadow-slate-200/50"
+                          : "bg-blue-100 text-slate-800 rounded-[24px] rounded-tl-none border border-slate-200/80 shadow-[0_4px_20px_rgb(0,0,0,0.03)]"
                       )}>
-                        {text}
+                        {/* Agent Badge (Premium) */}
+                        {isBot && (
+                          <div className="flex items-center gap-1.5 mb-2.5 opacity-60">
+                            <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+                            <span className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-500">
+                              Minerva - Inteligência Jurídica {formFields.length > 0 ? "• Coleta Ativa" : ""}
+                            </span>
+                          </div>
+                        )}
 
-                        {/* Form Fields Rendering */}
-                        {fields.length > 0 && msg.role === 'bot' && (
-                          <ChatForm
-                            fields={fields}
-                            onSubmit={(data) => handleFormSubmit(fields, data)}
-                            isLastMessage={i === messages.length - 1}
-                            isGuest={userName === 'Visitante'}
-                          />
+                        {formTitle && <div className="mb-2 text-[10px] font-black uppercase text-teal-600 tracking-widest">{formTitle}</div>}
+
+                        <div className="prose prose-slate prose-sm max-w-none">
+                          {text}
+                        </div>
+
+                        {/* Form Fields Rendering (Tool or Legacy) */}
+                        {formFields.length > 0 && isBot && (
+                          <div className="mt-6 pt-6 border-t border-slate-100/50">
+                            <ChatForm
+                              fields={formFields}
+                              onSubmit={(data) => handleFormSubmit(formFields, data)}
+                              isLastMessage={isLast}
+                              isGuest={userName === 'Visitante'}
+                            />
+                          </div>
                         )}
                       </div>
 
-                      {/* ... actions logic ... */}
+                      {/* Proactive Suggestions (Chips) */}
+                      {isBot && isLast && suggestions.length > 0 && !isProcessing && (
+                        <div className="flex flex-wrap gap-2 pt-2 animate-in fade-in slide-in-from-bottom-1 duration-700 delay-300">
+                          {suggestions.map((s, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => handleSendMessage(s)}
+                              className="px-4 py-2 bg-white border border-slate-200 rounded-full text-slate-600 text-xs font-bold hover:border-teal-500 hover:text-teal-600 hover:bg-teal-50/30 transition-all active:scale-95 shadow-sm"
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
 
-                      {/* Action Buttons */}
+                      {/* Action Buttons (Tool or Legacy) */}
                       {actions.length > 0 && (
                         <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-left-2 duration-500 delay-300">
                           {actions.map((path, idx) => (
@@ -786,7 +1038,7 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
                               key={idx}
                               onClick={() => handleAction(path)}
                               disabled={isProcessing}
-                              className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-900 font-black uppercase text-[10px] tracking-widest hover:bg-slate-900 hover:text-white transition-all active:scale-95 group disabled:opacity-50"
+                              className="flex items-center gap-2 px-6 py-3.5 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-800 transition-all active:scale-95 group shadow-xl shadow-slate-200/50 disabled:opacity-50"
                             >
                               {isProcessing ? <Loader2 size={14} className="animate-spin" /> : getActionIcon(path)}
                               {isProcessing ? "Processando..." : getActionLabel(path)}
@@ -836,32 +1088,86 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
           </div>
         )}
 
-        {/* Input de Mensagem */}
-        <div className="p-3 sm:p-8 bg-white border-t border-slate-100 shrink-0">
-          <div className="w-full">
-            <div className="relative flex items-center">
-              <div className="absolute left-6 text-slate-300 hidden sm:block">
-                <Sparkles size={20} />
+        {/* Input Area */}
+        <div className="p-4 sm:p-6 bg-white border-t border-slate-100 shrink-0">
+          <div className="w-fullmx-auto space-y-4">
+            {/* Attached Files List */}
+            {attachedFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 pb-2">
+                {attachedFiles.map((file, idx) => (
+                  <div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 animate-in fade-in slide-in-from-left-2 transition-all">
+                    {file.type.startsWith('image/') ? <ImageIcon size={12} /> : <FileText size={12} />}
+                    <span className="truncate max-w-[120px]">{file.name}</span>
+                    <button onClick={() => setAttachedFiles(f => f.filter((_, i) => i !== idx))} className="hover:text-red-500">
+                      <CloseIcon size={12} />
+                    </button>
+                  </div>
+                ))}
               </div>
+            )}
+
+            <div className="relative group">
               <input
-                type="text"
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                className="hidden"
+                accept=".pdf,.png,.jpg,.jpeg,.txt"
+              />
+
+              <div className={cn(
+                "absolute left-4 flex items-center gap-2 transition-all duration-200",
+                isMultiline ? "top-3 sm:top-4" : "top-1/2 -translate-y-1/2"
+              )}>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading || !sessionId}
+                  className="p-2 text-slate-400 hover:text-primary transition-colors disabled:opacity-30"
+                >
+                  {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Paperclip size={18} />}
+                </button>
+              </div>
+
+              <textarea
+                ref={textareaRef}
                 value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !isTyping && handleSendMessage()}
-                placeholder="Como a Minerva pode te ajudar hoje?"
-                className="w-full h-12 sm:h-16 px-4 sm:pl-16 pr-[52px] sm:pr-20 bg-slate-50 border-1 border-slate-300 rounded-[8px] text-slate-900 font-bold focus:outline-none focus:border-2 transition-all placeholder:text-slate-400 text-[13px] sm:text-base shadow-inner truncate"
-                disabled={isTyping}
+                onChange={(e) => {
+                  setInputValue(e.target.value)
+                  const target = e.target
+                  target.style.height = 'auto'
+                  const newHeight = Math.min(target.scrollHeight, 150)
+                  target.style.height = `${newHeight}px`
+                  setIsMultiline(newHeight > 64)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    if (!isProcessing && !isUploading && inputValue.trim()) handleSendMessage()
+                  }
+                }}
+                placeholder={isUploading ? "Minerva está analisando seu arquivo..." : `Fale com a Minerva...`}
+                disabled={isProcessing || isUploading}
+                rows={1}
+                className="block w-full pl-14 pr-16 py-4 sm:py-5 bg-slate-50 border border-slate-200 rounded-[22px] text-sm sm:text-base outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all shadow-sm font-medium resize-none overflow-y-auto min-h-[56px] sm:min-h-[64px]"
               />
               <button
                 onClick={() => handleSendMessage()}
-                disabled={!inputValue.trim() || isTyping}
-                className="absolute right-2 w-[36px] h-[36px] sm:w-12 sm:h-12 bg-primary text-white rounded-[8px] flex items-center justify-center hover:scale-105 active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all shadow-md sm:shadow-xl shadow-primary/20 group overflow-hidden"
+                disabled={isProcessing || !inputValue.trim() || isUploading}
+                className={cn(
+                  "absolute right-2 p-2.5 sm:p-3 bg-slate-900 text-white rounded-[22px] hover:bg-primary transition-all active:scale-95 disabled:opacity-30 shadow-md shadow-slate-200 duration-200",
+                  isMultiline ? "bottom-3 sm:bottom-4" : "top-1/2 -translate-y-1/2"
+                )}
               >
-                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                <Send size={16} className="relative z-10 sm:w-5 sm:h-5" />
+                {isProcessing ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <ArrowRight size={18} />
+                )}
               </button>
             </div>
-            <p className="mt-2 sm:mt-4 text-center text-[8px] sm:text-[10px] font-black text-slate-300 uppercase tracking-widest hidden sm:block">Powered by Minerva v4.0 • iaNow Security Engine</p>
+            <p className="text-[9px] sm:text-[10px] text-center text-slate-400 font-bold uppercase tracking-widest px-4">
+              iaNow Minerva AI • Inteligência Estratégica e Jurídica em Tempo Real
+            </p>
           </div>
         </div>
       </div>
@@ -966,11 +1272,16 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
                   localStorage.removeItem(`minerva_messages_${item.id}`)
                   localStorage.removeItem(`minerva_wizard_${item.id}`)
 
+                  // Delete from database
+                  deleteChatSession(item.id).catch(err => console.error('Failed to delete session from DB:', err))
+
                   if (sessionId === item.id) {
+                    localStorage.removeItem(ACTIVE_SESSION_KEY)
                     const newId = `session-${Date.now()}`
                     setSessionId(newId)
-                    localStorage.setItem('minerva_active_session_id', newId)
-                    loadMessagesFromStorage(newId)
+                    // No need to set ACTIVE_SESSION_KEY for a fresh, empty session yet
+                    setMessages([])
+                    setWizardData({})
                   }
                 }}
                 className="absolute top-3 right-3 text-slate-300 hover:text-rose-500 opacity-0 group-hover/item:opacity-100 transition-all p-1 bg-white rounded-md shadow-sm border border-slate-100"
@@ -994,6 +1305,44 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
   )
 }
 
+function AutoExpandingTextarea({ 
+  value, 
+  onChange, 
+  placeholder, 
+  disabled 
+}: { 
+  value: string, 
+  onChange: (val: string) => void, 
+  placeholder: string, 
+  disabled: boolean 
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+
+  const adjustHeight = () => {
+    const target = ref.current
+    if (target) {
+      target.style.height = 'auto'
+      target.style.height = (target.scrollHeight + 2) + 'px' // +2 to avoid micro-scrolling
+    }
+  }
+
+  useEffect(() => {
+    adjustHeight()
+  }, [value])
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={1}
+      className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-slate-300 min-h-[46px] resize-none overflow-hidden"
+      disabled={disabled}
+    />
+  )
+}
+
 function ChatForm({
   fields,
   onSubmit,
@@ -1011,9 +1360,9 @@ function ChatForm({
       if (f.defaultValue) {
         // Se for campo de contato e o valor não parecer um UUID, assumimos que é um nome para preenchimento manual
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(f.defaultValue)
-        
+
         if (f.isContact && !isUuid && f.defaultValue !== 'manual') {
-          initials[f.id] = 'manual'
+          initials[f.id] = f.defaultValue
           initials[`${f.id}_name`] = f.defaultValue
         } else {
           initials[f.id] = f.defaultValue
@@ -1049,7 +1398,7 @@ function ChatForm({
     return type === 'PJ' ? formatCnpj(value) : formatCpf(value)
   }
 
-  if (isSubmitted) return null
+  // if (isSubmitted) return null (Removed to keep form visible after submission)
 
   return (
     <div className="mt-6 p-5 bg-white border border-slate-200 rounded-2xl shadow-sm space-y-4 animate-in fade-in slide-in-from-top-2 duration-500">
@@ -1061,10 +1410,24 @@ function ChatForm({
         {fields.map(field => (
           <div key={field.id} className="space-y-1.5 flex flex-col">
             {field.isContact ? (
-              <div className="space-y-3">
+              <div className="space-y-4 p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
+                <div className="space-y-1.5 flex flex-col">
+                  <label className="text-[10px] font-black uppercase text-amber-700 tracking-wider ml-1">
+                    Função da Parte no Contrato
+                  </label>
+                  <input
+                    type="text"
+                    value={formData[`${field.id}_role`] !== undefined ? formData[`${field.id}_role`] : field.label}
+                    onChange={(e) => setFormData(prev => ({ ...prev, [`${field.id}_role`]: e.target.value }))}
+                    placeholder="Ex: Contratante, Prestador de Serviço, Locador..."
+                    className="px-4 py-3 bg-white border border-amber-200/60 rounded-xl text-slate-900 font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all placeholder:text-slate-300"
+                    disabled={!isLastMessage || isSubmitted}
+                  />
+                </div>
+
                 {!isGuest && (
                   <PartnerSelector
-                    label={field.label}
+                    label="Selecionar Contato do Hub"
                     selectedId={formData[`${field.id}`]}
                     onSelect={(partner) => {
                       setFormData(prev => ({
@@ -1080,12 +1443,12 @@ function ChatForm({
                         [`${field.id}_profession`]: partner.metadata?.profissao || partner.metadata?.profession || '',
                       }))
                     }}
-                    className={cn(!isLastMessage && "opacity-60 pointer-events-none")}
+                    className={cn((!isLastMessage || isSubmitted) && "opacity-60 pointer-events-none")}
                   />
                 )}
 
                 {formData[field.id] === 'manual' && (
-                  <div className={cn("flex flex-col gap-4 p-5 bg-amber-50/50 border border-amber-100 rounded-2xl animate-in fade-in duration-300", !isLastMessage && "opacity-60 pointer-events-none", isGuest && "mt-2")}>
+                  <div className={cn("flex flex-col gap-4 p-5 bg-amber-50/50 border border-amber-100 rounded-2xl animate-in fade-in duration-300", (!isLastMessage || isSubmitted) && "opacity-60 pointer-events-none", isGuest && "mt-2")}>
                     {isGuest && (
                       <div className="text-[10px] font-black uppercase text-amber-700/50 tracking-widest mb-1">
                         Dados da {field.label}
@@ -1184,7 +1547,7 @@ function ChatForm({
                               onChange={(e) => setFormData(prev => ({ ...prev, [`${field.id}_rep_doc`]: formatCpf(e.target.value) }))}
                               placeholder="000.000.000-00 (Se souber)"
                               className="px-4 py-3 bg-white border border-amber-200/60 rounded-xl text-slate-900 font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all placeholder:text-slate-300"
-                              disabled={!isLastMessage}
+                              disabled={!isLastMessage || isSubmitted}
                             />
                           </div>
                         </>
@@ -1198,7 +1561,7 @@ function ChatForm({
                           onChange={(e) => setFormData(prev => ({ ...prev, [`${field.id}_contact`]: e.target.value }))}
                           placeholder="contato@exemplo.com ou (11) 9..."
                           className="px-4 py-3 bg-white border border-amber-200/60 rounded-xl text-slate-900 font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all placeholder:text-slate-300"
-                          disabled={!isLastMessage}
+                          disabled={!isLastMessage || isSubmitted}
                         />
                       </div>
 
@@ -1210,7 +1573,7 @@ function ChatForm({
                           onChange={(e) => setFormData(prev => ({ ...prev, [`${field.id}_address`]: e.target.value }))}
                           placeholder="Rua, Número, Bairro, Cidade - UF"
                           className="px-4 py-3 bg-white border border-amber-200/60 rounded-xl text-slate-900 font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all placeholder:text-slate-300"
-                          disabled={!isLastMessage}
+                          disabled={!isLastMessage || isSubmitted}
                         />
                       </div>
                     </div>
@@ -1223,24 +1586,16 @@ function ChatForm({
                 value={formData[field.id] || ''}
                 onChange={(val) => setFormData(prev => ({ ...prev, [field.id]: val }))}
                 options={field.options}
-                className={cn(!isLastMessage && "opacity-60 pointer-events-none")}
+                className={cn((!isLastMessage || isSubmitted) && "opacity-60 pointer-events-none")}
               />
             ) : (
               <>
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider ml-1">{field.label}</label>
-                <textarea
+                <AutoExpandingTextarea
                   value={formData[field.id] || ''}
-                  onChange={(e) => {
-                    const target = e.target as HTMLTextAreaElement
-                    setFormData(prev => ({ ...prev, [field.id]: target.value }))
-                    // Auto-resize
-                    target.style.height = 'auto'
-                    target.style.height = target.scrollHeight + 'px'
-                  }}
+                  onChange={(val) => setFormData(prev => ({ ...prev, [field.id]: val }))}
                   placeholder="..."
-                  rows={1}
-                  className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-slate-300 min-h-[46px] resize-none overflow-hidden"
-                  disabled={!isLastMessage}
+                  disabled={!isLastMessage || isSubmitted}
                 />
               </>
             )}
@@ -1253,7 +1608,7 @@ function ChatForm({
           setIsSubmitted(true)
           onSubmit(formData)
         }}
-        disabled={!isLastMessage || fields.some(f => {
+        disabled={!isLastMessage || isSubmitted || fields.some(f => {
           if (!formData[f.id]?.trim()) return true;
           if (formData[f.id] === 'manual') {
             const missingBasic = !formData[`${f.id}_name`]?.trim() || !formData[`${f.id}_doc`]?.trim()
@@ -1261,9 +1616,18 @@ function ChatForm({
           }
           return false;
         })}
-        className="w-full flex items-center justify-center gap-2 py-3 bg-primary text-white font-black uppercase text-[10px] tracking-widest rounded-xl hover:bg-slate-900 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 disabled:shadow-none"
+        className={cn(
+          "w-full flex items-center justify-center gap-2 py-3 font-black uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg",
+          isSubmitted 
+            ? "bg-emerald-500 text-white shadow-emerald-200 cursor-default" 
+            : "bg-primary text-white hover:bg-slate-900 shadow-primary/20 disabled:opacity-50 disabled:shadow-none"
+        )}
       >
-        Enviar Informações <Send size={12} />
+        {isSubmitted ? (
+          <>Informações Enviadas <Check size={12} /></>
+        ) : (
+          <>Enviar Informações <Send size={12} /></>
+        )}
       </button>
     </div>
   )

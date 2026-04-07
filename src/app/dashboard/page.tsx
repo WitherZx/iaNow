@@ -127,16 +127,20 @@ export default function DashboardPage() {
     fetchDashboardData()
   }, [session])
 
-  // Persistência simples da preferência de view
+  // Persistência da preferência de view
   useEffect(() => {
     const saved = localStorage.getItem('ianow_dashboard_view') as 'assistant' | 'traditional'
     if (saved) setViewMode(saved)
   }, [])
 
-  const toggleView = () => {
-    const newMode = viewMode === 'assistant' ? 'traditional' : 'assistant'
+  const handleViewChange = (newMode: 'assistant' | 'traditional') => {
     setViewMode(newMode)
     localStorage.setItem('ianow_dashboard_view', newMode)
+  }
+
+  const toggleView = () => {
+    const newMode = viewMode === 'assistant' ? 'traditional' : 'assistant'
+    handleViewChange(newMode)
   }
 
   if (loading) {
@@ -205,7 +209,7 @@ export default function DashboardPage() {
       <PageContainer>
         <WelcomeDashboard 
           userName={userName} 
-          onActivateMinerva={() => setViewMode('assistant')} 
+          onActivateMinerva={() => handleViewChange('assistant')} 
         />
       </PageContainer>
     ) : (
