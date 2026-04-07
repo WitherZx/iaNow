@@ -1008,9 +1008,19 @@ function ChatForm({
   const [formData, setFormData] = useState<Record<string, string>>(() => {
     const initials: Record<string, string> = {}
     fields.forEach(f => {
-      if (f.defaultValue) initials[f.id] = f.defaultValue
-      // Se for visitante e for um campo de contato, inicia como manual
-      if (isGuest && f.isContact) initials[f.id] = 'manual'
+      if (f.defaultValue) {
+        // Se for campo de contato e o valor não parecer um UUID, assumimos que é um nome para preenchimento manual
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(f.defaultValue)
+        
+        if (f.isContact && !isUuid && f.defaultValue !== 'manual') {
+          initials[f.id] = 'manual'
+          initials[`${f.id}_name`] = f.defaultValue
+        } else {
+          initials[f.id] = f.defaultValue
+        }
+      }
+      // Se for visitante e for um campo de contato sem valor padrão, inicia como manual
+      if (isGuest && f.isContact && !initials[f.id]) initials[f.id] = 'manual'
     })
     return initials
   })
