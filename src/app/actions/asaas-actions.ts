@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { asaas } from '@/lib/asaas'
 import { revalidatePath } from 'next/cache'
+import { getGlobalConfigsAction } from './billing-actions'
 
 type CheckoutBillingType = 'PIX' | 'BOLETO' | 'UNDEFINED'
 
@@ -30,7 +31,7 @@ type OrganizationRow = {
   asaas_customer_id: string | null
   metadata?: Record<string, string | undefined> | null
 }
-type PlanRow = { id: string; name: string; price_monthly: number }
+type PlanRow = { id: string; name: string; slug: string; price_monthly: number }
 type AsaasCustomerResponse = { id: string }
 type AsaasSubscriptionResponse = {
   id: string
@@ -89,6 +90,17 @@ export async function createEmbeddedCheckoutAction(payload: CreateCheckoutPayloa
 
   if (planError || !plan) throw new Error('Plano não encontrado')
 
+  // 1.1. Buscar Preço Dinâmico Global se existir
+  let finalPrice = plan.price_monthly
+  const { success: configSuccess, data: configs } = await getGlobalConfigsAction()
+  if (configSuccess && configs) {
+    const configKey = `price_${plan.slug}_monthly`
+    const typedConfigs = configs as Record<string, any>
+    if (typedConfigs[configKey]) {
+      finalPrice = typedConfigs[configKey]
+    }
+  }
+
   // 2. Garantir que temos um Cliente no Asaas
   let asaasCustomerId = org.asaas_customer_id
 
@@ -130,7 +142,7 @@ export async function createEmbeddedCheckoutAction(payload: CreateCheckoutPayloa
     const subscription = (await asaas.post('/subscriptions', {
       customer: asaasCustomerId,
       billingType: payload.billingType,
-      value: plan.price_monthly,
+      value: finalPrice,
       nextDueDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString().split('T')[0], // 3 dias para o primeiro vencimento
       cycle: 'MONTHLY',
       description: `Mensalidade iaNow - Plano ${plan.name}`,

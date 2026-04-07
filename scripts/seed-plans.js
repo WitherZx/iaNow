@@ -8,7 +8,7 @@ const supabase = createClient(
 async function seed() {
   const plans = [
     {
-      name: 'iaNow Free Explorer',
+      name: 'Free Explorer',
       slug: 'free',
       price_monthly: 0,
       features: ['1 Estratégia', '1 Contrato', '1 Protocolo'],
@@ -17,7 +17,7 @@ async function seed() {
       status: 'active'
     },
     {
-      name: 'Plano Pro iaNow',
+      name: 'Plano Pro',
       slug: 'pro',
       price_monthly: 49.90,
       features: ['Estratégia Ilimitada', 'Jurídico Ilimitado', 'Jus Postulandi Express Ilimitado', 'Suporte Prioritário'],

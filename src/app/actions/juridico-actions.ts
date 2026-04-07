@@ -29,24 +29,12 @@ export async function getJuridicoDocumentAction(id: string, guestId?: string | n
     isTestMode: configs?.find((c: any) => c.key === 'test_mode')?.value_bool === true
   }
 
-  // 2. Se for um documento de convidado, validar o guestId
-  const isGuestDoc = document.metadata?.is_guest || document.metadata?.guest_id
-  
-  // Buscar usuário logado
+  // 2. Buscar usuário logado e validar "O dono" primeiro
   const serverSupabase = await createServerSupabaseClient()
   const { data: { user } } = await serverSupabase.auth.getUser()
-
-  if (isGuestDoc) {
-    if (!guestId || document.metadata?.guest_id !== guestId) {
-      return { error: 'Acesso negado a este documento de visitante' }
-    }
-    return { data: document, config: configData }
-  }
-
-  // 3. Se não for de convidado, validar se é o dono ou se há liberação global
   const isOwner = user && document.created_by === user.id
   
-  // Bypass para visualização de documentos corrompidos na transição
+  // Bypass para visualização de documentos corrompidos ou acesso global
   const isCorruptedLegacy = [
     '6aa08189-a20b-4f81-99d1-9d82d9604665', 
     'cd2c0021-dee9-436d-849d-a40278426f47', 
@@ -55,9 +43,33 @@ export async function getJuridicoDocumentAction(id: string, guestId?: string | n
     '25f2be91-288e-4186-a78d-51bb0834ba67'
   ].includes(id);
 
-  if (!isOwner && !configData.isAllAccess && !isCorruptedLegacy) {
-     return { error: 'Você não tem permissão para acessar este documento.' }
+  console.log(`[getJuridicoDocumentAction] Access check for ${id}:`, {
+    userId: user?.id,
+    isOwner,
+    isAllAccess: configData.isAllAccess,
+    isCorruptedLegacy,
+    docGuestId: document.metadata?.guest_id
+  })
+
+  // Se for o dono ou tiver acesso global, retorna imediatamente
+  if (isOwner || configData.isAllAccess || isCorruptedLegacy) {
+    return { success: true, data: document, config: configData }
   }
+
+  // 3. Se não for o dono, mas for um documento de convidado, validar o guestId
+  const isGuestDoc = document.metadata?.is_guest || document.metadata?.guest_id
+  
+  if (isGuestDoc) {
+    if (!guestId || document.metadata?.guest_id !== guestId) {
+      console.warn(`[getJuridicoDocumentAction] ACCESS DENIED for guest document ${id}`)
+      return { error: 'Acesso negado a este documento de visitante' }
+    }
+    return { data: document, config: configData }
+  }
+
+  // 4. Se chegou aqui e não é dono nem convidado correto, bloqueia
+  console.warn(`[getJuridicoDocumentAction] FINAL ACCESS DENIED for document ${id}`)
+  return { error: 'Você não tem permissão para acessar este documento.' }
 
   return { success: true, data: document, config: configData }
 }

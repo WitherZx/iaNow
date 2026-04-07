@@ -62,84 +62,61 @@ export function EmbeddedCheckout({ org, planId }: EmbeddedCheckoutProps) {
   }
 
   return (
-    <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-      <Card className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-8 shadow-sm">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h4 className="text-lg font-black tracking-tight text-slate-900">Checkout iaNow</h4>
-            <p className="text-sm font-medium text-slate-500">Pagamento seguro e confirmado por webhook</p>
-          </div>
-          <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.15em] text-emerald-600">
-            <Lock size={12} />
-            Seguro
-          </span>
+    <Card className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-8 shadow-sm max-w-2xl">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h4 className="text-lg font-black tracking-tight text-slate-900">Checkout iaNow</h4>
+          <p className="text-sm font-medium text-slate-500">Pagamento seguro e confirmado por webhook</p>
+        </div>
+        <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.15em] text-emerald-600">
+          <Lock size={12} />
+          Seguro
+        </span>
+      </div>
+
+      <form className="space-y-5" onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Input
+            label="Nome"
+            value={customer.name}
+            onChange={(e) => setCustomer((prev) => ({ ...prev, name: e.target.value }))}
+            placeholder="Razão social ou responsável"
+          />
+          <Input
+            label="Email"
+            type="email"
+            value={customer.email}
+            onChange={(e) => setCustomer((prev) => ({ ...prev, email: e.target.value }))}
+            placeholder="financeiro@empresa.com"
+          />
+          <Input
+            label="CPF/CNPJ"
+            value={customer.cpfCnpj}
+            onChange={(e) => setCustomer((prev) => ({ ...prev, cpfCnpj: e.target.value }))}
+            placeholder="Somente números ou formatado"
+          />
+          <Input
+            label="Telefone"
+            value={customer.mobilePhone}
+            onChange={(e) => setCustomer((prev) => ({ ...prev, mobilePhone: e.target.value }))}
+            placeholder="(00) 00000-0000"
+          />
         </div>
 
-        <form className="space-y-5" onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Input
-              label="Nome"
-              value={customer.name}
-              onChange={(e) => setCustomer((prev) => ({ ...prev, name: e.target.value }))}
-              placeholder="Razão social ou responsável"
-            />
-            <Input
-              label="Email"
-              type="email"
-              value={customer.email}
-              onChange={(e) => setCustomer((prev) => ({ ...prev, email: e.target.value }))}
-              placeholder="financeiro@empresa.com"
-            />
-            <Input
-              label="CPF/CNPJ"
-              value={customer.cpfCnpj}
-              onChange={(e) => setCustomer((prev) => ({ ...prev, cpfCnpj: e.target.value }))}
-              placeholder="Somente números ou formatado"
-            />
-            <Input
-              label="Telefone"
-              value={customer.mobilePhone}
-              onChange={(e) => setCustomer((prev) => ({ ...prev, mobilePhone: e.target.value }))}
-              placeholder="(00) 00000-0000"
-            />
-          </div>
+        <div className="space-y-2">
+          <Label>Método de pagamento</Label>
+          <CheckoutPaymentMethod value={billingType} onChange={setBillingType} />
+        </div>
 
-          <div className="space-y-2">
-            <Label>Método de pagamento</Label>
-            <CheckoutPaymentMethod value={billingType} onChange={setBillingType} />
-          </div>
-
-          <Button
-            type="submit"
-            isLoading={isSubmitting}
-            disabled={!canSubmit}
-            className="h-12 w-full rounded-2xl bg-primary text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-primary/20"
-          >
-            Finalizar Checkout
-          </Button>
-        </form>
-      </Card>
-
-      <div className="space-y-4">
-        <CheckoutPlanSummary
-          planName="Plano Pro"
-          priceMonthly={49.9}
-          features={[
-            'Estratégia, Jurídico e Jus ilimitados',
-            'Suporte prioritário',
-            'Atualização automática de assinatura'
-          ]}
-        />
-        <Card className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-          <div className="flex items-start gap-3">
-            <ShieldCheck size={18} className="mt-0.5 text-primary" />
-            <p className="text-xs font-semibold leading-relaxed text-slate-600">
-              O status do plano é atualizado automaticamente após confirmação no Asaas. Eventos duplicados
-              são tratados com idempotência.
-            </p>
-          </div>
-        </Card>
-      </div>
-    </div>
+        <Button
+          type="submit"
+          isLoading={isSubmitting}
+          disabled={!canSubmit}
+          className="h-12 w-full rounded-2xl bg-primary text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-primary/20"
+        >
+          Finalizar Checkout
+        </Button>
+      </form>
+    </Card>
   )
 }

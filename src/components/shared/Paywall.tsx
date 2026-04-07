@@ -1,6 +1,7 @@
+
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card } from './Card'
 import { Button } from './Button'
 import {
@@ -13,13 +14,15 @@ import {
   ArrowRight,
   TrendingUp,
   Microscope,
-  Clock
+  Clock,
+  Check
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
 import { TransparentCheckoutModal } from '../billing/TransparentCheckoutModal'
 import { simulatePurchaseAction } from '@/app/actions/justice-actions'
 import { toast } from 'sonner'
+import { getPlansAction, getGlobalConfigsAction } from '@/app/actions/billing-actions'
 
 interface PaywallProps {
   demandId: string
@@ -30,23 +33,32 @@ interface PaywallProps {
   isTestMode?: boolean
 }
 
-const PRICING = {
+interface PricingConfig {
+  price: string
+  label: string
+  desc: string
+  icon: any
+  color: string
+  features?: string[]
+}
+
+const DEFAULT_PRICING: Record<string, PricingConfig> = {
   contrato: {
-    price: 'R$ 19,90',
+    price: '---',
     label: 'Contrato avulso',
     desc: 'Acesso vitalício a este documento e todas as suas revisões.',
     icon: ShieldCheck,
     color: 'text-primary'
   },
   estrategia: {
-    price: 'R$ 9,90',
+    price: '---',
     label: 'Estratégia avulsa',
     desc: 'Relatório detalhado de viabilidade e blindagem jurídica.',
     icon: TrendingUp,
     color: 'text-amber-500'
   },
   processo: {
-    price: 'R$ 49,90',
+    price: '---',
     label: 'Acompanhamento premium',
     desc: 'Monitoramento em tempo real e análises ilimitadas da Minerva.',
     icon: Zap,
@@ -55,11 +67,65 @@ const PRICING = {
 }
 
 export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, onBack, isTestMode }: PaywallProps) {
-  const current = PRICING[type]
-  const Icon = current.icon
+  const [pricing, setPricing] = useState<Record<string, PricingConfig>>(DEFAULT_PRICING)
+  const [proPlan, setProPlan] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'avulso' | 'premium'>('avulso')
   const [checkoutMode, setCheckoutMode] = useState<'avulso' | 'premium' | null>(null)
   const [simulating, setSimulating] = useState(false)
+  const [isAllAccess, setIsAllAccess] = useState(false)
+  const [localTestMode, setLocalTestMode] = useState(isTestMode)
+
+  useEffect(() => {
+    async function loadPricing() {
+      try {
+        const [plansRes, configsRes] = await Promise.all([
+          getPlansAction(),
+          getGlobalConfigsAction()
+        ])
+
+        const configs: any = configsRes.data || {}
+        const dbPlans = plansRes.success ? plansRes.data || [] : []
+        const newPricing = { ...DEFAULT_PRICING }
+        
+        // 1. Preços Avulsos Centralizados
+        if (configs.price_contrato_avulso) {
+          newPricing.contrato = { ...newPricing.contrato, price: `R$ ${parseFloat(configs.price_contrato_avulso).toFixed(2).replace('.', ',')}` }
+        }
+        if (configs.price_estrategia_avulsa) {
+          newPricing.estrategia = { ...newPricing.estrategia, price: `R$ ${parseFloat(configs.price_estrategia_avulsa).toFixed(2).replace('.', ',')}` }
+        }
+        if (configs.price_processo_avulso) {
+          newPricing.processo = { ...newPricing.processo, price: `R$ ${parseFloat(configs.price_processo_avulso).toFixed(2).replace('.', ',')}` }
+        }
+
+        // 2. Extrair features dos planos se existirem
+        const contratoPlan = dbPlans.find((p: any) => p.slug === 'contrato-avulso')
+        if (contratoPlan?.features) newPricing.contrato.features = contratoPlan.features
+
+        const estrategiaPlan = dbPlans.find((p: any) => p.slug === 'estrategia-avulsa')
+        if (estrategiaPlan?.features) newPricing.estrategia.features = estrategiaPlan.features
+
+        const processoPlan = dbPlans.find((p: any) => p.slug === 'processo-avulso')
+        if (processoPlan?.features) newPricing.processo.features = processoPlan.features
+
+        setPricing(newPricing)
+        setProPlan(dbPlans.find((p: any) => p.slug === 'pro'))
+        
+        // 3. Flags Globais
+        if (configs.is_all_access === true) setIsAllAccess(true)
+        if (configs.test_mode === true) setLocalTestMode(true)
+      } catch (err) {
+        console.error('Paywall pricing load error:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadPricing()
+  }, [])
+
+  const current = pricing[type] || pricing.contrato
+  const Icon = current.icon
 
   const handleSimulate = async () => {
     try {
@@ -75,6 +141,8 @@ export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, o
       setSimulating(false)
     }
   }
+
+  if (isAllAccess) return null
 
   return (
     <div
@@ -107,7 +175,7 @@ export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, o
           </div>
         )}
 
-        <Card className="w-full flex flex-col gap-8 bg-white border-slate-200 shadow-2xl rounded-[24px] lg:rounded-[32px] overflow-hidden animate-in slide-in-from-bottom-8 duration-700">
+        <Card className="w-full flex flex-col gap-8 bg-white border-slate-200 shadow-2xl rounded-2xl md:rounded-3xl overflow-hidden animate-in slide-in-from-bottom-8 duration-700">
 
           {/* Mobile Tabs */}
           <div className="lg:hidden border-b border-slate-100 bg-slate-50/50">
@@ -145,7 +213,7 @@ export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, o
               <div className="flex flex-col gap-6 flex-1">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className={cn("shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center bg-slate-100 shadow-inner", current.color)}>
+                    <div className={cn("shrink-0 w-12 h-12 rounded-xl flex items-center justify-center bg-slate-100 shadow-inner", current.color)}>
                       <Icon size={24} strokeWidth={2.5} />
                     </div>
                     <div className="flex flex-col gap-1">
@@ -155,7 +223,7 @@ export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, o
                   </div>
 
                   {/* Dev Simulation Button */}
-                  {isTestMode && (
+                  {localTestMode && (
                     <Button
                       onClick={handleSimulate}
                       disabled={simulating}
@@ -173,30 +241,16 @@ export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, o
                   </p>
 
                   <div className="flex flex-col gap-4">
-                    <div className="flex items-start gap-3 group">
-                      <div className="shrink-0 w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center mt-0.5 group-hover:bg-emerald-100 transition-colors">
-                        <CheckCircle2 size={12} className="text-emerald-500" />
+                    {(current.features || ['Download Word/PDF', 'Auditoria Minerva', 'Acesso Vitalício']).map((f, i) => (
+                      <div key={i} className="flex items-start gap-3 group">
+                        <div className="shrink-0 w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center mt-0.5 group-hover:bg-emerald-100 transition-colors">
+                          <CheckCircle2 size={12} className="text-emerald-500" />
+                        </div>
+                        <p className="text-[13px] font-bold text-slate-600 leading-snug group-hover:text-slate-900 transition-colors">
+                          {f}
+                        </p>
                       </div>
-                      <p className="text-[13px] font-bold text-slate-600 leading-snug group-hover:text-slate-900 transition-colors">
-                        Download em PDF de alta qualidade pronto para assinatura.
-                      </p>
-                    </div>
-                    <div className="flex items-start gap-3 group">
-                      <div className="shrink-0 w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center mt-0.5 group-hover:bg-emerald-100 transition-colors">
-                        <CheckCircle2 size={12} className="text-emerald-500" />
-                      </div>
-                      <p className="text-[13px] font-bold text-slate-600 leading-snug group-hover:text-slate-900 transition-colors">
-                        Auditoria detalhada da Minerva incluída.
-                      </p>
-                    </div>
-                    <div className="flex items-start gap-3 group">
-                      <div className="shrink-0 w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center mt-0.5 group-hover:bg-emerald-100 transition-colors">
-                        <CheckCircle2 size={12} className="text-emerald-500" />
-                      </div>
-                      <p className="text-[13px] font-bold text-slate-600 leading-snug group-hover:text-slate-900 transition-colors">
-                        {current.desc}
-                      </p>
-                    </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -208,7 +262,7 @@ export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, o
                 </div>
                 <Button
                   onClick={() => setCheckoutMode('avulso')}
-                  className="w-full h-14 rounded-2xl bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-900 font-black text-xs uppercase tracking-[0.2em] shadow-sm flex items-center justify-center gap-3 active:scale-95 transition-all group"
+                  className="w-full h-14 rounded-xl bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-900 font-black text-xs uppercase tracking-[0.2em] shadow-sm flex items-center justify-center gap-3 active:scale-95 transition-all group"
                 >
                   <CreditCard size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" /> Desbloquear Agora
                 </Button>
@@ -226,12 +280,12 @@ export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, o
               <div className="flex flex-col gap-6 relative z-10 flex-1">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-4">
-                    <div className="shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center bg-gradient-to-br from-primary to-blue-600 text-white shadow-xl shadow-primary/30 ring-4 ring-primary/10">
+                    <div className="shrink-0 w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-primary to-blue-600 text-white shadow-xl shadow-primary/30 ring-4 ring-primary/10">
                       <Sparkles size={24} strokeWidth={2.5} />
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-[10px] font-black uppercase text-primary tracking-[0.25em]">Acesso Ilimitado</span>
-                      <h3 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight leading-none">Plano Mensal</h3>
+                      <h3 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight leading-none">{proPlan?.name || 'Plano Pro'}</h3>
                     </div>
                   </div>
                 </div>
@@ -241,28 +295,18 @@ export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, o
                     Tenha a Minerva trabalhando 24/7 para sua empresa. Crie quantos documentos e estratégias desejar, sem limites.
                   </p>
 
-                  <div className="flex flex-col gap-4 bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm relative overflow-hidden">
+                  <div className="flex flex-col gap-4 bg-white p-5 rounded-xl border border-slate-200/60 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-primary/5 to-transparent rounded-bl-3xl pointer-events-none" />
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-3">Incluso no plano:</span>
 
-                    <div className="flex items-center gap-3">
-                      <div className="shrink-0 w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Lock size={10} className="text-primary" />
+                    {(proPlan?.features || ['Hub de Contatos Ilimitado', 'Auditoria Avançada', 'Suporte Prioritário']).map((f: string, i: number) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <div className="shrink-0 w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Check size={10} className="text-primary" />
+                        </div>
+                        <span className="text-[13px] font-bold text-slate-700">{f}</span>
                       </div>
-                      <span className="text-[13px] font-bold text-slate-700">Hub de Contatos Ilimitado</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="shrink-0 w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Lock size={10} className="text-primary" />
-                      </div>
-                      <span className="text-[13px] font-bold text-slate-700">Auditoria de Risco Avançada</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="shrink-0 w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Lock size={10} className="text-primary" />
-                      </div>
-                      <span className="text-[13px] font-bold text-slate-700">Suporte Jurídico Prioritário</span>
-                    </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -271,13 +315,17 @@ export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, o
                 <div className="flex flex-col gap-1">
                   <span className="text-[10px] font-black text-primary uppercase tracking-widest">Upgrade Mensal</span>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-4xl font-black text-slate-900 tracking-tight leading-none">R$ 99,90</span>
+                    <span className="text-4xl font-black text-slate-900 tracking-tight leading-none">
+                      {proPlan?.price_monthly 
+                        ? `R$ ${Number(proPlan.price_monthly).toFixed(2).replace('.', ',')}` 
+                        : '---'}
+                    </span>
                     <span className="text-[13px] font-bold text-slate-400">/mês</span>
                   </div>
                 </div>
                 <Button
                   onClick={() => setCheckoutMode('premium')}
-                  className="w-full h-14 rounded-2xl bg-gradient-to-r from-primary to-blue-600 hover:from-blue-600 hover:to-primary text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-primary/30 hover:shadow-primary/40 flex items-center justify-center gap-3 active:scale-95 transition-all group"
+                  className="w-full h-14 rounded-xl bg-gradient-to-r from-primary to-blue-600 hover:from-blue-600 hover:to-primary text-white font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-primary/30 hover:shadow-primary/40 flex items-center justify-center gap-3 active:scale-95 transition-all group"
                 >
                   Assinar Premium <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
                 </Button>
@@ -292,7 +340,7 @@ export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, o
         <TransparentCheckoutModal
           demandId={demandId}
           demandType={type}
-          value={parseFloat(current.price.replace('R$ ', '').replace(',', '.'))}
+          value={parseFloat(current.price.replace('R$ ', '').replace(',', '.')) || 0}
           description={`Desbloqueio Avulso: ${current.label}`}
           onSuccess={() => {
             setCheckoutMode(null)
@@ -306,7 +354,7 @@ export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, o
         <TransparentCheckoutModal
           demandId="premium_upgrade"
           demandType="mensal"
-          value={99.90}
+          value={proPlan?.price_monthly || 99.90}
           description="Plano Premium Mensal"
           onSuccess={() => {
             setCheckoutMode(null)

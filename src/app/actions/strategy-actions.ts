@@ -32,10 +32,18 @@ export async function getStrategyAction(id: string, guestId?: string | null) {
 
   // 2. Validar acesso de convidado
   const isGuestStrat = strategy.metadata?.guest_id || strategy.diagnostics?.metadata?.guest_id
+  const stratGuestId = strategy.metadata?.guest_id || strategy.diagnostics?.metadata?.guest_id
   
+  console.log(`[getStrategyAction] Accessing strategy ${id}:`, {
+    providedGuestId: guestId,
+    stratGuestId,
+    isGuestStrat,
+    isAllAccess: configData.isAllAccess
+  })
+
   if (isGuestStrat) {
-    const stratGuestId = strategy.metadata?.guest_id || strategy.diagnostics?.metadata?.guest_id
     if (!guestId || stratGuestId !== guestId) {
+      console.warn(`[getStrategyAction] ACCESS DENIED for strategy ${id}`)
       return { error: 'Acesso negado a esta estratégia de visitante' }
     }
     return { data: strategy, config: configData }

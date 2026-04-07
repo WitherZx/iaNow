@@ -27,36 +27,20 @@ export async function middleware(request: NextRequest) {
   // Renova sessão se expirada
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Ajuste segurança: APENAS /estrategia/[id-uuid] é public route, mas a lista /estrategia e o /estrategia/novo não podem ser!
-  const isStrategyPublicLink = request.nextUrl.pathname.match(/^\/estrategia\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/) !== null
-  
-  // Roteamento Monetização 2026: Permitir Novo e Detalhes sem Login (com Paywall interno)
-  const isGuestAllowedRoute = [
-    '/juridico/novo',
-    '/justica/novo',
-    '/estrategia/novo',
-    '/api/juridico/gerar',
-    '/api/justica/gerar',
-    '/api/justica/analisar',
-    '/api/ai/strategy',
-    '/api/ai/chat',
-    '/api/juridico/document',
-    '/api/justica/demand',
-    '/api/estrategia/document'
-  ].some(p => request.nextUrl.pathname.startsWith(p)) || 
-  request.nextUrl.pathname.match(/^\/juridico\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/) ||
-  request.nextUrl.pathname.match(/^\/justica\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/)
-
+  // Rotas estritamente públicas
   const isPublicRoute = [
-    '/login', '/signup', '/invite', '/api/onboarding', '/api/strategy/public', '/_next', '/favicon', '/dashboard',
-    '/juridico', '/justica', '/estrategia'
-  ].some(
-    p => request.nextUrl.pathname.startsWith(p)
-  ) || isStrategyPublicLink || isGuestAllowedRoute
+    '/login', 
+    '/signup', 
+    '/invite', 
+    '/api/auth', 
+    '/_next', 
+    '/favicon',
+    '/api/onboarding'
+  ].some(p => request.nextUrl.pathname.startsWith(p))
   
   const isRootLanding = request.nextUrl.pathname === '/'
 
-  // Redireciona para login se não autenticado e não é rota pública
+  // Redireciona para login se não autenticado e tenta acessar área protegida
   if (!user && !isPublicRoute && !isRootLanding) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'

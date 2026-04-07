@@ -1,0 +1,71 @@
+﻿--- CONFIGS ---
+[
+  {
+    "id": "02bd3651-601d-450f-a0ea-7eeee65fdb4d",
+    "key": "is_all_access",
+    "value_bool": true,
+    "description": "Libera o paywall para todos os usu├írios da plataforma globalmente.",
+    "updated_at": "2026-04-03T05:40:02.225007+00:00"
+  },
+  {
+    "id": "44bab3be-f157-4309-89f0-7e35463bab85",
+    "key": "test_mode",
+    "value_bool": false,
+    "description": "Habilita o bot├úo de Simula├º├úo de Compra (Bypass) no Paywall para todos.",
+    "updated_at": "2026-04-03T05:40:02.225007+00:00"
+  }
+]
+--- PLANS ---
+[
+  {
+    "id": "830f0cca-9aaa-4330-a5fd-275bb7714924",
+    "name": "Free Explorer",
+    "slug": "free",
+    "description": null,
+    "price_monthly": 0,
+    "price_yearly": null,
+    "currency": "BRL",
+    "asaas_product_id": null,
+    "features": [
+      "1 Estrat├®gia",
+      "1 Contrato",
+      "1 Protocolo"
+    ],
+    "limits": {
+      "legal": 1,
+      "protocol": 1,
+      "strategy": 1
+    },
+    "is_public": true,
+    "status": "active",
+    "metadata": {},
+    "created_at": "2026-03-20T07:17:26.919991+00:00",
+    "updated_at": "2026-03-20T07:17:26.919991+00:00"
+  },
+  {
+    "id": "38ea6933-f519-40d7-8e3e-1ff70ab53293",
+    "name": "Plano Pro iaNow",
+    "slug": "pro",
+    "description": null,
+    "price_monthly": 49.9,
+    "price_yearly": null,
+    "currency": "BRL",
+    "asaas_product_id": null,
+    "features": [
+      "Estrat├®gia Ilimitada",
+      "Jur├¡dico Ilimitado",
+      "Jus Postulandi Express Ilimitado",
+      "Suporte Priorit├írio"
+    ],
+    "limits": {
+      "legal": -1,
+      "protocol": -1,
+      "strategy": -1
+    },
+    "is_public": true,
+    "status": "active",
+    "metadata": {},
+    "created_at": "2026-03-20T07:17:27.104555+00:00",
+    "updated_at": "2026-03-20T07:17:27.104555+00:00"
+  }
+]

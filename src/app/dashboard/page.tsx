@@ -19,6 +19,7 @@ import { ExecutionShield } from '@/components/dashboard/ExecutionShield'
 import { MinervaAssistant } from '@/components/dashboard/MinervaAssistant'
 import { cn } from '@/utils/cn'
 import { getDashboardDataAction } from '@/app/actions/dashboard-actions'
+import { WelcomeDashboard } from '@/components/dashboard/WelcomeDashboard'
 
 // Tipagens para o Dashboard
 interface Metric {
@@ -43,7 +44,7 @@ export default function DashboardPage() {
   const { session } = useAuth()
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState<'assistant' | 'traditional'>('assistant')
+  const [viewMode, setViewMode] = useState<'assistant' | 'traditional'>('traditional')
   const userName = session?.user?.user_metadata?.full_name?.split(' ')[0] || 'Visitante'
 
   const [data, setData] = useState<{
@@ -149,6 +150,10 @@ export default function DashboardPage() {
   }
 
   const { metrics, strategies: recentStrategies, legalDocs: recentDocs, justiceDemands: recentDemands } = data
+  
+  // Condição para mostrar Dashboard de Boas-vindas: 
+  // Usuário que não gerou pelo menos 1 de cada item core
+  const hasActivity = data.strategies.length > 0 && data.legalDocs.length > 0 && data.justiceDemands.length > 0
 
   const renderGhostCards = (count: number) => (
     <>
@@ -196,8 +201,15 @@ export default function DashboardPage() {
   }
 
   const content = viewMode === 'traditional' ? (
+    !hasActivity ? (
+      <PageContainer>
+        <WelcomeDashboard 
+          userName={userName} 
+          onActivateMinerva={() => setViewMode('assistant')} 
+        />
+      </PageContainer>
+    ) : (
     <PageContainer
-      reverseMobile
       title={
         <div className="flex flex-col gap-y-4 items-center lg:items-start text-center lg:text-left">
           <div className="flex items-center gap-2 text-primary font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] px-3 py-1.5 bg-primary/5 rounded-full w-fit border border-primary/10 mx-auto lg:mx-0">
@@ -344,6 +356,7 @@ export default function DashboardPage() {
         </div>
       </div>
     </PageContainer>
+    )
   ) : (
     <div className="-mx-6 -my-8 md:-mx-8 md:-my-10 h-[calc(100vh-64px)] overflow-hidden flex flex-col">
       <MinervaAssistant userName={userName} onToggleView={toggleView} />

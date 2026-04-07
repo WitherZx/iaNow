@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "seed": "node --env-file=.env.local scripts/seed-plans.js",
+    "update-plans": "node --env-file=.env.local update-plans-v2.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

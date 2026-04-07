@@ -7,27 +7,25 @@ import {
   Gavel, 
   PlusCircle, 
   Loader2, 
-  AlertCircle,
-  Clock,
   CheckCircle2,
   Search,
   Scale,
   Zap,
   FileSignature,
-  ArrowRight
+  Clock
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { cn } from '@/utils/cn'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { TrackProcessModal } from '@/components/justica/TrackProcessModal'
+import { createJusticeDemandAction, getGuestJusticeDemandsAction } from '@/app/actions/justice-actions'
+import { Button } from '@/components/shared/Button'
 import { CTAButton } from '@/components/shared/CTAButton'
 import { Card } from '@/components/shared/Card'
 import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
-import { useRouter } from 'next/navigation'
-import { cn } from '@/utils/cn'
-import { Button } from '@/components/shared/Button'
-import { TrackProcessModal } from '@/components/justica/TrackProcessModal'
-import { createJusticeDemandAction, getGuestJusticeDemandsAction } from '@/app/actions/justice-actions'
 import { DocumentCard } from '@/components/shared/DocumentCard'
+import { ModuleStatsSidebar } from '@/components/shared/ModuleStatsSidebar'
 
 interface Demand {
   id: string
@@ -56,7 +54,6 @@ export default function JusticaPage() {
       
       let allDemands: any[] = []
 
-      // 1. Buscas se estiver logado (pela organização)
       if (session) {
         const { data: membership } = await supabase
           .from('memberships')
@@ -76,7 +73,6 @@ export default function JusticaPage() {
         }
       }
 
-      // 2. Buscas pelo Guest ID (Usando Server Action para contornar RLS)
       if (guestId) {
         const { data: guestDemands } = await getGuestJusticeDemandsAction(guestId)
         if (guestDemands) {
@@ -163,135 +159,143 @@ export default function JusticaPage() {
 
   return (
     <DashboardLayout>
-      <PageContainer 
-        title="PROCESSOS JUDICIAIS" 
-        subtitle="Democratização do acesso à justiça para demandas de até 20 salários mínimos via JEC."
-        action={
-          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-            <Button 
-              variant="outline"
-              onClick={() => setIsTrackModalOpen(true)}
-              className="h-12 px-6 rounded-2xl border-slate-200 bg-white text-slate-700 font-black text-[11px] uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center gap-2 group"
-            >
-              <Search size={16} className="text-primary group-hover:scale-110 transition-transform" />
-              Acompanhar Processo
-            </Button>
-            <CTAButton icon={PlusCircle} onClick={handleNewProtocol} className="w-full lg:w-auto shadow-xl shadow-primary/20">
-              Novo Processo
-            </CTAButton>
-          </div>
-        }
-      >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="p-10 bg-white border-none shadow-sm flex flex-col items-center justify-center text-center gap-4 group hover:translate-y-[-4px] transition-all duration-300">
-            <div className="w-16 h-16 rounded-[24px] bg-blue-50 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors duration-300">
-              <Scale size={28} />
-            </div>
-            <div>
-              <p className="text-4xl font-black text-slate-900 leading-none mb-2">{metrics.total}</p>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Processos Ativos</p>
-            </div>
-          </Card>
+      <PageContainer>
+        {/* Mobile Title & Subtitle */}
+        <div className="flex lg:hidden flex-col gap-y-1.5 items-center w-full text-center mb-8">
+          <h1 className="font-montserrat font-bold text-2xl md:text-[26px] text-[#171717] m-0 uppercase leading-tight w-full">
+            PROCESSOS JUDICIAIS
+          </h1>
+          <p className="font-montserrat font-normal text-sm text-[#737373] m-0 max-w-2xl leading-relaxed mx-auto">
+            Democratização do acesso à justiça para demandas de até 20 salários mínimos via JEC.
+          </p>
+        </div>
 
-          <Card className="p-10 bg-white border-none shadow-sm flex flex-col items-center justify-center text-center gap-4 group hover:translate-y-[-4px] transition-all duration-300">
-            <div className="w-16 h-16 rounded-[24px] bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors duration-300">
-              <Gavel size={28} />
-            </div>
-            <div>
-              <p className="text-4xl font-black text-slate-900 leading-none mb-2">
-                R$ {metrics.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
+        <div className="flex flex-col lg:flex-row gap-8">
+          <ModuleStatsSidebar 
+            stats={[
+              { label: 'Processos Ativos', value: metrics.total, icon: <Scale size={28} />, color: 'primary' },
+              { label: 'Valor em Causa', value: `R$ ${metrics.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: <Gavel size={28} />, color: 'emerald' },
+              { label: 'Eficiência da IA', value: metrics.efficiency, icon: <Zap size={28} fill="currentColor" />, color: 'blue' }
+            ]}
+            action={
+              <div className="flex flex-col gap-3">
+                <Button 
+                  variant="outline"
+                  onClick={() => setIsTrackModalOpen(true)}
+                  className="h-12 px-6 rounded-2xl border-slate-200 bg-white text-slate-700 font-black text-[11px] uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center gap-2 group w-full"
+                >
+                  <Search size={16} className="text-primary group-hover:scale-110 transition-transform" />
+                  Acompanhar Processo
+                </Button>
+                <CTAButton icon={PlusCircle} onClick={handleNewProtocol} className="!w-full w-full shadow-xl shadow-primary/20">
+                  Novo Processo
+                </CTAButton>
+              </div>
+            }
+          />
+
+          <div className="flex-1 flex flex-col gap-y-8 w-full min-w-0">
+            
+            {/* Desktop Title & Subtitle */}
+            <div className="hidden lg:flex flex-col gap-y-1.5 items-start w-full text-left">
+              <h1 className="font-montserrat font-bold text-2xl md:text-[26px] text-[#171717] m-0 uppercase leading-tight w-full">
+                PROCESSOS JUDICIAIS
+              </h1>
+              <p className="font-montserrat font-normal text-sm text-[#737373] m-0 max-w-2xl leading-relaxed mx-0">
+                Democratização do acesso à justiça para demandas de até 20 salários mínimos via JEC.
               </p>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Valor em Causa</p>
             </div>
-          </Card>
 
-          <Card className="p-10 bg-white border-none shadow-sm flex flex-col items-center justify-center text-center gap-4 group hover:translate-y-[-4px] transition-all duration-300">
-            <div className="w-16 h-16 rounded-[24px] bg-indigo-50 flex items-center justify-center text-indigo-500 group-hover:bg-indigo-500 group-hover:text-white transition-colors duration-300">
-              <Zap size={28} fill="currentColor" />
+            <div className="flex flex-col space-y-8">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/30 p-2 rounded-[22px] border border-slate-100 shadow-inner-sm">
+                <div className="relative flex items-center p-1 bg-slate-100/50 rounded-2xl w-full sm:w-auto">
+                  <div 
+                    className={cn(
+                      "absolute h-[34px] transition-all duration-300 ease-out bg-white rounded-xl shadow-sm border border-slate-200/50",
+                      filter === 'all' && "w-[calc(33.33%-4px)] left-1 sm:w-[80px] sm:left-1",
+                      filter === 'ready' && "w-[calc(33.33%-4px)] left-[33.33%] sm:w-[94px] sm:left-[88px]",
+                      filter === 'generating' && "w-[calc(33.33%-4px)] left-[calc(66.66%+2px)] sm:w-[94px] sm:left-[186px]"
+                    )}
+                  />
+                  <button onClick={() => setFilter('all')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[80px]", filter === 'all' ? 'text-primary' : 'text-slate-400 hover:text-slate-600')}>Todas</button>
+                  <button onClick={() => setFilter('ready')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[94px]", filter === 'ready' ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600')}>Prontas</button>
+                  <button onClick={() => setFilter('generating')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[94px]", filter === 'generating' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600')}>Em Fila</button>
+                </div>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                  <input 
+                    type="text" 
+                    value={searchTerm} 
+                    onChange={(e) => setSearchTerm(e.target.value)} 
+                    placeholder="Buscar processo..." 
+                    className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-semibold text-slate-700 placeholder:text-slate-400" 
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="text-4xl font-black text-slate-900 leading-none mb-2">{metrics.efficiency}</p>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Eficiência da IA</p>
-            </div>
-          </Card>
-        </div>
 
-        <div className="mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-4 rounded-[24px] shadow-sm">
-          <div className="flex items-center gap-2 p-1.5 bg-slate-50 rounded-2xl w-fit">
-            <button 
-              onClick={() => setFilter('all')}
-              className={cn(
-                "px-6 h-10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                filter === 'all' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+            <div className="grid grid-cols-1 gap-4">
+              {loading ? (
+                <div className="flex flex-col items-center justify-center py-32 space-y-4">
+                  <Loader2 className="w-10 h-10 text-primary animate-spin opacity-20" />
+                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-300">Escaneando Tribunal...</p>
+                </div>
+              ) : filteredDemands.length > 0 ? (
+                filteredDemands.map((demand) => (
+                  <DocumentCard
+                    key={demand.id}
+                    id={demand.id}
+                    href={`/justica/${demand.id}`}
+                    title={demand.tipo_acao || 'Acompanhamento Estratégico'}
+                    subtitle={demand.valor_causa ? `Valor da Causa: R$ ${demand.valor_causa.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : (demand.metadata?.process_number ? `Processo nº ${demand.metadata.process_number}` : 'Valor não informado')}
+                    date={new Date(demand.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    isGenerating={demand.status === 'draft'}
+                    badge={{
+                      label: demand.status === 'draft' ? 'Analisando' : 'Pronto',
+                      className: demand.status === 'draft' ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                    }}
+                    moduleLabel="MINERVA • JUSTIÇA GRATUITA"
+                    icon={<Scale size={22} />}
+                    generatingIcon={<Clock size={16} className="animate-spin text-primary" />}
+                    footerTags={[
+                      { icon: <CheckCircle2 size={11} className="text-emerald-500" />, label: 'Processo Gratuito' }, 
+                      { icon: <FileSignature size={11} className="text-slate-400" />, label: 'Pronto para Protocolar' }
+                    ]}
+                  />
+                ))
+              ) : (
+                <EmptyState 
+                  icon={Gavel} 
+                  title="Sua Prateleira de Justiça está Vazia" 
+                  description="Você ainda não gerou petições ou iniciou o acompanhamento de processos." 
+                  actionText="Iniciar Novo Caso" 
+                  onClick={handleNewProtocol} 
+                />
               )}
-            >Todas</button>
-            <button 
-              onClick={() => setFilter('ready')}
-              className={cn(
-                "px-6 h-10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                filter === 'ready' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
-              )}
-            >Prontas</button>
-            <button 
-              onClick={() => setFilter('generating')}
-              className={cn(
-                "px-6 h-10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                filter === 'generating' ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
-              )}
-            >Em Fila</button>
+            </div>
+
+            {/* Cards Informativos - Padrão iaNow */}
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="bg-primary/5 border-primary/10 p-6 rounded-3xl">
+                  <h4 className="text-primary font-black text-xs uppercase tracking-widest mb-2">Segurança Processual</h4>
+                  <p className="text-slate-600 text-sm leading-relaxed font-medium">
+                    Nossas petições são fundamentadas em jurisprudência atualizada, garantindo que sua demanda seja técnica e precisa.
+                  </p>
+              </Card>
+              <Card className="bg-amber-50/50 border-amber-100 p-6 rounded-3xl">
+                  <h4 className="text-amber-800 font-black text-xs uppercase tracking-widest mb-2">Acesso Facilitado</h4>
+                  <p className="text-amber-700/80 text-sm leading-relaxed font-medium">
+                    Focado no Juizado Especial Cível (JEC), sem a necessidade inicial de advogados para causas abaixo de 20 salários mínimos.
+                  </p>
+              </Card>
+              <Card className="bg-emerald-50/50 border-emerald-100 p-6 rounded-3xl">
+                  <h4 className="text-emerald-800 font-black text-xs uppercase tracking-widest mb-2">Acompanhamento Inteligente</h4>
+                  <p className="text-emerald-700/80 text-sm leading-relaxed font-medium">
+                    A Minerva monitora ativamente o processo através do número (CNJ), informando andamentos de forma clara.
+                  </p>
+              </Card>
+            </div>
           </div>
-
-          <div className="relative group w-full md:w-80">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-primary transition-colors" />
-            <input 
-              type="text"
-              placeholder="Buscar processo..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full h-12 pl-12 pr-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-600 placeholder:text-slate-300 focus:ring-4 focus:ring-primary/5 transition-all outline-none"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-32 space-y-4">
-              <Loader2 className="w-12 h-12 text-primary animate-spin" />
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Escaneando Tribunal...</p>
-            </div>
-          ) : filteredDemands.length > 0 ? (
-            filteredDemands.map((demand) => (
-              <DocumentCard
-                key={demand.id}
-                id={demand.id}
-                href={`/justica/${demand.id}`}
-                title={demand.tipo_acao || 'Acompanhamento Estratégico'}
-                subtitle={demand.valor_causa ? `Valor da Causa: R$ ${demand.valor_causa.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : (demand.metadata?.process_number ? `Processo nº ${demand.metadata.process_number}` : 'Valor não informado')}
-                date={new Date(demand.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                isGenerating={demand.status === 'draft'}
-                badge={{
-                  label: demand.status === 'ready' || demand.status === 'filed' ? 'CONCLUÍDO' : 'GERANDO',
-                  icon: demand.status === 'ready' || demand.status === 'filed' ? <CheckCircle2 size={10} /> : <Clock size={10} />,
-                  className: demand.status === 'ready' || demand.status === 'filed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-blue-50 text-blue-600 border-blue-100'
-                }}
-                moduleLabel="MINERVA • JUSTIÇA GRATUITA"
-                icon={<Scale size={24} />}
-                generatingIcon={<Loader2 size={24} className="animate-spin" />}
-                footerTags={[
-                  { icon: <CheckCircle2 size={12} className="text-emerald-500" />, label: 'Processo Gratuito' },
-                  { icon: <FileSignature size={12} className="text-slate-400" />, label: 'Pronto para Protocolar' }
-                ]}
-              />
-            ))
-          ) : (
-            <EmptyState 
-              icon={Gavel}
-              title="Sua Prateleira de Justiça está Vazia"
-              description="Você ainda não gerou petições ou iniciou o acompanhamento de processos."
-              actionText="Iniciar Novo Caso"
-              onClick={handleNewProtocol}
-            />
-          )}
         </div>
       </PageContainer>
 

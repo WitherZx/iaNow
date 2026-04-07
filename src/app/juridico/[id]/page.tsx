@@ -171,7 +171,11 @@ export default function ViewDocumentPage() {
         const { getJuridicoDocumentAction } = await import('@/app/actions/juridico-actions')
         const { data, config, error } = await getJuridicoDocumentAction(id as string, guestId)
 
+        console.log('[ViewDocumentPage] getJuridicoDocumentAction Result:', { hasData: !!data, hasConfig: !!config, error })
+
         if (error) {
+          console.error('[ViewDocumentPage] Error from server action:', error)
+          
           // Fallback para API tradicional se houver erro na Action (segurança extra)
           const response = await fetch(`/api/juridico/document/${id as string}`, {
             method: 'GET',
@@ -182,7 +186,7 @@ export default function ViewDocumentPage() {
           try {
             payload = await response.json()
           } catch (jsonErr) {
-            console.warn('Falha ao interpretar resposta do Fallback (pode HTML inesperado):', jsonErr)
+            console.warn('[ViewDocumentPage] Fallback JSON parse error:', jsonErr)
           }
 
           if (response.status === 402 && payload?.paywall) {
@@ -192,7 +196,10 @@ export default function ViewDocumentPage() {
             if (interval) clearInterval(interval)
             return
           }
-          // Apenas encerra silênciosamente em vez de dar throw para evitar crash do Next
+
+          // Se não foi erro de paywall e a Action deu erro, mostramos o erro real
+          toast.error(error || 'Documento não encontrado ou sem permissão')
+          setLoading(false)
           if (interval) clearInterval(interval)
           return
         }
@@ -739,8 +746,8 @@ export default function ViewDocumentPage() {
                 />
               </div>
             ) : (
-              <div className="flex-1 p-4 md:p-8 print:p-0 prose prose-slate max-w-none whitespace-normal break-words prose-headings:font-black prose-h1:text-2xl md:prose-h1:text-3xl prose-h2:text-xl md:prose-h2:text-2xl prose-p:text-slate-600 prose-p:leading-relaxed prose-li:text-slate-600 text-sm sm:text-base md:text-lg overflow-hidden relative min-h-[500px]">
-                <div className={cn("transition-all duration-1000")}>
+              <div className="flex-1 p-4 md:p-8 print:p-0 prose prose-slate max-w-none whitespace-normal break-words prose-headings:font-black prose-h1:text-2xl md:prose-h1:text-3xl prose-h2:text-xl md:prose-h2:text-2xl prose-p:text-slate-600 prose-p:leading-relaxed prose-li:text-slate-600 text-sm sm:text-base md:text-lg overflow-hidden relative min-h-[500px] print:overflow-visible print:static print:min-h-0">
+                <div className={cn("transition-all duration-1000 print:static")}>
                   <ReactMarkdown
                     components={{
                       li: ({node, children, ...props}) => (

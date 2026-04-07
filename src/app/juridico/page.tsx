@@ -19,6 +19,7 @@ import { CTAButton } from '@/components/shared/CTAButton'
 import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
 import { useRouter } from 'next/navigation'
 import { getJuridicoDocumentsAction } from '@/app/actions/juridico-actions'
+import { ModuleStatsSidebar } from '@/components/shared/ModuleStatsSidebar'
 
 interface LegalDocument {
   id: string
@@ -142,56 +143,45 @@ export default function JuridicoPage() {
 
   return (
     <DashboardLayout>
-      <PageContainer
-        title="Repositório Jurídico"
-        subtitle="Documentos redigidos com precisão. Cada cláusula, revisada."
-        action={
-          <CTAButton icon={PlusCircle} onClick={handleNewDocument} className="w-full lg:w-auto">
-             Redigir Documento
-          </CTAButton>
-        }
-      >
-        <div className="flex flex-col gap-y-8">
-          
-          {/* Métricas */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="bg-white border-slate-100 flex flex-col items-center justify-center gap-y-4 p-8 group hover:border-primary/20 transition-all text-center animate-in slide-in-from-bottom-[10px] fade-in">
-              <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all duration-500">
-                <FileSignature size={28} />
-              </div>
-              <div className="flex flex-col gap-y-1">
-                <span className="text-3xl font-black text-slate-900">{metrics.total}</span>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Contratos Gerados</span>
-              </div>
-            </Card>
+      <PageContainer>
+        {/* Mobile Title & Subtitle */}
+        <div className="flex lg:hidden flex-col gap-y-1.5 items-center w-full text-center mb-8">
+          <h1 className="font-montserrat font-bold text-2xl md:text-[26px] text-[#171717] m-0 uppercase leading-tight w-full">
+            REPOSITÓRIO JURÍDICO
+          </h1>
+          <p className="font-montserrat font-normal text-sm text-[#737373] m-0 max-w-2xl leading-relaxed mx-auto">
+            Documentos redigidos com precisão. Cada cláusula, revisada.
+          </p>
+        </div>
+
+        <div className="flex flex-col lg:flex-row gap-8">
+          <ModuleStatsSidebar 
+            stats={[
+              { label: 'Contratos Gerados', value: metrics.total, icon: <FileSignature size={28} />, color: 'primary' },
+              { label: 'Análises em Curso', value: metrics.generating, icon: <Loader2 size={28} className={metrics.generating > 0 ? "animate-spin" : ""} />, color: 'blue' },
+              { label: 'Nível de Compliance', value: metrics.complianceStatus, icon: <ShieldAlert size={28} />, color: 'emerald' }
+            ]}
+            action={
+              <CTAButton icon={PlusCircle} onClick={handleNewDocument} className="!w-full w-full shadow-xl shadow-primary/20">
+                Redigir Documento
+              </CTAButton>
+            }
+          />
+
+          {/* Main Content Area */}
+          <div className="flex-1 flex flex-col gap-y-8 w-full min-w-0">
             
-            <Card className="bg-white border-slate-100 flex flex-col items-center justify-center gap-y-4 p-8 group hover:border-blue-500/20 transition-all text-center animate-in slide-in-from-bottom-[10px] fade-in delay-100">
-              <div className={cn(
-                "w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-500",
-                metrics.generating > 0 ? "bg-primary text-white shadow-lg shadow-primary/20 animate-pulse" : "bg-blue-500/10 text-blue-600 group-hover:bg-blue-500 group-hover:text-white"
-              )}>
-                <Loader2 size={28} className={metrics.generating > 0 ? "animate-spin" : ""} />
-              </div>
-              <div className="flex flex-col gap-y-1">
-                <span className="text-3xl font-black text-slate-900">{metrics.generating}</span>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Análises em Curso</span>
-              </div>
-            </Card>
+            {/* Desktop Title & Subtitle */}
+            <div className="hidden lg:flex flex-col gap-y-1.5 items-start w-full text-left">
+              <h1 className="font-montserrat font-bold text-2xl md:text-[26px] text-[#171717] m-0 uppercase leading-tight w-full">
+                REPOSITÓRIO JURÍDICO
+              </h1>
+              <p className="font-montserrat font-normal text-sm text-[#737373] m-0 max-w-2xl leading-relaxed mx-0">
+                Documentos redigidos com precisão. Cada cláusula, revisada.
+              </p>
+            </div>
 
-            <Card className="bg-white border-slate-100 flex flex-col items-center justify-center gap-y-4 p-8 group hover:border-emerald-500/20 transition-all text-center animate-in slide-in-from-bottom-[10px] fade-in delay-200">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-500 group-hover:text-white transition-all duration-500">
-                <ShieldAlert size={28} />
-              </div>
-              <div className="flex flex-col gap-y-1">
-                <span className="text-2xl font-black text-slate-900 uppercase tracking-tighter">{metrics.complianceStatus}</span>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Nível de Compliance</span>
-              </div>
-            </Card>
-          </div>
-
-          <div className="flex flex-col space-y-6">
             <div className="flex flex-col space-y-8">
-              
               {/* Filters and Search - Padrão iaNow */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/30 p-2 rounded-[22px] border border-slate-100 shadow-inner-sm">
                 <div className="relative flex items-center p-1 bg-slate-100/50 rounded-2xl w-full sm:w-auto">
@@ -203,7 +193,6 @@ export default function JuridicoPage() {
                       filter === 'generating' && "w-[calc(33.33%-4px)] left-[calc(66.66%+2px)] sm:w-[94px] sm:left-[186px]"
                     )}
                   />
-                  
                   <button onClick={() => setFilter('all')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[80px]", filter === 'all' ? 'text-primary' : 'text-slate-400 hover:text-slate-600')}>Todas</button>
                   <button onClick={() => setFilter('ready')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[94px]", filter === 'ready' ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600')}>Prontas</button>
                   <button onClick={() => setFilter('generating')} className={cn("relative z-10 px-2 sm:px-5 py-2 text-[10px] font-black uppercase tracking-[0.15em] transition-colors duration-300 w-1/3 sm:w-[94px]", filter === 'generating' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600')}>Em Fila</button>
@@ -276,31 +265,30 @@ export default function JuridicoPage() {
                   onClick={handleNewDocument}
                 />
               )}
+            </div>
+
+            {/* Linha 5: Cards Informativos - Padrão iaNow */}
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="bg-primary/5 border-primary/10 p-6 rounded-3xl">
+                  <h4 className="text-primary font-black text-xs uppercase tracking-widest mb-2">Validade Jurídica</h4>
+                  <p className="text-slate-600 text-sm leading-relaxed font-medium">
+                    Cada documento gerado está em conformidade com o Código Civil e a MP 2.200-2/01 — válido para assinatura digital com plena eficácia legal.
+                  </p>
+              </Card>
+              <Card className="bg-amber-50/50 border-amber-100 p-6 rounded-3xl">
+                  <h4 className="text-amber-800 font-black text-xs uppercase tracking-widest mb-2">Proteção de Dados</h4>
+                  <p className="text-amber-700/80 text-sm leading-relaxed font-medium">
+                    Cláusulas de tratamento de dados são inseridas automaticamente, assegurando conformidade com a LGPD desde a minuta.
+                  </p>
+              </Card>
+              <Card className="bg-emerald-50/50 border-emerald-100 p-6 rounded-3xl">
+                  <h4 className="text-emerald-800 font-black text-xs uppercase tracking-widest mb-2">Atualização Contínua</h4>
+                  <p className="text-emerald-700/80 text-sm leading-relaxed font-medium">
+                    A Minerva acompanha as resoluções vigentes. Seus contratos refletem o estado atual da legislação, sem revisão manual.
+                  </p>
+              </Card>
+            </div>
           </div>
-        </div>
-
-        {/* Linha 5: Cards Informativos - Padrão iaNow */}
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
-           <Card className="bg-primary/5 border-primary/10 p-6 rounded-3xl">
-              <h4 className="text-primary font-black text-xs uppercase tracking-widest mb-2">Validade Jurídica</h4>
-              <p className="text-slate-600 text-sm leading-relaxed font-medium">
-                Cada documento gerado está em conformidade com o Código Civil e a MP 2.200-2/01 — válido para assinatura digital com plena eficácia legal.
-              </p>
-           </Card>
-           <Card className="bg-amber-50/50 border-amber-100 p-6 rounded-3xl">
-              <h4 className="text-amber-800 font-black text-xs uppercase tracking-widest mb-2">Proteção de Dados</h4>
-              <p className="text-amber-700/80 text-sm leading-relaxed font-medium">
-                Cláusulas de tratamento de dados são inseridas automaticamente, assegurando conformidade com a LGPD desde a minuta.
-              </p>
-           </Card>
-           <Card className="bg-emerald-50/50 border-emerald-100 p-6 rounded-3xl">
-              <h4 className="text-emerald-800 font-black text-xs uppercase tracking-widest mb-2">Atualização Contínua</h4>
-              <p className="text-emerald-700/80 text-sm leading-relaxed font-medium">
-                A Minerva acompanha as resoluções vigentes. Seus contratos refletem o estado atual da legislação, sem revisão manual.
-              </p>
-           </Card>
-        </div>
-
         </div>
       </PageContainer>
     </DashboardLayout>

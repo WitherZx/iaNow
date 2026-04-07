@@ -42,6 +42,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           {children}
         </Providers>
+
+        {/* Script para desativar zoom de pinça (Trackpads e Touch) */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Previne Zoom de Pinça no Trackpad (Ctrl + Scroll)
+              document.addEventListener('wheel', function(e) {
+                if (e.ctrlKey) { e.preventDefault(); }
+              }, { passive: false });
+
+              // Previne Zoom de Pinça em Touch Screens
+              document.addEventListener('touchstart', function(e) {
+                if (e.touches.length > 1) { e.preventDefault(); }
+              }, { passive: false });
+            `
+          }}
+        />
       </body>
     </html>
   )

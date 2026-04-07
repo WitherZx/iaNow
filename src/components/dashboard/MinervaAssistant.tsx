@@ -136,7 +136,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
   const activeModule = (() => {
     if (defaultModule) return defaultModule
-    
+
     // Tentar detectar o módulo ativo baseado no histórico recente e wizardData
     const lastContextMsg = [...messages].reverse().find(m =>
       m.role === 'bot' && (m.content.includes('[FORM:') || m.content.includes('[ACTION:'))
@@ -200,7 +200,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
         // Find existing session or use current
         const saved = localStorage.getItem(`minerva_messages_${sessionId}`)
         if (!saved || JSON.parse(saved).length === 0) {
-           handleSendMessage(initialPrompt)
+          handleSendMessage(initialPrompt)
         }
       }
     } catch (e) {
@@ -314,18 +314,67 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
         })
       }, true)
 
-      if (!response.ok) throw new Error(response.status === 401 ? 'Sessao nao autorizada' : 'API Error')
+      if (!response.ok) throw new Error(response.status === 401 ? 'Sessão não autorizada' : 'Erro na comunicação com a API')
 
-      const data = await response.json()
-      const newBotMsg: Message = { role: 'bot', content: data.content }
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('Não foi possível iniciar o stream de dados')
+
+      const decoder = new TextDecoder()
+      let accumulatedContent = ''
+
+      // Initialize the bot message placeholder
+      setMessages(prev => [...prev, { role: 'bot', content: '' } as Message])
+      setIsTyping(false)
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          const trimmedLine = line.trim()
+          if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue
+
+          const dataStr = trimmedLine.replace('data: ', '')
+          if (dataStr === '[DONE]') break
+
+          try {
+            const data = JSON.parse(dataStr)
+            const content = data.choices[0]?.delta?.content || ''
+            if (content) {
+              accumulatedContent += content
+              setMessages(prev => {
+                const newMessages = [...prev]
+                if (newMessages.length > 0) {
+                  newMessages[newMessages.length - 1] = {
+                    role: 'bot',
+                    content: accumulatedContent
+                  } as Message
+                }
+                return newMessages
+              })
+            }
+          } catch (e) {
+            // Ignore parse errors for partial chunks
+          }
+        }
+      }
+
+      // Final save to storage after stream ends
       setMessages(prev => {
-        const updated = [...prev, newBotMsg]
+        saveMessagesToStorage(sessionId, prev)
+        return prev
+      })
+
+    } catch (error) {
+      console.error('Chat Error:', error)
+      setMessages(prev => {
+        const updated = [...prev, { role: 'bot', content: "Desculpe, tive um problema de comunicação. Poderia tentar novamente?" } as Message]
         saveMessagesToStorage(sessionId, updated)
         return updated
       })
-    } catch (error) {
-      console.error('Chat Error:', error)
-      setMessages(prev => [...prev, { role: 'bot', content: "Desculpe, tive um problema de comunicação. Poderia tentar novamente?" }])
     } finally {
       setIsTyping(false)
     }
@@ -407,6 +456,20 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
       setIsProcessing(true)
 
+      // Adicionar mensagem de feedback imediato no chat
+      const processingMsg: Message = {
+        role: 'bot',
+        content: `Certo! Estou iniciando a geração do seu **${path.includes('estrategia') ? 'Diagnóstico Estratégico' : path.includes('juridico') ? 'Contrato Personalizado' : 'Protocolo Judicial'}**. 
+        
+Isso pode levar alguns segundos. Por favor, não feche esta janela.`
+      }
+
+      setMessages(prev => {
+        const updated = [...prev, processingMsg]
+        saveMessagesToStorage(sessionId, updated)
+        return updated
+      })
+
       try {
         let endpoint = '/api/ai/strategy'
         let payload: any = {}
@@ -433,7 +496,9 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
           payload = {
             tipoContrato: wizardData.tipo || wizardData.tipoContrato || wizardData.tipo_contrato || 'Contrato Genérico',
             nivel: wizardData.nivel || wizardData.nivel_blindagem || 'Básico',
-            perfilPartes: wizardData.perfil || wizardData.perfil_partes || 'Amigável',
+            perfilPartes: (wizardData.roleA && wizardData.roleB) 
+              ? `${wizardData.roleA} vs ${wizardData.roleB}` 
+              : (wizardData.perfil || wizardData.perfil_partes || 'Amigável'),
             objetivo: wizardData.objetivo || wizardData.resumo_objeto || 'Formalizar relação entre as partes',
             foro: wizardData.foro || wizardData.comarca || wizardData.foro_eleicao || 'São Paulo - SP',
             partyA: {
@@ -503,7 +568,11 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
         const finalMsg: Message = {
           role: 'bot',
-          content: `✅ **${moduleName} processado com sucesso!**\n\nA execução foi finalizada em segundo plano com base nos dados fornecidos. Você já pode visualizar o resultado completo.\n\n[ACTION: ${resolvedResultPath}]`
+          content: `✅ **${moduleName} processado com sucesso!**
+
+A execução foi finalizada com base nos dados fornecidos e revisados através da Minerva. Clique no botão abaixo para abrir e visualizar o documento final.
+
+[ACTION: ${resolvedResultPath}]`
         }
 
         setMessages(prev => {
@@ -547,7 +616,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
   return (
     <div className="w-full flex-1 flex flex-row bg-white overflow-hidden animate-in fade-in duration-500">
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-white relative">
+      <div className="flex-1 flex flex-col min-w-0  relative">
         {/* Header Contextual */}
         <div className="p-4 sm:p-6 border-b border-slate-100 bg-slate-50/50 flex flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-3 sm:gap-4 shrink-0 overflow-hidden">
@@ -691,8 +760,8 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
                       <div className={cn(
                         "p-4 text-sm sm:text-base font-medium leading-relaxed whitespace-pre-wrap",
                         msg.role === 'user'
-                          ? "bg-slate-950 text-white rounded-[20px] rounded-tr-none"
-                          : "bg-slate-50 text-slate-800 rounded-[20px] rounded-tl-none"
+                          ? "bg-slate-900 text-white rounded-[20px] rounded-tr-none"
+                          : "bg-slate-200 text-slate-800 rounded-[22px] rounded-tl-none border-b border-slate-300/50 shadow-sm"
                       )}>
                         {text}
 
@@ -738,9 +807,9 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
                   <div className="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center bg-white border border-slate-100 overflow-hidden shadow-sm">
                     <img src="/minerva-icon.png" alt="Typing" className="w-7 h-7 object-contain animate-pulse" />
                   </div>
-                  <div className="bg-slate-50 p-5 flex items-center gap-3">
+                  <div className="bg-slate-200 px-6 py-4 rounded-[22px] rounded-tl-none border-b border-slate-300/50 shadow-sm flex items-center gap-4">
                     <Loader2 size={18} className="text-primary animate-spin" />
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Minerva está analisando...</span>
+                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">Sintonizando Minerva...</span>
                   </div>
                 </div>
               </div>
@@ -780,13 +849,13 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !isTyping && handleSendMessage()}
                 placeholder="Como a Minerva pode te ajudar hoje?"
-                className="w-full h-12 sm:h-16 px-4 sm:pl-16 pr-[52px] sm:pr-20 bg-slate-50 border-2 border-slate-100 rounded-[16px] sm:rounded-[20px] text-slate-900 font-bold focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary/20 transition-all placeholder:text-slate-400 text-[13px] sm:text-base shadow-inner truncate"
+                className="w-full h-12 sm:h-16 px-4 sm:pl-16 pr-[52px] sm:pr-20 bg-slate-50 border-1 border-slate-300 rounded-[8px] text-slate-900 font-bold focus:outline-none focus:border-2 transition-all placeholder:text-slate-400 text-[13px] sm:text-base shadow-inner truncate"
                 disabled={isTyping}
               />
               <button
                 onClick={() => handleSendMessage()}
                 disabled={!inputValue.trim() || isTyping}
-                className="absolute right-1.5 sm:right-3 w-[36px] h-[36px] sm:w-12 sm:h-12 bg-primary text-white rounded-[10px] sm:rounded-xl flex items-center justify-center hover:scale-105 active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all shadow-md sm:shadow-xl shadow-primary/20 group overflow-hidden"
+                className="absolute right-2 w-[36px] h-[36px] sm:w-12 sm:h-12 bg-primary text-white rounded-[8px] flex items-center justify-center hover:scale-105 active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all shadow-md sm:shadow-xl shadow-primary/20 group overflow-hidden"
               >
                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
                 <Send size={16} className="relative z-10 sm:w-5 sm:h-5" />

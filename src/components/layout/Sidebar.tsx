@@ -10,16 +10,7 @@ import { cn } from '@/utils/cn'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 
-const NAV_ITEMS = [
-  { href: '/dashboard', label: 'Home', icon: LayoutDashboard },
-  { href: '/estrategia', label: 'Estratégia', icon: Lightbulb },
-  { href: '/juridico', label: 'Contratos', icon: FileText },
-  { href: '/justica', label: 'Processos', icon: Gavel },
-  { href: '/parceiros', label: 'Contatos', icon: Users },
-  { href: '/financeiro', label: 'Financeiro', icon: LineChart, locked: true },
-  { href: '/pessoas', label: 'Gestão de Pessoas', icon: Share2, locked: true },
-  { href: '/tributario', label: 'Tributário', icon: Landmark, locked: true },
-] as const
+import { NAV_ITEMS } from '@/constants/navigation'
 
 interface SidebarProps {
   isOpen?: boolean
@@ -39,7 +30,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   return (
     <aside className={cn(
-      "fixed inset-y-0 left-0 z-50 flex flex-col w-[280px] bg-slate-950 py-6 h-screen border-r border-white/5 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0",
+      "fixed inset-y-0 left-0 z-50 flex flex-col w-[280px] bg-slate-950 py-6 h-screen border-r border-white/5 transition-transform duration-300 ease-in-out lg:hidden print:hidden",
       isOpen ? "translate-x-0" : "-translate-x-full"
     )}>
       {/* Mobile Close Button */}
@@ -52,11 +43,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Logo */}
       <div className="px-6 mb-8 flex items-center">
-        <img
-          src="/logo.webp"
-          alt="iaNow"
-          className="h-10 w-auto object-contain brightness-0 invert opacity-90 hover:opacity-100 transition-opacity"
-        />
+        <Link href="/dashboard" className="flex items-center gap-x-0.5 group">
+          <span className="text-2xl font-black text-white tracking-tighter transition-all group-hover:tracking-normal">ia</span>
+          <span className="text-2xl font-black text-primary tracking-tighter transition-all group-hover:tracking-normal">Now</span>
+        </Link>
       </div>
 
       {/* Nav */}

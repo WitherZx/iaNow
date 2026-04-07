@@ -38,7 +38,18 @@ export async function getJusticeDemandAction(id: string, guestId?: string | null
     const isOwner = user && data.user_id === user.id
     const matchesGuest = guestId && data.metadata?.guest_id === guestId
     
+    console.log(`[getJusticeDemandAction] Accessing demand ${id}:`, {
+      userId: user?.id,
+      guestId,
+      docOwnerId: data.user_id,
+      docGuestId: data.metadata?.guest_id,
+      isOwner,
+      matchesGuest,
+      isAllAccessGlobal
+    })
+
     if (!isOwner && !matchesGuest && !isAllAccessGlobal) {
+      console.warn(`[getJusticeDemandAction] ACCESS DENIED for demand ${id}`)
       return { error: 'Você não tem permissão para acessar esta demanda.' }
     }
 

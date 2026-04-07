@@ -8,7 +8,13 @@ import { cn } from '@/utils/cn'
 import { useState, useEffect } from 'react'
 import { linkGuestDataToUserAction } from '@/app/actions/auth-actions'
 
-export function DashboardLayout({ children }: { children: React.ReactNode }) {
+export function DashboardLayout({ 
+  children, 
+  sidebar 
+}: { 
+  children: React.ReactNode,
+  sidebar?: React.ReactNode
+}) {
   const { isAuthenticated, user, loading } = useAuth()
   const [isSidebarOpen, setSidebarOpen] = useState(false)
   const router = useRouter()
@@ -37,31 +43,38 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen print:h-auto overflow-hidden print:overflow-visible bg-slate-200 print:bg-white" suppressHydrationWarning>
-      {/* Sidebar - Controlada internamente para mobile e desktop */}
-      <div className="print:hidden">
-        <Sidebar 
-          isOpen={isSidebarOpen} 
-          onClose={() => setSidebarOpen(false)} 
-        />
+    <div className="flex flex-col h-screen print:h-auto overflow-hidden print:overflow-visible bg-slate-200 print:bg-white" suppressHydrationWarning>
+      {/* Mobile Sidebar drawer */}
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
+
+      {/* Topbar - Top of everything */}
+      <div className="print:hidden border-b border-slate-100 bg-white shrink-0">
+        <Topbar onMenuClick={() => setSidebarOpen(!isSidebarOpen)} />
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden print:overflow-visible relative">
-        {/* Topbar com trigger do menu mobile */}
-        <div className="print:hidden">
-          <Topbar onMenuClick={() => setSidebarOpen(!isSidebarOpen)} />
-        </div>
+      {/* Main Layout Body */}
+      <div className="flex flex-1 min-w-0 overflow-hidden print:overflow-visible relative">
+        
+        {/* Optional Page Sidebar (Desktop) */}
+        {sidebar && (
+          <div className="hidden lg:block shrink-0 h-full print:hidden">
+            {sidebar}
+          </div>
+        )}
 
         <main className={cn(
-          "flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible font-montserrat px-6 py-8 md:px-8 md:py-10 print:p-0"
+          "flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible font-montserrat px-6 py-8 md:px-8 md:py-10 print:p-0 print:bg-white print:border-none print:shadow-none",
+          !sidebar && "xl:px-12" // Extra padding if no sidebar
         )}>
           {children}
         </main>
 
-        {/* Overlay para fechar menu mobile ao clicar fora */}
+        {/* Overlay for mobile drawer */}
         {isSidebarOpen && (
-          <div 
+          <div
             className="fixed inset-0 bg-slate-950/20 backdrop-blur-sm z-40 lg:hidden transition-all duration-300"
             onClick={() => setSidebarOpen(false)}
           />

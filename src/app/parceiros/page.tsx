@@ -311,7 +311,7 @@ export default function PartnerHubPage() {
   return (
     <DashboardLayout>
       <PageContainer>
-        <div className="flex flex-col gap-y-12 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-full overflow-x-hidden">
+        <div className="flex flex-col gap-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-full overflow-x-hidden">
 
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-y-8 text-center lg:text-left">
             <div className="space-y-2">
