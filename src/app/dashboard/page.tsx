@@ -11,7 +11,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge'
 import { DashboardItemCard } from '@/components/shared/DashboardItemCard'
 import { Button } from '@/components/shared/Button'
 import { CTAButton } from '@/components/shared/CTAButton'
-import { Lightbulb, Scale, Gavel, PlayCircle, Eye, Loader2, Play, ShieldCheck, PlusCircle } from 'lucide-react'
+import { Lightbulb, Scale, Gavel, PlayCircle, Eye, Loader2, Play, ShieldCheck, PlusCircle, Cpu } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
@@ -157,7 +157,7 @@ export default function DashboardPage() {
   
   // Condição para mostrar Dashboard de Boas-vindas: 
   // Usuário que não gerou pelo menos 1 de cada item core
-  const hasActivity = data.strategies.length > 0 && data.legalDocs.length > 0 && data.justiceDemands.length > 0
+  const hasActivity = data.strategies.length > 0 || data.legalDocs.length > 0 || data.justiceDemands.length > 0
 
   const renderGhostCards = (count: number) => (
     <>
@@ -239,10 +239,10 @@ export default function DashboardPage() {
             <Button 
               onClick={toggleView}
               size="lg" 
-              className="w-full sm:w-auto h-12 sm:h-14 md:h-16 shadow-[0_20px_40px_-15px_rgba(37,99,235,0.4)] font-black px-3 sm:px-12 text-[13px] sm:text-lg md:text-xl bg-gradient-to-r from-primary to-blue-700 hover:from-blue-700 hover:to-primary text-white border-none transition-all hover:scale-105 active:scale-95 group mx-auto lg:mx-0 flex items-center justify-center gap-2 sm:gap-3"
+              className="w-full sm:w-auto h-12 sm:h-14 md:h-16 shadow-[0_20px_40px_-15px_rgba(37,99,235,0.4)] font-black px-6 sm:px-12 text-[13px] sm:text-lg md:text-xl bg-gradient-to-r from-primary to-blue-700 hover:from-blue-700 hover:to-primary text-white border-none transition-all hover:scale-105 active:scale-95 group mx-auto lg:mx-0 flex items-center justify-center gap-2 sm:gap-3"
             >
-              <img src="/minerva-icon.png" alt="Minerva" className="w-5 h-5 sm:w-6 sm:h-6 object-contain brightness-0 invert" /> 
-              Conhecer Assistente Minerva
+              <Cpu className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 mr-1 text-blue-200 group-hover:rotate-12 transition-transform shrink-0" /> 
+              <span>Conhecer Assistente Minerva</span>
             </Button>
           </div>
         </div>

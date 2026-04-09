@@ -23,53 +23,53 @@ interface WelcomeDashboardProps {
 export function WelcomeDashboard({ userName, onActivateMinerva }: WelcomeDashboardProps) {
   const faqSections = [
     {
-      title: 'Estratégia & Operação',
+      title: 'Performance & Estratégia',
       items: [
         {
-          question: 'Como gerar minha primeira estratégia?',
-          answer: 'Clique em "CRIAR ESTRATÉGIA" e descreva seu objetivo. Nossa IA fará um scan completo de riscos e oportunidades em segundos.'
+          question: 'Como a iaNow detecta riscos que eu não percebi?',
+          answer: 'Nossa IA realiza uma análise 360º cruzando jurisprudência atualizada e normas da LGPD, identificando gargalos contratuais e riscos operacionais em segundos.'
         },
         {
-          question: 'O que é o Assistente Minerva?',
-          answer: 'É a nossa IA conversacional de elite (Baseada em DeepSeek R1) que te guia em tempo real por todas as funções da plataforma.'
+          question: 'Posso converter uma Estratégia em um Contrato?',
+          answer: 'Sim. A iaNow é sistêmica: o diagnóstico gerado no módulo de Estratégia pode alimentar diretamente a redação do seu documento jurídico, mantendo a coerência.'
         },
         {
-          question: 'Posso editar as estratégias geradas?',
-          answer: 'Com certeza. Você tem total controle para ajustar, expandir ou refinar qualquer insight gerado pela nossa inteligência.'
+          question: 'Como uso os insights da IA em uma reunião real?',
+          answer: 'Utilize os "Pontos de Atenção" e "Blindagem Recomenda" para embasar suas decisões. Os dados são estruturados para serem apresentados como prova técnica ou diretriz de gestão.'
         }
       ]
     },
     {
-      title: 'Segurança & Dados',
+      title: 'Inteligência Minerva',
       items: [
         {
-          question: 'Meus dados são usados para treinamento?',
-          answer: 'Não. Garantimos isolamento total. Suas informações são privadas e nunca alimentam modelos de IA públicos.'
+          question: 'Qual o segredo para extrair o melhor da Minerva?',
+          answer: 'Seja específico. Em vez de "faça um contrato", use "Minerva, redija um contrato de prestação de serviços protegendo o Polo A contra inadimplência e atrasos".'
         },
         {
-          question: 'É seguro gerar contratos aqui?',
-          answer: 'Sim. Utilizamos templates validados juridicamente e criptografia de nível bancário (AES-256) em todos os documentos.'
+          question: 'O "Polo Protegido" realmente muda a redação?',
+          answer: 'Totalmente. Ao marcar um Polo como protegido, a IA altera o viés das cláusulas de rescisão, multas e responsabilidades para favorecer juridicamente o seu lado da mesa.'
         },
         {
-          question: 'Como funciona a blindagem de dados?',
-          answer: 'Toda interação é criptografada de ponta a ponta, com auditoria constante para garantir conformidade com a LGPD.'
+          question: 'A Minerva aprende com meu estilo de escrita?',
+          answer: 'Sim. Quanto mais você interage e ajusta os textos, mais a IA compreende o padrão de formalidade e as preferências jurídicas da sua organização.'
         }
       ]
     },
     {
-      title: 'Justiça & Processos',
+      title: 'Justiça & Validade',
       items: [
         {
-          question: 'O que é Jus Postulandi?',
-          answer: 'É o seu direito de ingressar na justiça sem advogado em causas de até 20 salários mínimos via Juizados Especiais.'
+          question: 'Os documentos têm validade jurídica real?',
+          answer: 'Sim. Todos os templates seguem os padrões do Código Civil e leis específicas. O documento final está pronto para assinatura digital e protocolo em juízo.'
         },
         {
-          question: 'Como a iaNow ajuda em processos?',
-          answer: 'Automatizamos a redação de petições e o acompanhamento de movimentações nos tribunais (Rede DataJud).'
+          question: 'Como funciona o monitoramento do DataJud?',
+          answer: 'Ao inserir um número de processo, o sistema se conecta à rede nacional DataJud, alertando você sobre movimentações críticas antes mesmo da publicação oficial.'
         },
         {
-          question: 'Posso acompanhar processos externos?',
-          answer: 'Sim. Basta inserir o número do processo no módulo de Justiça para que a iaNow monitore atualizações para você.'
+          question: 'Causas acima de 20 salários mínimos: o que fazer?',
+          answer: 'A iaNow orienta o rito processual. Se a causa ultrapassar o limite do Juizado Especial, o sistema sinaliza a necessidade de representação por advogado parceiro.'
         }
       ]
     }
@@ -132,16 +132,16 @@ export function WelcomeDashboard({ userName, onActivateMinerva }: WelcomeDashboa
             Vamos blindar seu negócio?
           </h1>
           <p className="text-slate-500 text-base md:text-xl font-medium leading-relaxed w-full max-w-xl">
-            Você ainda não possui documentos ativos. Escolha um módulo ao lado para começar ou deixe a Minerva te guiar.
+            Maximize sua eficiência jurídica e operacional. Escolha um módulo ao lado para iniciar uma nova tarefa ou deixe a Minerva guiar sua próxima execução estratégica.
           </p>
 
           <div className="mt-2 w-full sm:w-auto">
             <Button
               onClick={onActivateMinerva}
-              className="h-auto min-h-[48px] py-3 w-full sm:w-auto px-4 sm:px-8 shadow-[0_20px_40px_-15px_rgba(37,99,235,0.4)] font-bold text-[13px] sm:text-base md:text-lg bg-primary hover:bg-blue-700 transition-all hover:scale-105 active:scale-95 group whitespace-nowrap"
+              className="w-full sm:w-auto h-12 sm:h-14 md:h-16 shadow-[0_20px_40px_-15px_rgba(37,99,235,0.4)] font-black px-6 sm:px-12 text-[13px] sm:text-lg md:text-xl bg-gradient-to-r from-primary to-blue-700 hover:from-blue-700 hover:to-primary text-white border-none transition-all hover:scale-105 active:scale-95 group flex items-center justify-center gap-2 sm:gap-3"
             >
-              <Cpu className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mr-2 sm:mr-3 text-blue-200 group-hover:rotate-12 transition-transform shrink-0" />
-              <span>Conheça a Assistente Minerva</span>
+              <Cpu className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 mr-1 text-blue-200 group-hover:rotate-12 transition-transform shrink-0" />
+              <span>Conhecer Assistente Minerva</span>
             </Button>
           </div>
         </div>
