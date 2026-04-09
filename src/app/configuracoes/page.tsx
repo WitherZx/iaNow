@@ -370,7 +370,9 @@ function ConfiguraçõesPageContent() {
                       <div className="space-y-1">
                         <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">{profile.nome}</h2>
                         <p className="text-sm md:text-base text-slate-500 font-medium">{profile.email}</p>
-                        <span className="inline-flex px-3 py-1 bg-emerald-50 text-emerald-600 text-[9px] md:text-[10px] font-black uppercase tracking-widest rounded-full border border-emerald-100 mt-2">{profile.cargo}</span>
+                        {!isPF && (
+                          <span className="inline-flex px-3 py-1 bg-emerald-50 text-emerald-600 text-[9px] md:text-[10px] font-black uppercase tracking-widest rounded-full border border-emerald-100 mt-2">Representante</span>
+                        )}
                       </div>
                     </div>
 
