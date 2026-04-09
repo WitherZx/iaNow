@@ -157,7 +157,7 @@ export default function DashboardPage() {
   
   // Condição para mostrar Dashboard de Boas-vindas: 
   // Usuário que não gerou pelo menos 1 de cada item core
-  const hasActivity = data.strategies.length > 0 || data.legalDocs.length > 0 || data.justiceDemands.length > 0
+  const hasActivity = data.strategies.length > 0 && data.legalDocs.length > 0 && data.justiceDemands.length > 0
 
   const renderGhostCards = (count: number) => (
     <>

@@ -39,9 +39,9 @@ export async function getDashboardDataAction(guestId?: string | null, userIdHint
         }
 
         const [stratsResult, docsResult, justiceResult] = await Promise.all([
-          fetchModuleData(admin, 'strategies', 'organization_id', 'created_by', possibleOrgIds, uid, gid),
-          fetchModuleData(admin, 'generated_documents', 'organization_id', 'created_by', possibleOrgIds, uid, gid),
-          fetchModuleData(admin, 'justice_demands', 'organization_id', 'user_id', possibleOrgIds, uid, gid)
+          fetchModuleData(admin, 'strategies', 'organization_id', 'created_by', possibleOrgIds, uid, gid, 'id, title, description, status, created_at'),
+          fetchModuleData(admin, 'generated_documents', 'organization_id', 'created_by', possibleOrgIds, uid, gid, 'id, title, status, created_at, metadata'),
+          fetchModuleData(admin, 'justice_demands', 'organization_id', 'user_id', possibleOrgIds, uid, gid, 'id, tipo_acao, valor_causa, status, created_at')
         ])
 
         return {
@@ -76,12 +76,13 @@ async function fetchModuleData(
   userCol: string, 
   orgIds: string[], 
   userId: string | null | undefined, 
-  guestId: string | null | undefined
+  guestId: string | null | undefined,
+  selectFields: string = '*'
 ) {
   // Construímos uma query única com OR para evitar múltiplos round-trips
   let query = admin
     .from(table)
-    .select('*')
+    .select(selectFields)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(10)

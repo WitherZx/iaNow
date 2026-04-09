@@ -8,12 +8,14 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { Toaster } from 'sonner'
 import { useState } from 'react'
 
+import { AppDataProvider } from '@/providers/AppDataProvider'
+
 export function Providers({ children }: { children: React.ReactNode }) {
   // QueryClient criado dentro do useState para evitar compartilhamento entre requests (Next.js SSR)
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 1000 * 60 * 5,    // 5 minutos de cache
+        staleTime: 1000 * 60 * 5,    // 5 minutos de cache padrão
         gcTime: 1000 * 60 * 30,       // 30 minutos de garbage collection
         retry: 1,
         refetchOnWindowFocus: false,
@@ -26,7 +28,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      <AppDataProvider>
+        {children}
+      </AppDataProvider>
       {/* Toast notifications do Sonner */}
       <Toaster
         position="bottom-right"
