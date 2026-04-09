@@ -81,12 +81,13 @@ REGRAS CRÍTICAS:
 ESTRUTURA DA PETIÇÃO:
 1. Endereçamento (Selecione o JEC competente com base na cidade do autor ou réu).
 2. Qualificação Completa (Autor e Réu).
-3. Dos Fatos (Narrativa cronológica).
+   - VALIDAÇÃO DE DOCUMENTO: Se o Autor for Pessoa Física, o documento deve ser um CPF (000.000.000-00). Se o Réu for Empresa, o documento deve ser um CNPJ (00.000.000/0000-00).
+   - NUNCA troque essas informações. Se os dados fornecidos parecerem inconsistentes (ex: CNPJ no Autor PF), corrija para o formato correto ou deixe em branco se não tiver certeza absoluta.
+3. Dos Fatos (Narrativa cronológica detalhada baseada nos dados fornecidos).
 4. Do Direito (Fundamentação jurídica com CDC, CC, etc.).
 5. Dos Pedidos e Valor da Causa.
 
-ORIENTAÇÃO LEGAL ADICIONAL:
-- Se for fornecida uma 'Jurisprudência de Referência', utilize-a como BASE LEGAL PRINCIPAL para fundamentar o pedido, citando-a ou explicando por que o caso do autor se assemelha àquela decisão.
+IMPORTANTE: Use os fatos reais informados. Se o usuário mencionou pesos, valores e locais específicos, eles DEVEM constar na petição. Jamais use placeholders se houver dados.
 
 O RESULTADO DEVE SER UM JSON VÁLIDO:
 {
@@ -97,17 +98,18 @@ O RESULTADO DEVE SER UM JSON VÁLIDO:
      "pontos_fortes": ["..."],
      "falhas_detectadas": ["..."],
      "instrucoes_protocolo": ["Passo prático 1 (ex: Acessar portal do TJ)", "Passo prático 2 (ex: Clicar em Novo Processo)"],
-     "documentos_necessarios": ["Item do documento 1 (ex: RG/CPF)", "Item do documento 2 (ex: Comprovante de Residência)"],
+     "documentos_necessarios": ["RG/CPF", "Comprovante de Residência"],
+     "provas_recomendadas": ["Prova 1 (ex: Prints do WhatsApp)", "Prova 2 (ex: Nota Fiscal n. 123)"],
      "onde_protocolar": {
         "orgao": "Ex: Juizado Especial Cível de [Cidade]",
-        "portal": "Link sugerido do TJ do Estado (ex: TJSP, TJRJ)",
-        "instrucao": "Ex: Procurar o setor de Atermação ou usar o portal [Link]"
+        "portal": "Link sugerido do TJ do Estado",
+        "instrucao": "Ex: Procurar o setor de Atermação"
      }
   }
 }
 
-IMPORTANTE: Não coloque documentos no campo 'instrucoes_protocolo'. Use 'instrucoes_protocolo' apenas para a sequência de ações práticas. 
-Coloque a lista de documentos exclusivamente em 'documentos_necessarios'.`
+IMPORTANTE: Diferencie 'documentos_necessarios' (que são documentos de identificação) de 'provas_recomendadas' (que são as evidências dos fatos narrados). Seja específico sobre as provas (ex: se houve dano material, mencione a nota fiscal).
+Não coloque documentos no campo 'instrucoes_protocolo'. Use 'instrucoes_protocolo' apenas para a sequência de ações práticas.`
 
     const userPrompt = isRefining 
       ? `PETIÇÃO ATUAL:
@@ -168,11 +170,26 @@ Gere o JSON completo.`
 
     const adminApi = adminClient as any
 
+    // Função auxiliar para limpar e converter valores monetários
+    const parseCurrency = (val: any): number => {
+      if (!val) return 0
+      if (typeof val === 'number') return val
+      const clean = String(val)
+        .replace(/R\$/g, '')
+        .replace(/\s/g, '')
+        .replace(/\./g, '')
+        .replace(',', '.')
+      return parseFloat(clean) || 0
+    }
+
+    const valorTotal = parseCurrency(diagnosticData.estimatedValue || diagnosticData.valor_causa || 0)
+
     if (isRefining && demandId) {
       const { error: updateError } = await adminApi
         .from('justice_demands')
         .update({
           tipo_acao: parsedData.tipo_acao,
+          valor_causa: valorTotal,
           score_risco: parsedData.score,
           metadata: {
              ...diagnosticData,
@@ -180,13 +197,12 @@ Gere o JSON completo.`
              auditoria: parsedData.auditoria,
              refined_at: new Date().toISOString()
           }
-        })
+        } as any)
         .eq('id', demandId)
 
       if (updateError) throw updateError
       return NextResponse.json({ success: true, demandId })
     } else {
-      const valorTotal = Number(diagnosticData.estimatedValue || 0)
       const { data: demand, error: demandError } = await adminApi
         .from('justice_demands')
         .insert({

@@ -26,7 +26,7 @@ export function PageContainer({
           "flex",
           centered 
             ? 'flex-col items-center text-center gap-12' 
-            : `${reverseMobile ? 'flex-col-reverse' : 'flex-col'} items-center text-center lg:flex-row lg:items-center lg:justify-between lg:text-left gap-12 lg:gap-6`
+            : `${reverseMobile ? 'flex-col-reverse' : 'flex-col'} items-center text-center lg:flex-row lg:items-center lg:justify-between lg:text-left gap-2 sm:gap-12 lg:gap-6`
         )}>
           <div className={cn(
             "flex flex-col gap-y-1.5 items-center lg:items-start w-full",
@@ -38,7 +38,7 @@ export function PageContainer({
               </div>
             )}
             {subtitle && (
-              <div className="font-montserrat font-normal text-sm text-[#737373] m-0 max-w-2xl leading-relaxed mx-auto lg:mx-0">
+              <div className="font-montserrat font-normal text-sm md:text-base text-[#737373] m-0 leading-relaxed mx-auto lg:mx-0">
                 {subtitle}
               </div>
             )}

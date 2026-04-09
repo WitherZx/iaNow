@@ -64,7 +64,7 @@ export default function DashboardPage() {
   useEffect(() => {
     async function fetchDashboardData() {
       try {
-        setLoading(true)
+        if (data.metrics.length === 0) setLoading(true)
         const guestId = typeof window !== 'undefined' ? localStorage.getItem('ianow_guest_id') : null
         
         console.log('[DashboardPage] Fetching unified data. Session:', !!session)
@@ -214,6 +214,7 @@ export default function DashboardPage() {
       </PageContainer>
     ) : (
     <PageContainer
+      reverseMobile={true}
       title={
         <div className="flex flex-col gap-y-4 items-center lg:items-start text-center lg:text-left">
           <div className="flex items-center gap-2 text-primary font-bold text-[10px] md:text-xs uppercase tracking-[0.2em] px-3 py-1.5 bg-primary/5 rounded-full w-fit border border-primary/10 mx-auto lg:mx-0">
@@ -223,58 +224,31 @@ export default function DashboardPage() {
             </div>
             Monitoramento Ativo
           </div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[56px] font-black text-slate-950 leading-[1.1] tracking-tight">
+          <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-[56px] font-black text-slate-950 leading-[1.1] tracking-tight">
             Olá, <span className="text-primary">{userName}</span>.
           </h1>
         </div>
       }
       subtitle={
-        <div className="flex flex-col gap-y-8 md:gap-y-12 items-center lg:items-start text-center lg:text-left">
-          <p className="text-slate-500 text-lg md:text-2xl font-medium leading-relaxed m-0 max-w-2xl mx-auto lg:mx-0">
-            Sua blindagem institucional está sendo monitorada em tempo real. Transformamos processos complexos em execução instantânea.
+        <div className="flex flex-col gap-y-8 md:gap-y-12 items-center lg:items-start text-center lg:text-left w-full">
+          <p className="text-slate-500 text-sm sm:text-lg md:text-2xl font-medium leading-relaxed m-0 w-full lg:max-w-3xl mx-auto lg:mx-0">
+            Transforme sua gestão jurídica em poder de execução. Use inteligência artificial para automatizar processos complexos em segundos.
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
-            {/* Card 1: Security */}
-            <div className="p-4 md:p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center justify-center lg:justify-start gap-4 md:gap-5 hover:border-primary/20 hover:shadow-md transition-all group">
-              <div className="w-12 h-12 md:w-14 md:h-14 shrink-0 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
-                <ShieldCheck size={28} />
-              </div>
-              <div className="flex flex-col gap-y-0.5 text-center lg:text-left">
-                <span className="text-[10px] md:text-[11px] font-black text-slate-400 uppercase tracking-widest">Status de Conformidade</span>
-                <span className="text-base md:text-lg font-bold text-slate-900">Blindagem Ativa</span>
-              </div>
-            </div>
-
-            {/* Card 2: AI Intelligence */}
-            <div className="p-4 md:p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center justify-center lg:justify-start gap-4 md:gap-5 hover:border-primary/20 hover:shadow-md transition-all group">
-              <div className="w-12 h-12 md:w-14 md:h-14 shrink-0 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
-                <Lightbulb size={28} />
-              </div>
-              <div className="flex flex-col gap-y-0.5 text-center lg:text-left">
-                <span className="text-[10px] md:text-[11px] font-black text-slate-400 uppercase tracking-widest">IA & Estratégia</span>
-                <span className="text-base md:text-lg font-bold text-slate-900">{data.insightsCount} {data.insightsCount === 1 ? 'Insight Gerado' : 'Insights Gerados'}</span>
-              </div>
-            </div>
-          </div>
-
           <div className="flex flex-col sm:flex-row items-center gap-4 md:gap-8 w-full">
-            <Link href="/estrategia" className="w-full sm:w-auto">
-              <Button size="lg" className="w-full sm:w-auto h-14 md:h-16 shadow-[0_20px_40px_-15px_rgba(37,99,235,0.4)] font-bold px-8 md:px-12 text-lg md:text-xl bg-primary hover:bg-blue-700 transition-all hover:scale-105 active:scale-95 group mx-auto">
-                <Play className="w-5 h-5 md:w-6 md:h-6 mr-3 fill-white group-hover:animate-pulse" /> Iniciar Execução
-              </Button>
-            </Link>
-
-            <div className="flex flex-col items-center">
-              <Button variant="ghost" onClick={toggleView} className="text-[11px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
-                <img src="/minerva-icon.png" alt="Minerva" className="w-5 h-5 object-contain" /> Experimentar Assistente Minerva
-              </Button>
-            </div>
+            <Button 
+              onClick={toggleView}
+              size="lg" 
+              className="w-full sm:w-auto h-12 sm:h-14 md:h-16 shadow-[0_20px_40px_-15px_rgba(37,99,235,0.4)] font-black px-3 sm:px-12 text-[13px] sm:text-lg md:text-xl bg-gradient-to-r from-primary to-blue-700 hover:from-blue-700 hover:to-primary text-white border-none transition-all hover:scale-105 active:scale-95 group mx-auto lg:mx-0 flex items-center justify-center gap-2 sm:gap-3"
+            >
+              <img src="/minerva-icon.png" alt="Minerva" className="w-5 h-5 sm:w-6 sm:h-6 object-contain brightness-0 invert" /> 
+              Conhecer Assistente Minerva
+            </Button>
           </div>
         </div>
       }
       action={
-        <div className="relative shrink-0 flex justify-center lg:block lg:mr-8 scale-[0.7] sm:scale-85 lg:scale-[1.15] xl:scale-[1.25] transition-all hover:scale-[1.3] duration-500">
+        <div className="relative flex justify-center lg:block lg:mr-8 scale-[0.6] sm:scale-75 lg:scale-[1.15] xl:scale-[1.25] transition-all hover:scale-[1.3] duration-500 -my-14 lg:my-0">
           <ExecutionShield />
         </div>
       }

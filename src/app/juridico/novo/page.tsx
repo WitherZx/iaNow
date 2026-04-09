@@ -1,23 +1,23 @@
 "use client"
 
 import { useState } from 'react'
-import { 
-  ArrowRight, 
-  CheckCircle2, 
-  ShieldCheck, 
-  Scale, 
-  Zap, 
-  Sparkles, 
-  Building2, 
-  UserCircle2, 
-  FileSearch, 
-  User, 
-  Building, 
-  Calculator, 
-  TrendingUp, 
-  MapPin, 
-  Loader2, 
-  FileText 
+import {
+  ArrowRight,
+  CheckCircle2,
+  ShieldCheck,
+  Scale,
+  Zap,
+  Sparkles,
+  Building2,
+  UserCircle2,
+  FileSearch,
+  User,
+  Building,
+  Calculator,
+  TrendingUp,
+  MapPin,
+  Loader2,
+  FileText
 } from 'lucide-react'
 import { Card } from '@/components/shared/Card'
 import { Button } from '@/components/shared/Button'
@@ -50,6 +50,7 @@ export default function NewDocumentPage() {
   // 2. Dados das Partes
   const [partyA, setPartyA] = useState({ id: '', name: '', document: '', address: '', role: 'Contratante/Sócio 1', type: 'pj' })
   const [partyB, setPartyB] = useState({ id: '', name: '', document: '', address: '', role: 'Contratada/Sócio 2', type: 'pj' })
+  const [protectedSide, setProtectedSide] = useState<'A' | 'B'>('A')
 
   const handleSelectPartner = (side: 'A' | 'B', partner: any) => {
     const data = {
@@ -66,24 +67,24 @@ export default function NewDocumentPage() {
 
   // 3. Parâmetros (Contexto Adicional)
   const [parametros, setParametros] = useState('')
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleGenerate = async () => {
     setIsSubmitting(true)
-    
+
     try {
-      const guestId = !localStorage.getItem('sb-auth-token') 
-        ? (localStorage.getItem('ianow_guest_id') || crypto.randomUUID()) 
+      const guestId = !localStorage.getItem('sb-auth-token')
+        ? (localStorage.getItem('ianow_guest_id') || crypto.randomUUID())
         : null
-      
+
       if (guestId && !localStorage.getItem('ianow_guest_id')) {
         localStorage.setItem('ianow_guest_id', guestId)
       }
 
       const res = await fetch('/api/juridico/gerar', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           ...(guestId ? { 'X-Guest-Id': guestId } : {})
         },
@@ -95,6 +96,7 @@ export default function NewDocumentPage() {
           foro,
           partyA,
           partyB,
+          protectedSide,
           parametros
         })
       })
@@ -103,7 +105,7 @@ export default function NewDocumentPage() {
         const errorData = await res.json().catch(() => ({}))
         throw new Error(errorData.error || 'Falha ao processar a geração do contrato')
       }
- 
+
       const data = await res.json()
       window.location.href = `/juridico/${data.documentId}`
     } catch (e: any) {
@@ -120,7 +122,7 @@ export default function NewDocumentPage() {
     <DashboardLayout>
       <PageContainer centered>
         <div className="w-full max-w-4xl mx-auto flex flex-col gap-y-12 pb-20 pt-8">
-          
+
           <div className="text-center space-y-4 animate-in fade-in slide-in-from-top-4">
             <div className="mx-auto w-20 h-20 bg-primary/10 border border-primary/20 rounded-3xl flex items-center justify-center text-primary mb-4 shadow-sm shadow-primary/20">
               <ShieldCheck size={36} strokeWidth={2} />
@@ -132,10 +134,10 @@ export default function NewDocumentPage() {
           </div>
 
           <Card padding="none" className="w-full min-w-0 min-h-[400px] p-4 sm:p-5 md:p-12 border-slate-100 shadow-xl shadow-slate-200/40 relative overflow-visible">
-            
+
             {/* STEP PROGRESS INSTRUCTION */}
             <div className="hidden md:block absolute top-0 right-0 p-8">
-               <StepBadge current={step} total={3} />
+              <StepBadge current={step} total={3} />
             </div>
 
             {/* STEP 1: CONTEXTO GERAL */}
@@ -152,9 +154,9 @@ export default function NewDocumentPage() {
                     <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Informe o tipo, o objetivo e o foro. Esses dados determinam a estrutura legal do documento.</p>
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <FormInput 
+                  <FormInput
                     label="Tipo de Documento"
                     required
                     value={tipoContrato}
@@ -162,7 +164,7 @@ export default function NewDocumentPage() {
                     placeholder="Ex: Prestação de Serviços, Acordo de Sócios, NDA"
                     tooltip="Qual a natureza jurídica deste documento? Ex: Prestação de Serviços, NDA, Acordo de Sócios, Contrato de Locação. Isso define a estrutura das cláusulas geradas."
                   />
-                  <FormInput 
+                  <FormInput
                     label="Perfil das Partes"
                     required
                     value={perfilPartes}
@@ -193,7 +195,7 @@ export default function NewDocumentPage() {
                     tooltip="Cidade e estado onde eventuais litígios serão julgados. Normalmente a sede de uma das partes. Ex: Comarca de São Paulo/SP. Este dado é obrigatório no contrato."
                   />
                 </div>
-                
+
                 {/* Nível de Complexidade */}
                 <div className="flex flex-col gap-y-5 pt-4">
                   <Label tooltip="Básico = simples e ágil, ideal para acordos rápidos. Intermediário = cláusulas de proteção balanceadas. Avançado = máxima proteção, ideal para contratos de alto valor ou risco elevado.">Nível de Blindagem e Complexidade</Label>
@@ -206,8 +208,8 @@ export default function NewDocumentPage() {
                           onClick={() => setNivel(lvl.id)}
                           className={cn(
                             "relative flex flex-col items-start gap-y-3 p-6 rounded-2xl border-2 transition-all duration-300 group text-left",
-                            isActive 
-                              ? "bg-primary/5 border-primary shadow-sm ring-2 ring-primary/10 scale-[1.02]" 
+                            isActive
+                              ? "bg-primary/5 border-primary shadow-sm ring-2 ring-primary/10 scale-[1.02]"
                               : "bg-white border-slate-100 hover:border-slate-300 hover:bg-slate-50"
                           )}
                         >
@@ -225,8 +227,8 @@ export default function NewDocumentPage() {
                   </div>
                 </div>
 
-                <div className="flex justify-end mt-4 pt-10 border-t border-slate-100">
-                  <Button 
+                <div className="flex justify-end border-t border-slate-100">
+                  <Button
                     size="lg" disabled={!isStep1Valid} onClick={() => setStep(2)}
                     className="w-full md:w-auto bg-primary hover:bg-blue-700 font-black px-12 h-14 rounded-xl text-white shadow-[0_15px_30px_-10px_rgba(37,99,235,0.4)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-base"
                   >
@@ -252,25 +254,41 @@ export default function NewDocumentPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-12 p-3 sm:p-4 md:p-10 bg-slate-100 rounded-[20px] sm:rounded-[24px] md:rounded-[40px] border-2 border-slate-200">
-                  
+
                   {/* Parte A */}
                   <div className="flex flex-col gap-y-6">
-                    <div className="flex items-center justify-between border-b border-slate-300 pb-4">
+                    <div className="flex flex-col gap-y-4 border-b border-slate-300 pb-4">
+                      <button
+                        onClick={() => setProtectedSide('A')}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-1.5 rounded-full border-2 transition-all w-fit",
+                          protectedSide === 'A'
+                            ? "bg-primary/10 border-primary text-primary shadow-sm"
+                            : "bg-slate-50 border-slate-200 text-slate-400 opacity-50 hover:opacity-100"
+                        )}
+                      >
+                        <ShieldCheck size={14} className={cn(protectedSide === 'A' && "fill-primary text-white")} />
+                        <span className="text-[10px] font-black uppercase tracking-widest">{protectedSide === 'A' ? "Protegido" : "Proteger"}</span>
+                      </button>
+
                       <h4 className="font-black text-slate-900 flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-primary text-white flex items-center justify-center shadow-lg shadow-primary/20 transition-all"><UserCircle2 size={24} /></div> 
+                        <div className="w-10 h-10 rounded-2xl bg-primary text-white flex items-center justify-center shadow-lg shadow-primary/20 transition-all"><UserCircle2 size={24} /></div>
                         Polo Ativo (A)
                       </h4>
                     </div>
-                    
-                    <div className="space-y-4 md:space-y-6 bg-white p-4 md:p-6 rounded-[20px] md:rounded-[32px] border border-slate-200 shadow-sm">
+
+                    <div className={cn(
+                      "space-y-4 md:space-y-6 bg-white p-4 md:p-6 rounded-[20px] md:rounded-[32px] border transition-all",
+                      protectedSide === 'A' ? "border-primary shadow-lg shadow-primary/5 ring-2 ring-primary/5" : "border-slate-200 shadow-sm"
+                    )}>
                       <FormInput
                         label="Papel na Relação"
                         value={partyA.role}
-                        onChange={(e) => setPartyA({...partyA, role: e.target.value})}
+                        onChange={(e) => setPartyA({ ...partyA, role: e.target.value })}
                         placeholder="Ex: Contratante, Licenciante..."
                       />
 
-                      <PartnerSelector 
+                      <PartnerSelector
                         label="Selecionar Contato Registrado"
                         onSelect={(p) => handleSelectPartner('A', p)}
                         selectedId={partyA.id}
@@ -284,7 +302,7 @@ export default function NewDocumentPage() {
                             <span className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Qualificação Vinculada</span>
                           </div>
                           <p className="text-[11px] text-slate-600 font-bold leading-relaxed">
-                             {partyA.name} • {partyA.document} • {partyA.address.substring(0, 40)}...
+                            {partyA.name} • {partyA.document} • {partyA.address.substring(0, 40)}...
                           </p>
                         </div>
                       )}
@@ -293,22 +311,38 @@ export default function NewDocumentPage() {
 
                   {/* Parte B */}
                   <div className="flex flex-col gap-y-6">
-                    <div className="flex items-center justify-between border-b border-slate-300 pb-4">
+                    <div className="flex flex-col gap-y-4 border-b border-slate-300 pb-4">
+                      <button
+                        onClick={() => setProtectedSide('B')}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-1.5 rounded-full border-2 transition-all w-fit",
+                          protectedSide === 'B'
+                            ? "bg-primary/10 border-primary text-primary shadow-sm"
+                            : "bg-slate-50 border-slate-200 text-slate-400 opacity-50 hover:opacity-100"
+                        )}
+                      >
+                        <ShieldCheck size={14} className={cn(protectedSide === 'B' && "fill-primary text-white")} />
+                        <span className="text-[10px] font-black uppercase tracking-widest">{protectedSide === 'B' ? "Protegido" : "Proteger"}</span>
+                      </button>
+
                       <h4 className="font-black text-slate-900 flex items-center gap-3">
-                         <div className="w-10 h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg shadow-slate-200 transition-all"><Building2 size={24} /></div> 
-                         Polo Passivo (B)
+                        <div className="w-10 h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg shadow-slate-200 transition-all"><Building2 size={24} /></div>
+                        Polo Passivo (B)
                       </h4>
                     </div>
 
-                    <div className="space-y-4 md:space-y-6 bg-white p-4 md:p-6 rounded-[20px] md:rounded-[32px] border border-slate-200 shadow-sm">
+                    <div className={cn(
+                      "space-y-4 md:space-y-6 bg-white p-4 md:p-6 rounded-[20px] md:rounded-[32px] border transition-all",
+                      protectedSide === 'B' ? "border-primary shadow-lg shadow-primary/5 ring-2 ring-primary/5" : "border-slate-200 shadow-sm"
+                    )}>
                       <FormInput
                         label="Papel na Relação"
                         value={partyB.role}
-                        onChange={(e) => setPartyB({...partyB, role: e.target.value})}
+                        onChange={(e) => setPartyB({ ...partyB, role: e.target.value })}
                         placeholder="Ex: Contratada, Licenciada..."
                       />
 
-                      <PartnerSelector 
+                      <PartnerSelector
                         label="Selecionar Contato Registrado"
                         onSelect={(p) => handleSelectPartner('B', p)}
                         selectedId={partyB.id}
@@ -322,7 +356,7 @@ export default function NewDocumentPage() {
                             <span className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Qualificação Vinculada</span>
                           </div>
                           <p className="text-[11px] text-slate-600 font-bold leading-relaxed">
-                             {partyB.name} • {partyB.document} • {partyB.address.substring(0, 40)}...
+                            {partyB.name} • {partyB.document} • {partyB.address.substring(0, 40)}...
                           </p>
                         </div>
                       )}
@@ -330,11 +364,11 @@ export default function NewDocumentPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4 mt-4 pt-10 border-t border-slate-100">
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-t border-slate-100">
                   <Button variant="ghost" onClick={() => setStep(1)} className="w-full md:w-auto font-bold text-slate-400 hover:text-slate-900 h-14 px-6 order-2 md:order-1">
                     <ArrowRight className="mr-2 w-5 h-5 rotate-180" /> Voltar
                   </Button>
-                  <Button 
+                  <Button
                     size="lg" onClick={() => setStep(3)} disabled={!partyA.name.trim() || !partyB.name.trim()}
                     className="w-full md:w-auto bg-primary hover:bg-blue-700 font-black px-12 h-14 rounded-xl text-white shadow-[0_15px_30px_-10px_rgba(37,99,235,0.4)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-base group order-1 md:order-2"
                   >
@@ -375,19 +409,19 @@ export default function NewDocumentPage() {
                       />
                     </div>
 
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-4 mt-6 pt-10 border-t border-slate-100 uppercase tracking-widest text-[11px] font-black">
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-t border-slate-100 uppercase tracking-widest text-[11px] font-black">
                       <Button variant="ghost" onClick={() => setStep(2)} className="w-full md:w-auto font-bold text-slate-400 hover:text-slate-900 h-14 px-6 order-2 md:order-1">
                         <ArrowRight className="mr-2 w-5 h-5 rotate-180" /> Parte Anterior
                       </Button>
-                      <Button 
-                        size="lg" 
-                        disabled={isSubmitting} 
+                      <Button
+                        size="lg"
+                        disabled={isSubmitting}
                         onClick={handleGenerate}
-                        className="w-full md:w-auto bg-primary hover:bg-blue-700 font-black px-12 h-14 rounded-xl text-white shadow-[0_15px_30px_-10px_rgba(37,99,235,0.4)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-base group overflow-hidden relative order-1 md:order-2"
+                        className="w-full md:w-auto bg-primary hover:bg-blue-700 font-black px-8 min-h-[56px] h-auto py-3 rounded-xl text-white shadow-[0_15px_30px_-10px_rgba(37,99,235,0.4)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-sm sm:text-base group overflow-hidden relative order-1 md:order-2 flex items-center justify-center text-center"
                       >
                         <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 pointer-events-none" />
-                        <Sparkles className="mr-3 w-5 h-5 group-hover:animate-pulse text-blue-200" />
-                        Gerar Documento Blindado
+                        <Sparkles className="mr-3 w-5 h-5 group-hover:animate-pulse text-blue-200 shrink-0" />
+                        <span>Gerar Documento <br className="sm:hidden" /> Blindado</span>
                       </Button>
                     </div>
                   </>
@@ -408,9 +442,9 @@ export default function NewDocumentPage() {
 
                     {/* Resumo da Blindagem */}
                     <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-bottom-4 duration-700">
-                      <div className="p-6 bg-slate-50 border border-slate-100 rounded-[32px] space-y-4">
+                      <div className="p-6 bg-slate-200 border border-slate-100 rounded-[32px] space-y-4">
                         <div className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">
-                           <Scale className="w-4 h-4" /> Natureza Contratual
+                          <Scale className="w-4 h-4" /> Natureza Contratual
                         </div>
                         <div className="flex flex-col gap-y-1 px-1">
                           <span className="text-lg font-black text-slate-900">{tipoContrato}</span>
@@ -418,18 +452,18 @@ export default function NewDocumentPage() {
                         </div>
                       </div>
 
-                      <div className="p-6 bg-slate-50 border border-slate-100 rounded-[32px] space-y-4">
+                      <div className="p-6 bg-slate-200 border border-slate-100 rounded-[32px] space-y-4">
                         <div className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">
-                           <ShieldCheck className="w-4 h-4" /> Partes Envolvidas
+                          <ShieldCheck className="w-4 h-4" /> Partes Envolvidas
                         </div>
                         <div className="space-y-3 px-1">
                           <div className="flex items-center gap-2">
-                             <div className="w-2 h-2 rounded-full bg-primary" />
-                             <span className="text-xs font-bold text-slate-700 truncate">{partyA.name}</span>
+                            <div className="w-2 h-2 rounded-full bg-primary" />
+                            <span className="text-xs font-bold text-slate-700 truncate">{partyA.name}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                             <div className="w-2 h-2 rounded-full bg-slate-400" />
-                             <span className="text-xs font-bold text-slate-700 truncate">{partyB.name}</span>
+                            <div className="w-2 h-2 rounded-full bg-slate-400" />
+                            <span className="text-xs font-bold text-slate-700 truncate">{partyB.name}</span>
                           </div>
                         </div>
                       </div>
@@ -446,7 +480,7 @@ export default function NewDocumentPage() {
                 )}
               </div>
             )}
-            
+
           </Card>
         </div>
       </PageContainer>

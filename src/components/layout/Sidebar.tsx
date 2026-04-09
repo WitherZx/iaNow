@@ -41,11 +41,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <X size={24} />
       </button>
 
-      {/* Logo */}
       <div className="px-6 mb-8 flex items-center">
-        <Link href="/dashboard" className="flex items-center gap-x-0.5 group">
-          <span className="text-2xl font-black text-white tracking-tighter transition-all group-hover:tracking-normal">ia</span>
-          <span className="text-2xl font-black text-primary tracking-tighter transition-all group-hover:tracking-normal">Now</span>
+        <Link href="/dashboard" className="flex items-center gap-x-2.5 group">
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-xl shadow-primary/20 group-hover:scale-110 transition-transform duration-300">
+            <Scale size={18} className="text-white" strokeWidth={2.5} />
+          </div>
+          <div className="flex items-center gap-x-0.5">
+            <span className="text-2xl font-black text-white tracking-tighter transition-all group-hover:ring-offset-1">ia</span>
+            <span className="text-2xl font-black text-primary tracking-tighter transition-all group-hover:ring-offset-1">Now</span>
+          </div>
         </Link>
       </div>
 

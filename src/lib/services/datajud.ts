@@ -13,11 +13,21 @@ export interface ProcessMovement {
   polo?: 'juizo' | 'ativo' | 'passivo' | 'mp' | 'outro';
   actionRequired?: boolean;
   actionHint?: string;
+  documents?: ProcessDocument[];
 }
 
 export interface ProcessParty {
   nome: string;
   tipo: string; // 'Requerente' | 'Requerido' | 'Autor' | 'Réu' | etc.
+}
+
+export interface ProcessDocument {
+  id: string;
+  name: string;
+  url: string;
+  date: string;
+  type?: string;
+  size?: string;
 }
 
 export interface ProcessStatus {
@@ -32,6 +42,7 @@ export interface ProcessStatus {
   valorCausa?: string;
   partes?: ProcessParty[];
   movements: ProcessMovement[];
+  documents?: ProcessDocument[];
 }
 
 export class DataJudService {

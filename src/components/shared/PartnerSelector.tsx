@@ -26,7 +26,7 @@ interface PartnerSelectorProps {
   className?: string
 }
 
-export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Selecione um parceiro...", className }: PartnerSelectorProps) {
+export function PartnerSelector({ label, onSelect, selectedId, placeholder = "Selecione um contato...", className }: PartnerSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [partners, setPartners] = useState<Partner[]>([])

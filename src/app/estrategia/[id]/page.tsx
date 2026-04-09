@@ -62,48 +62,30 @@ export default function EstrategiaDetalhePage() {
     async function loadAndCheck() {
       if (!id) return
       try {
-        setLoading(true)
         const guestId = localStorage.getItem('ianow_guest_id')
-
-        // 1. Buscar a estratégia via Server Action (com suporte a Guest)
         const { getStrategyAction } = await import('@/app/actions/strategy-actions')
         const { data, config, error } = await getStrategyAction(id as string, guestId)
 
-        if (error || !data) {
-          // Fallback para API pública se houver erro
-          const response = await fetch(`/api/strategy/public?id=${id as string}`)
-          if (!response.ok) throw new Error('Falha ao carregar estratégia')
-          
-          let fallbackData = null
-          try {
-            fallbackData = await response.json()
-          } catch (jsonErr) {
-            console.error('JSON parsing error:', jsonErr)
-            throw new Error('Falha de formato na resposta')
-          }
-          
-          setStrategy(fallbackData)
-          setLoading(false)
-          return
-        }
+        if (error || !data) throw new Error(error || 'Estratégia não encontrada')
 
         setStrategy(data)
-        // Sincroniza o isTestMode vindo da Action (App Configs)
-        if (config && typeof config.isTestMode !== 'undefined') {
-          setConfigParams({ isTestMode: config.isTestMode })
+        const { data: { session } } = await supabase.auth.getSession()
+
+        // Robust Access Check: Prioritize is_paid column, fallback to metadata
+        let metadata = data.metadata || {}
+        if (typeof metadata === 'string') {
+          try { metadata = JSON.parse(metadata) } catch (e) { metadata = {} }
         }
 
-        // --- Lógica de Paywall & Auth ---
-        const { data: { session } } = await supabase.auth.getSession()
-        const isGuestDoc = data.metadata?.guest_id === guestId
-        const isUnlocked = data.metadata?.unlocked === true
+        const isGuestDoc = metadata?.guest_id === guestId
+        const isUnlocked = data.is_paid === true || metadata.unlocked === true
 
-        // 0. Se for isAllAccess, bypass do paywall
+        // 0. Se for isAllAccess (Admin), bypass do paywall
         if (config?.isAllAccess) {
           setShowPaywall(false)
           setIsGuest(!session)
         }
-        // 1. Se estiver desbloqueado explicitamente (avulso), libera
+        // 1. Se estiver desbloqueado explicitamente (is_paid ou unlocked), libera
         else if (isUnlocked) {
           setShowPaywall(false)
           setIsGuest(false)
@@ -113,7 +95,7 @@ export default function EstrategiaDetalhePage() {
           setShowPaywall(true)
           setIsGuest(true)
         }
-        // 3. Se estiver logado, verifica plano Pro
+        // 3. Se estiver logado, verifica plano Pro do usuário
         else if (session) {
           setIsGuest(false)
           const { data: membership } = await supabase
@@ -151,9 +133,9 @@ export default function EstrategiaDetalhePage() {
         } else {
           setShowPaywall(true)
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error loading strategy:', err)
-        toast.error('Ocorreu um erro ao carregar os dados.')
+        toast.error(err.message || 'Ocorreu um erro ao carregar os dados.')
       } finally {
         setLoading(false)
       }
@@ -326,9 +308,22 @@ export default function EstrategiaDetalhePage() {
             fullscreen
             isTestMode={configParams.isTestMode}
             onBack={() => router.back()}
-            onUnlockSuccess={() => {
+            onUnlockSuccess={async () => {
+              // 1. Atualiza estados locais imediatamente para remover o Paywall da tela
               setShowPaywall(false)
-              setTimeout(() => window.location.reload(), 1500)
+              setIsGuest(false)
+              setStrategy((prev: any) => prev ? { ...prev, metadata: { ...prev.metadata, unlocked: true } } : prev)
+              
+              // 2. Notifica o usuário
+              toast.success('Acesso liberado com sucesso!')
+              
+              // 3. Recarrega os dados em background para garantir sincronia com o servidor sem F5
+              const { getStrategyAction } = await import('@/app/actions/strategy-actions')
+              const guestId = localStorage.getItem('ianow_guest_id')
+              const res = await getStrategyAction(id as string, guestId)
+              if (res.data) {
+                setStrategy(res.data)
+              }
             }}
           />
         </div>
@@ -345,73 +340,6 @@ export default function EstrategiaDetalhePage() {
         <DocumentActionBar
           onDelete={handleDelete}
           className="print:hidden"
-          onViewHistory={
-            <div className="relative">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => {
-                  if (!showHistoryDropdown) loadVersions()
-                  setShowHistoryDropdown(!showHistoryDropdown)
-                }}
-                title="Histórico de alterações"
-                className={cn(
-                  "h-10 w-10 rounded-xl border-slate-200 text-slate-900 transition-all hover:scale-105",
-                  viewingVersion ? "bg-amber-50 border-amber-200 text-amber-600" : "hover:text-primary hover:border-primary/30"
-                )}
-              >
-                <HistoryIcon size={18} />
-              </Button>
-
-              {showHistoryDropdown && (
-                <div className="absolute right-0 top-12 w-64 bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 p-2 animate-in fade-in slide-in-from-top-2">
-                  <div className="px-3 py-2 border-b border-slate-50 mb-1">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Histórico de Versões</p>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto custom-scrollbar">
-                    <button
-                      onClick={() => handleSelectVersion(null)}
-                      className={cn(
-                        "w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center justify-between group",
-                        !viewingVersion ? "bg-primary/10 text-primary" : "hover:bg-slate-50 text-slate-600"
-                      )}
-                    >
-                      <div className="flex flex-col">
-                        <span className="text-[11px] font-black uppercase tracking-tight">Versão Atual (Live)</span>
-                        <span className="text-[9px] font-bold opacity-60">Conteúdo mais recente</span>
-                      </div>
-                      {!viewingVersion && <CheckCircle2 size={12} />}
-                    </button>
-
-                    {loadingVersions && (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 size={16} className="animate-spin text-slate-300" />
-                      </div>
-                    )}
-
-                    {!loadingVersions && versions.map((v) => (
-                      <button
-                        key={v.id}
-                        onClick={() => handleSelectVersion(v)}
-                        className={cn(
-                          "w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center justify-between group mt-1",
-                          viewingVersion?.id === v.id ? "bg-amber-50 text-amber-600" : "hover:bg-slate-50 text-slate-600"
-                        )}
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-[11px] font-black uppercase tracking-tight">
-                            {new Date(v.created_at).toLocaleDateString('pt-BR')} às {new Date(v.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          <span className="text-[9px] font-bold opacity-60">ID: {v.id.slice(0, 8)}...</span>
-                        </div>
-                        {viewingVersion?.id === v.id && <Clock size={12} />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          }
         />
       }
       hero={

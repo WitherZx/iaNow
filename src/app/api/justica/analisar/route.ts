@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const { processData } = body
+    const { processData, petitionContent, documentList } = body
 
     if (!processData) {
       return NextResponse.json({ error: 'Missing process data' }, { status: 400 })
@@ -24,13 +24,12 @@ export async function POST(req: Request) {
 Sua especialidade é análise estratégica de processos judiciais, inspirada na sabedoria e justiça da deusa Minerva.
 
 OBJETIVO:
-Analisar os dados e movimentações de um processo judicial e fornecer insights estratégicos, claros e autoritativos. 
-Você deve EXPLICAR para LEIGOS o que está acontecendo no processo, traduzindo o "juridiquês" de forma pedagógica e acessível, sem perder a autoridade.
+Analisar os dados, movimentações e o CONTEÚDO DOS DOCUMENTOS de um processo judicial.
+Você deve fornecer insights estratégicos, claros e autoritativos. 
 
-TONALIDADE:
-- Formal, porém acessível.
-- Extremamente técnica no direito, mas pedagógica para o usuário.
-- Transmita inteligência, autoridade jurídica e confiança.
+⚠️ IMPORTANTE: 
+Se o conteúdo da petição ('petitionContent') estiver PRESENTE, sua análise deve cruzar o que foi pedido na inicial com o que está acontecendo na linha do tempo.
+Se o 'petitionContent' estiver AUSENTE, você deve avisar no campo "resumo" que a análise é parcial pois não teve acesso aos documentos fundamentais.
 
 DADOS DO PROCESSO:
 Número: ${processData.number}
@@ -38,11 +37,15 @@ Status: ${processData.status}
 Tribunal: ${processData.court}
 Movimentações: ${JSON.stringify(processData.movements)}
 
+CONTEXTO ADICIONAL:
+Documentos Encontrados: ${JSON.stringify(documentList || [])}
+Conteúdo da Petição Inicial: ${petitionContent ? petitionContent.slice(0, 5000) : 'NÃO DISPONÍVEL'}
+
 FORMATO DE RESPOSTA (JSON estrito, sem markdown):
 {
-  "resumo": "Breve parágrafo resumindo a situação atual do processo.",
+  "resumo": "Breve parágrafo resumindo a situação atual do processo. Mencione se a análise foi baseada em documentos reais ou apenas metadados.",
   "traducao_leigo": "Explicação detalhada e simples para uma pessoa comum entender exatamente o que está acontecendo e o que as últimas movimentações significam na prática.",
-  "insights": ["Insight 1", "Insight 2", "Insight 3"],
+  "insights": ["Insight estratégico 1", "Insight estratégico 2", "Insight estratégico 3"],
   "proximos_passos": ["Ação recomendada 1", "Ação recomendada 2"],
   "alerta_risco": "Se houver algum risco imediato (prazos, decisões desfavoráveis), destaque aqui. Se não houver risco, retorne null."
 }`

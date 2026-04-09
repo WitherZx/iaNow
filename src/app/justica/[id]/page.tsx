@@ -26,7 +26,9 @@ import {
   Info,
   Search,
   History,
-  RotateCcw
+  RotateCcw,
+  RefreshCw,
+  AlertTriangle
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { getDocumentVersionsAction, getVersionContentAction } from '@/app/actions/version-actions'
@@ -40,6 +42,7 @@ import { toast } from 'sonner'
 import { cn } from '@/utils/cn'
 import { Paywall } from '@/components/shared/Paywall'
 import { getJusticeDemandAction } from '@/app/actions/justice-actions'
+import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
 
 export default function DemandDetailPage() {
   const { id } = useParams()
@@ -54,14 +57,29 @@ export default function DemandDetailPage() {
   const [refinePrompt, setRefinePrompt] = useState('')
   const [refining, setRefining] = useState(false)
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
-  const [uploadedEvidence, setUploadedEvidence] = useState<{ id: string; name: string; url: string; type: string }[]>([])
+  const [recommendedEvidence, setRecommendedEvidence] = useState<string[]>([])
 
   const hasPetition = demand?.metadata?.petition_content
   const [activeTab, setActiveTab] = useState<'minuta' | 'acompanhamento' | 'analise' | 'auditoria'>('minuta')
   const [processStatus, setProcessStatus] = useState<any>(null)
+  const [isTrackModalOpen, setIsTrackModalOpen] = useState(false)
+  const { needsOnboarding } = useOnboardingGuard()
+  const isMounted = useRef(true)
+
+  useEffect(() => {
+    isMounted.current = true
+    return () => { isMounted.current = false }
+  }, [])
+
   const [isTrackingLoading, setIsTrackingLoading] = useState(false)
   const [processAnalysis, setProcessAnalysis] = useState<any>(null)
   const [isAnalysisLoading, setIsAnalysisLoading] = useState(false)
+  
+  const [processDocuments, setProcessDocuments] = useState<any[]>([])
+  const [isDocsLoading, setIsDocsLoading] = useState(false)
+  const [isExtracting, setIsExtracting] = useState(false)
+
+  const isExternal = !!demand?.metadata?.process_number
 
   const [showPaywall, setShowPaywall] = useState(false)
   const [config, setConfig] = useState({ isAllAccess: false, isTestMode: false })
@@ -85,7 +103,8 @@ export default function DemandDetailPage() {
       setEditContent(content)
       setProcessStatus(data.metadata?.last_remote_status || null)
       setProcessAnalysis(data.metadata?.last_analysis || null)
-      setUploadedEvidence(data.metadata?.evidence_files || [])
+      setProcessDocuments(data.metadata?.last_documents || [])
+      setRecommendedEvidence(data.metadata?.auditoria?.provas_recomendadas || [])
       setConfig(res.config || { isAllAccess: false, isTestMode: false })
 
       // Redirecionamento Inteligente: Se não tem petição, foca no acompanhamento
@@ -160,6 +179,20 @@ export default function DemandDetailPage() {
     if (id) loadDemand()
   }, [id])
 
+  // Gatilho Automático: Análise Minerva
+  useEffect(() => {
+    if (activeTab === 'analise' && !processAnalysis && !isAnalysisLoading && processStatus) {
+      generateMinervaAnalysis()
+    }
+  }, [activeTab, processAnalysis, processStatus])
+
+  // Gatilho Automático: Documentos do Escavador
+  useEffect(() => {
+    if (processStatus && processDocuments.length === 0 && !isDocsLoading) {
+      fetchProcessDocuments()
+    }
+  }, [processStatus])
+
   const loadVersions = async () => {
     try {
       setLoadingVersions(true)
@@ -191,38 +224,7 @@ export default function DemandDetailPage() {
     }
   }
 
-  const handleFileUpload = async (file: File, label: string) => {
-    try {
-      setSaving(true)
-      const reader = new FileReader()
-      reader.readAsDataURL(file)
-      reader.onload = async () => {
-        const base64Content = reader.result as string
-        const newFile = {
-          id: Math.random().toString(36).substr(2, 9),
-          name: label || file.name,
-          url: base64Content,
-          type: file.type
-        }
-
-        const updatedEvidence = [...uploadedEvidence, newFile]
-        const guestId = localStorage.getItem('ianow_guest_id')
-        const { updateJusticeDemandMetadataAction } = await import('@/app/actions/justice-actions')
-        const newMetadata = { ...demand.metadata, evidence_files: updatedEvidence }
-
-        const res = await updateJusticeDemandMetadataAction(id as string, newMetadata, guestId)
-        if (res.error) throw new Error(res.error)
-
-        setUploadedEvidence(updatedEvidence)
-        setDemand({ ...demand, metadata: newMetadata })
-        toast.success(`Anexado: ${label || file.name}`)
-      }
-    } catch (err) {
-      toast.error('Erro ao anexar arquivo.')
-    } finally {
-      setSaving(false)
-    }
-  }
+  // handleFileUpload removed as per request to focus on AI Proof Strategy
 
   const handleSave = async () => {
     try {
@@ -328,7 +330,13 @@ export default function DemandDetailPage() {
       if (res.error) throw new Error(res.error)
 
       setDemand((prev: any) => ({ ...prev, metadata: updatedMetadata, ...(numericValorCausa !== undefined && { valor_causa: numericValorCausa }) }))
-      setActiveTab('acompanhamento')
+      
+      // DISPARA SINCRONIZAÇÃO DO ESCAVADOR TAMBÉM
+      await fetchProcessDocuments()
+      
+      if (isMounted.current) {
+        setActiveTab('acompanhamento')
+      }
     } catch (err: any) {
       console.error('[Sync] Error:', err)
       toast.error(err.message || 'Erro ao sincronizar com o tribunal.')
@@ -348,7 +356,11 @@ export default function DemandDetailPage() {
           'Content-Type': 'application/json',
           'X-Guest-Id': guestId
         },
-        body: JSON.stringify({ processData: processStatus })
+        body: JSON.stringify({ 
+          processData: processStatus,
+          petitionContent: editContent,
+          documentList: processDocuments
+        })
       })
 
       if (!response.ok) {
@@ -369,13 +381,79 @@ export default function DemandDetailPage() {
 
       setProcessAnalysis(analysis)
       setDemand((prev: any) => ({ ...prev, metadata: updatedMetadata }))
-      setActiveTab('analise')
-      toast.success('Análise da Minerva concluída!')
+      
+      if (isMounted.current) {
+        setActiveTab('analise')
+        toast.success('Análise da Minerva concluída!')
+      }
     } catch (err) {
       console.error('Erro ao salvar análise:', err)
       toast.error('Erro ao gerar análise.')
     } finally {
       setIsAnalysisLoading(false)
+    }
+  }
+
+  const fetchProcessDocuments = async () => {
+    if (!demand?.metadata?.process_number) return
+    if (isDocsLoading) return
+    setIsDocsLoading(true)
+    try {
+      const { getProcessDocumentsAction, updateJusticeDemandMetadataAction } = await import('@/app/actions/justice-actions')
+      const result = await getProcessDocumentsAction(demand.metadata.process_number)
+      
+      if (result.success) {
+        const docs = result.data || []
+        setProcessDocuments(docs)
+        
+        // Auto-extração da Petição Inicial se for externo
+        if (isExternal && !editContent) {
+          const initialDoc = docs.find((d: any) => d.category === 'petition_initial')
+          if (initialDoc) {
+            handleAutoExtract(initialDoc.url)
+          }
+        }
+
+        // Salva no cache do documento
+        const guestId = localStorage.getItem('ianow_guest_id')
+        const updatedMetadata = { ...demand.metadata, last_documents: docs }
+        await updateJusticeDemandMetadataAction(id as string, updatedMetadata, guestId)
+        
+        if (docs.length > 0) {
+          toast.success(`${docs.length} documentos encontrados no Escavador!`)
+        } else {
+          toast.info('Nenhum documento encontrado na base do Escavador para este número.')
+        }
+
+        setDemand((prev: any) => ({ ...prev, metadata: updatedMetadata }))
+      }
+    } catch (err: any) {
+      console.error('[Escavador] Error:', err)
+      toast.error(err.message || 'Erro ao buscar documentos no Escavador.')
+    } finally {
+      setIsDocsLoading(false)
+    }
+  }
+
+  const handleAutoExtract = async (url: string) => {
+    setIsExtracting(true)
+    try {
+      const { extractTextFromPdfAction, updateJusticeDemandMetadataAction } = await import('@/app/actions/justice-actions')
+      const guestId = localStorage.getItem('ianow_guest_id')
+      const result = await extractTextFromPdfAction(url, demand?.metadata?.process_number || '')
+      if (result.success && result.text) {
+        setEditContent(result.text)
+        // Salva opcionalmente no metadado para persistir
+        await updateJusticeDemandMetadataAction(id as string, { 
+          ...demand.metadata, 
+          petition_content: result.text,
+          is_external_petition: true 
+        }, guestId)
+      }
+    } catch (err) {
+      console.error('Extraction error:', err)
+    } finally {
+      setIsExtracting(false)
     }
   }
 
@@ -418,73 +496,6 @@ export default function DemandDetailPage() {
           isSaving={saving}
           onPrint={() => window.print()}
           onDelete={handleDelete}
-          onViewHistory={
-            <div className="relative">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => {
-                  if (!showHistoryDropdown) loadVersions()
-                  setShowHistoryDropdown(!showHistoryDropdown)
-                }}
-                title="Histórico de alterações"
-                className={cn(
-                  "h-10 w-10 rounded-xl border-slate-200 text-slate-900 transition-all hover:scale-105",
-                  viewingVersion ? "bg-amber-50 border-amber-200 text-amber-600" : "hover:text-primary hover:border-primary/30"
-                )}
-              >
-                <History size={18} />
-              </Button>
-
-              {showHistoryDropdown && (
-                <div className="absolute right-0 top-12 w-64 bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 p-2 animate-in fade-in slide-in-from-top-2">
-                  <div className="px-3 py-2 border-b border-slate-50 mb-1">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Histórico de Versões</p>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto custom-scrollbar">
-                    <button
-                      onClick={() => handleSelectVersion(null)}
-                      className={cn(
-                        "w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center justify-between group",
-                        !viewingVersion ? "bg-primary/10 text-primary" : "hover:bg-slate-50 text-slate-600"
-                      )}
-                    >
-                      <div className="flex flex-col">
-                        <span className="text-[11px] font-black uppercase tracking-tight">Versão Atual (Live)</span>
-                        <span className="text-[9px] font-bold opacity-60">Conteúdo mais recente</span>
-                      </div>
-                      {!viewingVersion && <CheckCircle2 size={12} />}
-                    </button>
-
-                    {loadingVersions && (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 size={16} className="animate-spin text-slate-300" />
-                      </div>
-                    )}
-
-                    {!loadingVersions && versions.map((v) => (
-                      <button
-                        key={v.id}
-                        onClick={() => handleSelectVersion(v)}
-                        className={cn(
-                          "w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center justify-between group mt-1",
-                          viewingVersion?.id === v.id ? "bg-amber-50 text-amber-600" : "hover:bg-slate-50 text-slate-600"
-                        )}
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-[11px] font-black uppercase tracking-tight">
-                            {new Date(v.created_at).toLocaleDateString('pt-BR')} às {new Date(v.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          <span className="text-[9px] font-bold opacity-60">ID: {v.id.slice(0, 8)}...</span>
-                        </div>
-                        {viewingVersion?.id === v.id && <Clock size={12} />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          }
         />
       }
       hero={
@@ -607,153 +618,107 @@ export default function DemandDetailPage() {
             </div>
           )}
 
-          {/* 3. AJUSTAR COM IA */}
-          <SidebarRefineSection
-            value={refinePrompt}
-            onChange={setRefinePrompt}
-            onSubmit={() => handleRefine()}
-            isLoading={refining}
-            label="Ajustar Petição com IA"
-            hint="Descreva o que deseja mudar ou adicionar à petição de Jus Postulandi."
-          />
+          {/* 3. AJUSTAR COM IA — Somente na Petição */}
+          {activeTab === 'minuta' && (
+            <SidebarRefineSection
+              value={refinePrompt}
+              onChange={setRefinePrompt}
+              onSubmit={() => handleRefine()}
+              isLoading={refining}
+              label="Ajustar Petição com IA"
+              hint="Descreva o que deseja mudar ou adicionar à petição de Jus Postulandi."
+            />
+          )}
 
-          {/* 4. PONTUAÇÃO DE ROBUSTEZ (Compliance) */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">
-              <Scale size={14} className="text-emerald-500" /> Auditoria de Risco
-            </div>
-            <div className="bg-white border border-slate-100 rounded-[28px] p-6 shadow-sm">
-              <div className="flex flex-col items-center text-center gap-2 mb-6">
-                <div className="relative w-20 h-20 flex items-center justify-center">
-                  <svg className="w-full h-full transform -rotate-90">
-                    <circle cx="40" cy="40" r="36" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-slate-100" />
-                    <circle cx="40" cy="40" r="36" stroke="currentColor" strokeWidth="6" fill="transparent" strokeDasharray={226} strokeDashoffset={226 - (226 * (demand.score_risco || 0)) / 100} className="text-emerald-500 transition-all duration-1000" />
-                  </svg>
-                  <span className="absolute text-xl font-black text-slate-900">{demand.score_risco || 0}%</span>
-                </div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nível de Robustez</p>
+          {/* 4. PONTUAÇÃO DE ROBUSTEZ (Compliance) — Somente na Petição */}
+          {activeTab === 'minuta' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                <Scale size={14} className="text-emerald-500" /> Auditoria de Risco
               </div>
-
-              {auditoriaData.pontos_fortes?.length > 0 && (
-                <div className="space-y-3 pt-4 border-t border-slate-50">
-                  {auditoriaData.pontos_fortes.slice(0, 2).map((p: string, i: number) => (
-                    <div key={i} className="flex gap-3">
-                      <CheckCircle2 size={14} className="text-emerald-500 shrink-0 mt-0.5" />
-                      <p className="text-[11px] font-bold text-slate-600 leading-tight">{p}</p>
-                    </div>
-                  ))}
+              <div className="bg-white border border-slate-100 rounded-[28px] p-6 shadow-sm">
+                <div className="flex flex-col items-center text-center gap-2 mb-6">
+                  <div className="relative w-20 h-20 flex items-center justify-center">
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle cx="40" cy="40" r="36" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-slate-100" />
+                      <circle cx="40" cy="40" r="36" stroke="currentColor" strokeWidth="6" fill="transparent" strokeDasharray={226} strokeDashoffset={226 - (226 * (demand.score_risco || 0)) / 100} className="text-emerald-500 transition-all duration-1000" />
+                    </svg>
+                    <span className="absolute text-xl font-black text-slate-900">{demand.score_risco || 0}%</span>
+                  </div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nível de Robustez</p>
                 </div>
-              )}
-            </div>
-          </div>
 
-          {/* 5. GUIA DE PROTOCOLO PASSO A PASSO */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">
-              <MapPin size={14} className="text-blue-500" /> Guia de Protocolo
-            </div>
-            <div className="bg-white border border-slate-100 rounded-[28px] p-6 shadow-sm space-y-4">
-              <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 mb-2">
-                <p className="text-xs font-black text-blue-900 mb-1 leading-tight">{ondeProtocolar.orgao || 'JEC - Juizado Especial Cível'}</p>
-                <p className="text-[10px] text-blue-600 font-bold leading-relaxed">{ondeProtocolar.instrucao || 'Procure o setor de atermação presencialmente ou via portal digital.'}</p>
-                {ondeProtocolar.portal && (
-                  <a href={ondeProtocolar.portal} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center text-[10px] font-black text-blue-700 hover:underline">
-                    Acessar Portal <ExternalLink size={10} className="ml-1" />
-                  </a>
+                {auditoriaData.pontos_fortes?.length > 0 && (
+                  <div className="space-y-3 pt-4 border-t border-slate-50">
+                    {auditoriaData.pontos_fortes.slice(0, 2).map((p: string, i: number) => (
+                      <div key={i} className="flex gap-3">
+                        <CheckCircle2 size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+                        <p className="text-[11px] font-bold text-slate-600 leading-tight">{p}</p>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
+            </div>
+          )}
 
-              {auditoriaData.instrucoes_protocolo?.length > 0 && (
-                <div className="space-y-3 pt-2">
-                  {auditoriaData.instrucoes_protocolo.map((step: string, i: number) => (
-                    <div key={i} className="flex items-start gap-3">
-                      <div className="w-5 h-5 bg-blue-100 text-blue-600 rounded flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">{i + 1}</div>
-                      <p className="text-[11px] font-bold text-slate-600 leading-tight">{step}</p>
-                    </div>
-                  ))}
+          {/* 5. GUIA DE PROTOCOLO PASSO A PASSO — Somente na Petição */}
+          {activeTab === 'minuta' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                <MapPin size={14} className="text-blue-500" /> Guia de Protocolo
+              </div>
+              <div className="bg-white border border-slate-100 rounded-[28px] p-6 shadow-sm space-y-4">
+                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 mb-2">
+                  <p className="text-xs font-black text-blue-900 mb-1 leading-tight">{ondeProtocolar.orgao || 'JEC - Juizado Especial Cível'}</p>
+                  <p className="text-[10px] text-blue-600 font-bold leading-relaxed">{ondeProtocolar.instrucao || 'Procure o setor de atermação presencialmente ou via portal digital.'}</p>
+                  {ondeProtocolar.portal && (
+                    <a href={ondeProtocolar.portal} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center text-[10px] font-black text-blue-700 hover:underline">
+                      Acessar Portal <ExternalLink size={10} className="ml-1" />
+                    </a>
+                  )}
                 </div>
-              )}
 
-              {/* DOCUMENTOS DE IDENTIFICAÇÃO (APENAS ADMINISTRATIVOS) */}
-              <div className="pt-4 border-t border-slate-50 space-y-3">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Documentos de Identificação</p>
-                {(auditoriaData.documentos_necessarios || [])
-                  .filter((doc: string) => {
-                    const d = doc.toLowerCase()
-                    return d.includes('rg') || d.includes('cpf') || d.includes('cnh') || d.includes('residência') || d.includes('foto') || d.includes('pessoais')
-                  })
-                  .concat(['Documento com Foto (RG/CNH)', 'CPF', 'Comprovante de Residência'])
-                  .slice(0, 3)
-                  .filter((v: any, i: number, a: any[]) => a.indexOf(v) === i)
-                  .map((doc: string, i: number) => (
-                    <div key={i} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl border border-slate-100">
-                      <div className="w-1.5 h-1.5 bg-blue-400 rounded-full" />
-                      <span className="text-[10px] font-bold text-slate-600 truncate">{doc}</span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </div>
-
-          {/* 6. GESTÃO DE PROVAS (APENAS MÉRITO/FATOS) */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">
-              <FileText size={14} className="text-amber-500" /> Provas dos Fatos
-            </div>
-            <div className="bg-white border border-slate-100 rounded-[28px] p-6 shadow-sm space-y-5">
-              <div className="space-y-3">
-                {(auditoriaData.provas_recomendadas || [])
-                  .filter((prova: string) => {
-                    const p = prova.toLowerCase()
-                    return !p.includes('rg') && !p.includes('cpf') && !p.includes('residencia') && !p.includes('cnh')
-                  })
-                  .concat(['Prints de conversas/WhatsApp', 'Faturas ou Notas Fiscais', 'E-mails de reclamação'])
-                  .slice(0, 3)
-                  .filter((v: any, i: number, a: any[]) => a.indexOf(v) === i)
-                  .map((prova: string, i: number) => {
-                    const hasAnexo = uploadedEvidence.some(f => f.name === prova)
-                    return (
-                      <div key={i} className={cn(
-                        "group relative border rounded-2xl p-4 transition-all overflow-hidden",
-                        hasAnexo ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 hover:bg-white border-slate-100 hover:border-amber-200"
-                      )}>
-                        <div className="flex items-center justify-between gap-3 mb-1">
-                          <span className="text-[11px] font-black text-slate-700 leading-tight flex-1">{prova}</span>
-                          {hasAnexo ? (
-                            <CheckCircle2 size={14} className="text-emerald-500" />
-                          ) : (
-                            <Upload size={14} className="text-slate-300 group-hover:text-amber-500 transition-colors" />
-                          )}
-                        </div>
-                        <input
-                          type="file"
-                          className="absolute inset-0 opacity-0 cursor-pointer"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            if (file) handleFileUpload(file, prova)
-                          }}
-                        />
-                        <p className="text-[9px] font-bold text-slate-400 italic">
-                          {hasAnexo ? 'Arquivo anexado com sucesso' : 'Clique para anexar prova'}
-                        </p>
+                {auditoriaData.instrucoes_protocolo?.length > 0 && (
+                  <div className="space-y-3 pt-2">
+                    {auditoriaData.instrucoes_protocolo.map((step: string, i: number) => (
+                      <div key={i} className="flex items-start gap-3">
+                        <div className="w-5 h-5 bg-blue-100 text-blue-600 rounded flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">{i + 1}</div>
+                        <p className="text-[11px] font-bold text-slate-600 leading-tight">{step}</p>
                       </div>
-                    )
-                  })
-                }
-
-                <label className="group relative flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-slate-200 hover:border-amber-200 rounded-2xl cursor-pointer bg-slate-50/50 transition-all mt-2">
-                  <input type="file" className="hidden" multiple onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) handleFileUpload(file, file.name)
-                  }} />
-                  <div className="flex flex-col items-center justify-center gap-1.5 text-center">
-                    <Upload size={16} className="text-slate-400 group-hover:text-amber-500 transition-colors" />
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-slate-600 transition-colors">Outras Provas</p>
+                    ))}
                   </div>
-                </label>
+                )}
               </div>
             </div>
-          </div>
+          )}
+
+          {/* 6. GESTÃO DE PROVAS — Somente na Petição */}
+          {activeTab === 'minuta' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                <FileText size={14} className="text-amber-500" /> Checklist de Provas
+              </div>
+              <div className="bg-white border border-slate-100 rounded-[28px] p-6 shadow-sm space-y-5">
+                <div className="space-y-3">
+                  {(recommendedEvidence.length > 0 ? recommendedEvidence : ['Prints de conversas/WhatsApp', 'Faturas ou Notas Fiscais', 'E-mails de reclamação'])
+                    .slice(0, 5)
+                    .map((prova: string, i: number) => (
+                      <div key={i} className="flex gap-3 bg-slate-50 border border-slate-100 rounded-2xl p-4 transition-all">
+                        <div className="w-5 h-5 bg-amber-100 text-amber-600 rounded flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">
+                          <Sparkles size={10} />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[11px] font-black text-slate-700 leading-tight">{prova}</span>
+                          <p className="text-[9px] font-bold text-slate-400 italic uppercase tracking-wider">Necessário para o êxito</p>
+                        </div>
+                      </div>
+                    ))
+                  }
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 7. RELATÓRIO TÉCNICO (CARD ESCURO DO PRINT) */}
           <div className="bg-[#0f172a] rounded-[32px] p-8 text-white shadow-2xl relative overflow-hidden group">
@@ -784,29 +749,29 @@ export default function DemandDetailPage() {
         <div className="flex items-center gap-2 p-3 bg-slate-50/50 border-b border-slate-100 print:hidden overflow-x-auto whitespace-nowrap custom-scrollbar justify-between">
           <div className="flex items-center gap-2">
             {(['minuta', 'acompanhamento', 'analise'] as const).map((tab) => {
-              const isPetitionEmpty = tab === 'minuta' && !editContent
+              const isPetitionEmpty = tab === 'minuta' && !editContent && !isExtracting
               const labels: Record<string, string> = {
-                minuta: 'Petição IA',
+                minuta: 'Petição Inicial',
                 acompanhamento: 'Processo CNJ',
                 analise: 'Análise Minerva'
               }
+              const isActive = activeTab === tab
+              const isAvailable = tab !== 'minuta' || !isPetitionEmpty || isExternal
               return (
                 <button
                   key={tab}
+                  disabled={!isAvailable}
                   onClick={() => setActiveTab(tab)}
-                  disabled={isPetitionEmpty}
-                  title={isPetitionEmpty ? 'Petição gerada pela Minerva. Não disponível para processos de acompanhamento externo.' : undefined}
-                  className={cn(
-                    "px-6 h-10 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shrink-0",
-                    activeTab === tab
-                      ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
-                      : isPetitionEmpty
-                        ? "text-slate-200 cursor-not-allowed"
-                        : "text-slate-400 hover:text-slate-600"
-                  )}
+                  className={`px-6 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all duration-300 ${
+                    isActive 
+                      ? 'bg-white text-primary shadow-sm ring-1 ring-slate-100 scale-105' 
+                      : isAvailable 
+                        ? 'text-slate-400 hover:text-primary hover:bg-slate-50' 
+                        : 'text-slate-200 cursor-not-allowed opacity-30'
+                  }`}
                 >
                   {labels[tab]}
-                  {isPetitionEmpty && <span className="ml-1.5 text-[8px] text-slate-300">· IA</span>}
+                  {tab === 'minuta' && isExternal && <span className="ml-1.5 opacity-50 text-[10px]">EXT</span>}
                 </button>
               )
             })}
@@ -830,7 +795,12 @@ export default function DemandDetailPage() {
         <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar print:overflow-visible print:p-0 print:m-0">
           {activeTab === 'minuta' && (
             <div className="mx-auto space-y-8 animate-in fade-in duration-700 print:space-y-0">
-              {isEditing ? (
+              {isExtracting ? (
+                <div className="flex flex-col items-center justify-center py-32 text-center space-y-4">
+                  <Loader2 size={40} className="animate-spin text-primary opacity-20" />
+                  <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Extraindo texto da Petição Inicial...</p>
+                </div>
+              ) : isEditing && !isExternal ? (
                 <div className="flex-1">
                   <textarea
                     value={editContent}
@@ -840,36 +810,19 @@ export default function DemandDetailPage() {
                   />
                 </div>
               ) : editContent ? (
-                <div className="flex-1 print:p-0 text-slate-800 leading-[1.8] font-sans text-lg md:text-[17px] whitespace-pre-wrap selection:bg-primary/20">
-                  {renderTextWithHighlights(editContent)}
-
-                  {/* ANEXOS DE PROVAS (SÓ PARA IMPRESSÃO) */}
-                  {uploadedEvidence.length > 0 && (
-                    <div className="hidden print:block">
-                      {uploadedEvidence.map((file, idx) => (
-                        <div key={file.id} className="pt-2" style={{ pageBreakBefore: 'always' }}>
-                          <div className="mb-6 flex items-center justify-between border-b pb-2">
-                            <h2 className="text-xl font-bold uppercase tracking-widest text-slate-500">ANEXO {idx + 1}</h2>
-                            <span className="text-sm font-medium text-slate-400">{file.name}</span>
-                          </div>
-
-                          <div className="flex items-center justify-center min-h-[800px]">
-                            {file.type.startsWith('image/') ? (
-                              <img src={file.url} alt={file.name} className="max-w-full max-h-[900px] object-contain" />
-                            ) : file.type === 'application/pdf' ? (
-                              <div className="text-center p-20 border-2 border-dashed rounded-3xl">
-                                <FileText size={48} className="mx-auto mb-4 text-slate-300" />
-                                <p className="text-slate-500 font-bold">Documento PDF: {file.name}</p>
-                                <p className="text-xs text-slate-400 mt-2">Deve ser anexado manualmente ao sistema do tribunal.</p>
-                              </div>
-                            ) : (
-                              <p className="text-slate-400">Arquivo: {file.name}</p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                <div className="flex-1 print:p-0">
+                  {isExternal && (
+                    <div className="mb-8 p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center gap-3">
+                      <FileText size={18} className="text-blue-500" />
+                      <div>
+                        <p className="text-xs font-black text-blue-900 leading-none mb-1">Petição de Acompanhamento Externo</p>
+                        <p className="text-[10px] font-bold text-blue-600/70 uppercase">Conteúdo extraído via Escavador • Modo de Leitura</p>
+                      </div>
                     </div>
                   )}
+                  <div className="text-slate-800 leading-[1.8] font-sans text-lg md:text-[17px] whitespace-pre-wrap selection:bg-primary/20">
+                    {renderTextWithHighlights(editContent)}
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-32 text-center space-y-6">
@@ -877,8 +830,14 @@ export default function DemandDetailPage() {
                     <FileText size={40} />
                   </div>
                   <div className="max-w-xs">
-                    <h4 className="text-xl font-black text-slate-900 mb-2">Sem Petição Gerada</h4>
-                    <p className="text-sm font-medium text-slate-500 leading-relaxed">Este processo foi adicionado apenas para acompanhamento de movimentos oficiais.</p>
+                    <h4 className="text-xl font-black text-slate-900 mb-2">
+                      {isExternal ? 'Petição não Localizada' : 'Nenhum Documento Gerado'}
+                    </h4>
+                    <p className="text-sm font-medium text-slate-500 leading-relaxed">
+                      {isExternal 
+                        ? 'O texto integral da petição inicial não foi encontrado automaticamente na base do Escavador para este processo.' 
+                        : 'Este processo foi adicionado para acompanhamento. Para gerar uma petição, utilize o assistente de estratégias.'}
+                    </p>
                   </div>
                 </div>
               )}
@@ -899,14 +858,6 @@ export default function DemandDetailPage() {
                         <p className="text-xs font-bold text-emerald-700/70 mt-1">{[processStatus.classe, processStatus.subject].filter(Boolean).join(' • ')}</p>
                       )}
                     </div>
-                    <Button
-                      onClick={generateMinervaAnalysis}
-                      disabled={isAnalysisLoading}
-                      className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl h-12 px-8 shadow-lg shadow-emerald-500/20 shrink-0"
-                    >
-                      {isAnalysisLoading ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} className="mr-2" />}
-                      Analisar com Minerva
-                    </Button>
                   </div>
 
                   {/* Partes do processo */}
@@ -1032,15 +983,83 @@ export default function DemandDetailPage() {
                                               ? 'bg-blue-50 border-blue-200 text-blue-700'
                                               : 'bg-yellow-100 border-yellow-300 text-yellow-700'
 
+                                    const isNumeric = /^\d+$/.test(String(extra.valor || ''))
+                                    const displayValue = isNumeric ? null : String(extra.valor)
+                                    const displayName = String(extra.nome).replace(/\(S\)/g, '').trim()
+
                                     return (
-                                      <span key={j} className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1 rounded-lg sm:rounded-full border text-[9px] sm:text-[10px] font-bold overflow-hidden ${style}`}>
-                                        <span className="font-black uppercase opacity-80 sm:opacity-100">{extra.nome}:</span>
-                                        <span className="leading-tight">{extra.valor}</span>
+                                      <span key={j} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border text-[10px] font-bold transition-all hover:scale-105 ${style}`}>
+                                        <span className="font-black uppercase tracking-tight">{displayName}</span>
+                                        {displayValue && (
+                                          <>
+                                            <span className="w-1 h-1 rounded-full bg-current opacity-30" />
+                                            <span className="opacity-80 font-medium">{displayValue}</span>
+                                          </>
+                                        )}
                                       </span>
                                     )
                                   })}
                                 </div>
                               )}
+
+                              {/* Documentos Anexados (do Escavador) */}
+                              {(() => {
+                                const movDate = new Date(mov.date)
+                                movDate.setHours(0, 0, 0, 0)
+                                const movTime = movDate.getTime()
+
+                                // Filtra movimentos do mesmo dia para decidir se o vínculo por data é seguro
+                                const allMovsSameDay = (processStatus.movements || []).filter((m: any) => {
+                                  const d = new Date(m.date)
+                                  d.setHours(0, 0, 0, 0)
+                                  return d.getTime() === movTime
+                                })
+
+                                const relatedDocs = processDocuments.filter(d => {
+                                  const docDate = new Date(d.date)
+                                  docDate.setHours(0, 0, 0, 0)
+                                  const docTime = docDate.getTime()
+                                  
+                                  if (docTime !== movTime) return false
+
+                                  const nameMatch = mov.description && d.name && (
+                                    mov.description.toLowerCase().includes(d.name.toLowerCase()) ||
+                                    d.name.toLowerCase().includes(mov.description.toLowerCase())
+                                  )
+
+                                  // Se bater o nome, vincula sempre
+                                  if (nameMatch) return true
+                                  
+                                  // Se não bater o nome, só vincula por data se for a única movimentação do dia
+                                  // ou se o documento tiver um nome genérico que bata com o movimento
+                                  return allMovsSameDay.length === 1
+                                })
+                                
+                                if (relatedDocs.length === 0) return null
+
+                                return (
+                                  <div className="mt-4 pt-3 border-t border-slate-50 space-y-2">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                                      <FileText size={10} /> Documentos Vinculados
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {relatedDocs.map(doc => (
+                                        <a
+                                          key={doc.id}
+                                          href={doc.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-100 rounded-xl text-[10px] font-black text-blue-700 transition-all group/doc"
+                                        >
+                                          <Upload size={12} className="rotate-180 text-blue-400 group-hover/doc:text-blue-600" />
+                                          {doc.name}
+                                          {doc.size && <span className="opacity-40 font-bold ml-1">{doc.size}</span>}
+                                        </a>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
                             </div>
                           </div>
                         </div>
@@ -1064,6 +1083,37 @@ export default function DemandDetailPage() {
 
           {activeTab === 'analise' && (
             <div className="mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-2xl font-black text-slate-900">Análise Estratégica</h3>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Cérebro Jurídico Minerva AI</p>
+                </div>
+                <button
+                  onClick={() => generateMinervaAnalysis()}
+                  disabled={isAnalysisLoading}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs hover:bg-slate-800 transition-all disabled:opacity-50 shadow-lg shadow-slate-900/20 active:scale-95"
+                >
+                  {isAnalysisLoading ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <RefreshCw size={16} />
+                  )}
+                  {isAnalysisLoading ? 'Analisando...' : 'Refazer Análise'}
+                </button>
+              </div>
+
+              {!editContent && (
+                <div className="p-5 bg-amber-50 border border-amber-100 rounded-[28px] flex items-start gap-4">
+                  <div className="w-10 h-10 bg-amber-100 rounded-2xl flex items-center justify-center shrink-0">
+                    <AlertTriangle size={20} className="text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-amber-900 leading-none mb-1">Atenção: Contexto de Análise Parcial</p>
+                    <p className="text-[11px] font-bold text-amber-600 leading-relaxed uppercase tracking-tight">O texto da petição inicial não foi localizado ou extraído. A Minerva está analisando apenas as movimentações do tribunal, o que pode limitar a precisão estratégica do mérito.</p>
+                  </div>
+                </div>
+              )}
+
               {processAnalysis ? (
                 <div className="space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

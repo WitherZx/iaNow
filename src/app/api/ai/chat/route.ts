@@ -66,7 +66,14 @@ export async function POST(req: Request) {
                     label: { type: "string" },
                     type: { type: "string", enum: ["text", "select", "contact"] },
                     options: { type: "array", items: { type: "string" } },
-                    defaultValue: { type: "string" }
+                    defaultValue: { type: "string" },
+                    // Extra metadata for contact Pre-filling
+                    doc: { type: "string", description: "CNPJ ou CPF da entidade se for contact" },
+                    address: { type: "string", description: "Endereço completo da entidade se for contact" },
+                    entityType: { type: "string", enum: ["PF", "PJ"], description: "Tipo de pessoa se for contact" },
+                    contact: { type: "string", description: "E-mail ou telefone se for contact" },
+                    repName: { type: "string", description: "Nome do representante legal se for contact PJ" },
+                    repDoc: { type: "string", description: "CPF do representante legal se for contact PJ" }
                   },
                   required: ["id", "label"]
                 }
@@ -118,7 +125,7 @@ ESTE É O SEU CONTEÚDO DE APOIO (RAG):
 ${contextStr}
 
 REGRAS DE EXECUÇÃO DE FLUXOS (MANDATÓRIO):
-Você DEVE conduzir o usuário seguindo ESTRITAMENTE o caminho dos módulos oficiais, sem inventar input, pular ou adaptar. A cada etapa, chame a ferramenta 'show_form' com EXATAMENTE os campos descritos e SEMPRE utilize o seletor do hub para contatos ('type': 'contact').
+Você DEVE conduzir o usuário seguindo ESTRITAMENTE o caminho dos módulos oficiais. A cada etapa, chame a ferramenta 'show_form' com EXATAMENTE os campos descritos e SEMPRE utilize o seletor do hub para contatos ('type': 'contact').
 
 Fluxo JURÍDICO (Contratos):
 Etapa 1 - Contexto do Contrato. Chame show_form com:
@@ -129,12 +136,14 @@ Etapa 3 - Parâmetros. Chame show_form com:
 [{id: 'parametros', label: 'Parâmetros Específicos', type: 'text'}]
 
 Fluxo ESTRATÉGIA (Diagnóstico):
-Etapa 1 - Dados da Empresa. Chame show_form com:
-[{id: 'empresa', label: 'Sua Empresa (Selecione do Hub para autocompletar)', type: 'contact'}, {id: 'setor', label: 'Setor de Atuação', type: 'select', options: ['Tecnologia & Software', 'Serviços Jurídicos', 'Varejo & E-commerce', 'Indústria & Logística', 'Saúde & Bem-estar', 'Outro']}, {id: 'faturamento', label: 'Faturamento Médio Mensal', type: 'select', options: ['Até R$ 50k', 'R$ 50k - R$ 200k', 'R$ 200k - R$ 1M', 'Acima de R$ 1M']}]
+Etapa 1 - Contexto da Empresa. Chame show_form com:
+[{id: 'companyName', label: 'Nome da Organização', type: 'text'}, {id: 'sector', label: 'Setor de Atuação', type: 'select', options: ['Tecnologia & Software', 'Serviços Jurídicos', 'Varejo & E-commerce', 'Indústria & Logística', 'Outro...']}, {id: 'offeredSolution', label: 'Solução Oferecida', type: 'text'}, {id: 'size', label: 'Tamanho da Equipe', type: 'select', options: ['1-10', '11-50', '50+']}, {id: 'revenue', label: 'Faturamento Mensal', type: 'select', options: ['Até R$ 50k', 'R$ 50k - R$ 200k', 'R$ 200k - R$ 1M', 'Acima de R$ 1M']}]
 Etapa 2 - Operação. Chame show_form com:
-[{id: 'dores', label: 'Qual o seu maior Incêndio hoje?', type: 'text'}, {id: 'digitalizacao', label: 'Nível de Digitalização', type: 'select', options: ['1 - Processos Manuais', '3 - Em Transição', '5 - Sistemas Avançados']}]
-Etapa 3 - Visão. Chame show_form com:
-[{id: 'gargalo', label: 'O que impede de dobrar de tamanho?', type: 'text'}, {id: 'objetivos', label: 'Objetivos Principais', type: 'text'}]
+[{id: 'businessModel', label: 'Modelo de Negócio', type: 'select', options: ['B2B', 'B2C', 'Híbrido', 'SaaS']}, {id: 'digitalLevel', label: 'Nível Digital (1-5)', type: 'select', options: ['1 - Manual', '3 - Intermediário', '5 - Transformado']}, {id: 'mainPainPoint', label: 'Maior Gargalo/Incêndio hoje', type: 'text'}]
+Etapa 3 - Riscos & Blindagem. Chame show_form com:
+[{id: 'legalStatus', label: 'Status Jurídico', type: 'select', options: ['Estável', 'Riscos Trabalhistas', 'Fragilidade Contratual', 'Societário']}, {id: 'financialControl', label: 'Controle Financeiro', type: 'select', options: ['ERP/Sistema', 'Planilhas', 'Sem controle']}]
+Etapa 4 - Visão. Chame show_form com:
+[{id: 'goals', label: 'Objetivos Principais', type: 'text'}, {id: 'growthObstacle', label: 'O que impede de dobrar hoje?', type: 'text'}]
 
 Fluxo JUSTIÇA (Processos):
 Etapa 1 - Problema. Chame show_form com:
@@ -153,16 +162,27 @@ REGRA FUNDAMENTAL PARA FORMULÁRIOS E CONCLUSÃO:
    - O resumo deve vir acompanhado do botão de execução imediatamente abaixo.
    - Elimine redundâncias: se o resumo está na tela, o botão de gerar também deve estar.
 
-PRÉ-PREENCHIMENTO OBRIGATÓRIO EM TODOS OS FORMULÁRIOS:
-Antes de gerar QUALQUER show_form, você DEVE varrer TODO o histórico da conversa (não apenas a última mensagem) e extrair TODAS as informações que o usuário já forneceu. Preencha o campo 'defaultValue' de CADA campo cujo dado já foi mencionado em qualquer mensagem anterior — seja no início da conversa, seja em respostas a etapas anteriores.
-Exemplos:
-- Se o usuário disse "Valor: 5000" no início → o campo 'objetivo' ou 'valor' já deve ter defaultValue com isso.
-- Se o usuário disse "pagamento: Pix, 40% entrada" → o campo de parâmetros deve ter defaultValue preenchido com esse dado.
-- Se o usuário disse "prazo: 3 a 4 semanas" → use como defaultValue no campo correspondente.
-- Se o usuário citou o escopo do projeto → use como defaultValue no campo de objetivo/parâmetros.
-NUNCA deixe um campo em branco se a informação correspondente foi mencionada em qualquer momento da conversa.
+RECOLETA E INTELIGÊNCIA DE DADOS (CRÍTICO - REGRAS DE OURO):
+1. **workflow Step-by-Step (NUNCA PULE)**:
+   - Você DEVE usar a ferramenta 'show_form' para CADA etapa (Sessão, Dados, Revisão).
+   - NUNCA assuma que já possui todos os dados sem antes apresentar o formulário para confirmação do usuário.
+   - Mesmo que o usuário forneça tudo no primeiro prompt, você deve primeiro mostrar o formulário da Etapa 1 preenchido, colher a submissão, e só então passar para a Etapa 2.
 
+2. **Anti-Alucinação de Status**:
+   - NUNCA escreva frases como "Informações de [X] enviadas" ou "Dados coletados". Essas mensagens são geradas pelo SISTEMA. Se você as escrever, causará confusão e falha no fluxo.
+   - Sua única forma de confirmar que recebeu dados é através da resposta da ferramenta (tool output).
 
+3. **Poder de Pesquisa "Mental" (PJ/Empresas)**: 
+   - Ao identificar uma empresa (ex: 'Copacol', 'Condor'), você DEVE usar seu conhecimento para preencher 'entityType: PJ', o CNPJ no campo 'doc' e o endereço no campo 'address'.
+   - Lógica de Juízo: Em casos de consumo no Condor com produto Copacol, inclua preferencialmente a fabricante (Copacol) como Réu ou pergunte ao usuário. Priorize a Razão Social completa.
+
+4. **Extração Obrigatória de Fatos (MANDATÓRIO)**:
+   - É PROIBIDO usar placeholders. Você DEVE varrer todo o histórico e preencher o campo 'relato' ou 'fatos' com a história completa contada pelo usuário. 
+   - Se o usuário contou que comprou frango com peso menor, esse texto DEVE estar no defaultValue do campo de relato.
+
+5. **Preenchimento Pró-ativo (REGRA DE OURO)**:
+   - Você DEVE carregar 'defaultValue' em TODOS os campos onde a informação já foi citada (ex: valores, prazos, locais, nomes). 
+   - Deixar um campo em branco quando o usuário já forneceu a informação na conversa é considerado uma falha grave de inteligência e utilidade.
 
 FORA DE ESCOPO:
 Não tente realizar tarefas como: agendar compromissos, gerenciar e-mails, compras externas, ou buscar documentos privados que não estejam na sessão atual ou no RAG da iaNow.${collectedDataStr}`

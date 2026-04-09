@@ -299,16 +299,33 @@ export async function unlockDocumentMockAction(demandId: string, type: 'contrato
     else if (type === 'estrategia') table = 'strategies'
     else table = 'justice_demands'
 
-    // Not all tables might exist (e.g. justice_demands). 
-    // In any case, we fetch current metadata, then append unlocked: true
+    // 1. Busca metadados atuais para não sobrescrever outros campos
     const { data: doc } = await admin.from(table).select('metadata').eq('id', demandId).maybeSingle()
-    if (doc) {
-      const newMeta = { ...(doc.metadata || {}), unlocked: true }
-      await admin.from(table).update({ metadata: newMeta }).eq('id', demandId)
+    
+    let currentMeta = doc?.metadata || {}
+    if (typeof currentMeta === 'string') {
+      try { currentMeta = JSON.parse(currentMeta) } catch (e) { currentMeta = {} }
     }
+
+    const newMeta = { 
+      ...currentMeta, 
+      unlocked: true,
+      single_purchase_paid: true,
+      paid_at: new Date().toISOString()
+    }
+
+    // 2. Atualização Universal (is_paid + metadata)
+    const { error } = await admin.from(table).update({ 
+      is_paid: true,
+      metadata: newMeta,
+      updated_at: new Date().toISOString()
+    }).eq('id', demandId)
+
+    if (error) throw error
+
     return { success: true }
   } catch (err) {
     console.error('Mock Unlock Error:', err)
-    return { success: false }
+    return { success: false, error: 'Falha ao liberar documento.' }
   }
 }

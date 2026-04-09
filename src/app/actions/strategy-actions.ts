@@ -14,6 +14,7 @@ export async function getStrategyAction(id: string, guestId?: string | null) {
     .eq('id', id)
     .single()
 
+
   if (error || !strategy) {
     return { error: 'Estratégia não encontrada' }
   }
@@ -30,23 +31,24 @@ export async function getStrategyAction(id: string, guestId?: string | null) {
     isTestMode: configs?.find((c: any) => c.key === 'test_mode')?.value_bool === true
   }
 
-  // 2. Validar acesso de convidado
-  const isGuestStrat = strategy.metadata?.guest_id || strategy.diagnostics?.metadata?.guest_id
-  const stratGuestId = strategy.metadata?.guest_id || strategy.diagnostics?.metadata?.guest_id
+  // 2. Validar acesso (Dono ou Guest)
+  const serverSupabase = await createServerSupabaseClient()
+  const { data: { user } } = await serverSupabase.auth.getUser()
   
-  console.log(`[getStrategyAction] Accessing strategy ${id}:`, {
-    providedGuestId: guestId,
-    stratGuestId,
-    isGuestStrat,
-    isAllAccess: configData.isAllAccess
-  })
+  const stratGuestId = strategy.metadata?.guest_id || strategy.diagnostics?.metadata?.guest_id
+  const isGuestStrat = !!stratGuestId
 
+  // Se o usuário é o dono real (logado), libera
+  if (user && strategy.created_by === user.id) {
+    return { data: strategy, config: configData }
+  }
+
+  // Se é guest, valida o ID
   if (isGuestStrat) {
-    if (!guestId || stratGuestId !== guestId) {
-      console.warn(`[getStrategyAction] ACCESS DENIED for strategy ${id}`)
+    if (!guestId || String(stratGuestId) !== String(guestId)) {
+      console.warn(`[getStrategyAction] ACCESS DENIED for strategy ${id}. Required: ${stratGuestId}, Provided: ${guestId}`)
       return { error: 'Acesso negado a esta estratégia de visitante' }
     }
-    return { data: strategy, config: configData }
   }
 
   return { data: strategy, config: configData }

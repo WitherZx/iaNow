@@ -188,17 +188,32 @@ export async function simulatePurchaseAction(id: string, type: 'contrato' | 'est
       return { error: 'Opção disponível apenas em Modo de Teste Global.' }
     }
 
-    // 4. Executa o desbloqueio
-    // Para Processos, usamos is_paid
-    if (type === 'processo') {
-      await admin.from('justice_demands').update({ is_paid: true }).eq('id', id)
-    } 
-    
-    // Independente do tipo, injetamos 'unlocked: true' no metadata para garantir que o Paywall saia da frente
-    const currentMeta = doc?.metadata || {}
-    await admin.from(table).update({ 
-      metadata: { ...currentMeta, unlocked: true, single_purchase_paid: true } 
+    // 4. Executa o desbloqueio fiel ao fluxo de pós-venda real
+    let currentMeta = doc?.metadata || {}
+    if (typeof currentMeta === 'string') {
+      try { currentMeta = JSON.parse(currentMeta) } catch (e) { currentMeta = {} }
+    }
+
+    const updatedMeta = { 
+      ...currentMeta, 
+      unlocked: true, 
+      single_purchase_paid: true,
+      paid_at: new Date().toISOString()
+    }
+
+    // 5. Atualização Padronizada (Universal)
+    const { error: updateError } = await admin.from(table).update({ 
+      is_paid: true,
+      metadata: updatedMeta,
+      updated_at: new Date().toISOString()
     }).eq('id', id)
+
+    console.log(`[DEBUG:simulatePurchaseAction] Update result for ${table}:${id}:`, {
+      success: !updateError,
+      error: updateError?.message
+    })
+
+    if (updateError) throw updateError
 
     return { success: true }
   } catch (err: any) {
@@ -336,3 +351,49 @@ export async function updateJusticeDemandAction(id: string, updates: any, guestI
   }
 }
 
+/**
+ * Busca documentos do processo via Escavador.
+ */
+export async function getProcessDocumentsAction(processNumber: string) {
+  try {
+    const { EscavadorService } = await import('@/lib/services/escavador')
+    const documents = await EscavadorService.getProcessDocuments(processNumber)
+    return { success: true, data: documents }
+  } catch (err: any) {
+    console.error('getProcessDocumentsAction Error:', err)
+    return { error: err.message || 'Falha ao buscar documentos no Escavador' }
+  }
+}
+/**
+ * Simula a extração de texto de um PDF de petição (OCR/Regex).
+ */
+export async function extractTextFromPdfAction(docUrl: string, processNumber: string) {
+  try {
+    // Simulação de delay de processamento
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    
+    // Mock de texto extraído — em prod aqui entraria uma lib de OCR ou PDF-Parse
+    const extractedText = `EXCELENTÍSSIMO SENHOR DOUTOR JUIZ DE DIREITO DA VARA DO TRABALHO DE SÃO PAULO
+
+PROCESSO Nº: ${processNumber}
+
+RECLAMANTE: [NOME DO AUTOR]
+RECLAMADO: [NOME DO RÉU]
+
+OBJETO: Ação Reclamatória Trabalhista com pedido de verbas rescisórias e reconhecimento de vínculo.
+
+DA SÍNTESE DOS FATOS:
+O reclamante trabalhou para a reclamada no período de [DATA] a [DATA], exercendo a função de [FUNÇÃO], percebendo como última remuneração a quantia de R$ [VALOR].
+
+DOS PEDIDOS:
+Diante do exposto, requer a condenação da reclamada ao pagamento das verbas rescisórias, horas extras e danos morais.
+
+Nestes termos, pede deferimento.
+São Paulo, ${new Date().toLocaleDateString('pt-BR')}.`
+
+    return { success: true, text: extractedText }
+  } catch (err: any) {
+    console.error('extractTextFromPdfAction Error:', err)
+    return { error: 'Falha ao processar PDF' }
+  }
+}

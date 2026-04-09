@@ -207,7 +207,7 @@ export default function ViewDocumentPage() {
         // --- Lógica de Paywall Estrita ---
         const { data: { session } } = await supabase.auth.getSession()
         const isGuestDoc = data.metadata?.guest_id === guestId
-        const isUnlocked = data.metadata?.unlocked === true
+        const isUnlocked = data.is_paid === true || data.metadata?.unlocked === true
         
         if (config?.isAllAccess) {
           setShowPaywall(false)
@@ -482,73 +482,6 @@ export default function ViewDocumentPage() {
           }}
           onDownload={() => window.print()}
           onDelete={handleDelete}
-          onViewHistory={
-            <div className="relative">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => {
-                  if (!showHistoryDropdown) loadVersions()
-                  setShowHistoryDropdown(!showHistoryDropdown)
-                }}
-                title="Histórico de alterações"
-                className={cn(
-                  "h-10 w-10 rounded-xl border-slate-200 text-slate-900 transition-all hover:scale-105",
-                  viewingVersion ? "bg-amber-50 border-amber-200 text-amber-600" : "hover:text-primary hover:border-primary/30"
-                )}
-              >
-                <HistoryIcon size={18} />
-              </Button>
-
-              {showHistoryDropdown && (
-                <div className="absolute right-0 top-12 w-64 bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 p-2 animate-in fade-in slide-in-from-top-2">
-                  <div className="px-3 py-2 border-b border-slate-50 mb-1">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Histórico de Versões</p>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto custom-scrollbar">
-                    <button
-                      onClick={() => handleSelectVersion(null)}
-                      className={cn(
-                        "w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center justify-between group",
-                        !viewingVersion ? "bg-primary/10 text-primary" : "hover:bg-slate-50 text-slate-600"
-                      )}
-                    >
-                      <div className="flex flex-col">
-                        <span className="text-[11px] font-black uppercase tracking-tight">Versão Atual (Live)</span>
-                        <span className="text-[9px] font-bold opacity-60">Conteúdo mais recente</span>
-                      </div>
-                      {!viewingVersion && <CheckCircle2 size={12} />}
-                    </button>
-
-                    {loadingVersions && (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 size={16} className="animate-spin text-slate-300" />
-                      </div>
-                    )}
-
-                    {!loadingVersions && versions.map((v) => (
-                      <button
-                        key={v.id}
-                        onClick={() => handleSelectVersion(v)}
-                        className={cn(
-                          "w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center justify-between group mt-1",
-                          viewingVersion?.id === v.id ? "bg-amber-50 text-amber-600" : "hover:bg-slate-50 text-slate-600"
-                        )}
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-[11px] font-black uppercase tracking-tight">
-                            {new Date(v.created_at).toLocaleDateString('pt-BR')} às {new Date(v.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          <span className="text-[9px] font-bold opacity-60">ID: {v.id.slice(0, 8)}...</span>
-                        </div>
-                        {viewingVersion?.id === v.id && <Clock size={12} />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          }
         />
       }
       hero={

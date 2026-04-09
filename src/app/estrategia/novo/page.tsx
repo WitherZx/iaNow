@@ -26,7 +26,6 @@ import { FormInput } from '@/components/shared/FormInput'
 import { FormTextArea } from '@/components/shared/FormTextArea'
 import { FormSelect } from '@/components/shared/FormSelect'
 import { StepBadge } from '@/components/shared/StepBadge'
-import { PartnerSelector } from '@/components/shared/PartnerSelector'
 import { Label } from '@/components/shared/Label'
 import { cn } from '@/utils/cn'
 import { toast } from 'sonner'
@@ -62,14 +61,6 @@ export default function NovoDiagnosticoPage() {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSelectPartner = (partner: any) => {
-    setFormData(prev => ({
-      ...prev,
-      companyName: partner.name || prev.companyName,
-      website: partner.website || partner.metadata?.website || partner.metadata?.site || partner.metadata?.url || prev.website,
-      sector: (partner.metadata?.setor || partner.metadata?.sector) || prev.sector
-    }))
-  }
 
   const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, STEPS.length - 1))
   const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 0))
@@ -77,18 +68,18 @@ export default function NovoDiagnosticoPage() {
   const handleSubmit = async () => {
     try {
       setIsSubmitting(true)
-      
-      const guestId = !localStorage.getItem('sb-auth-token') 
-        ? (localStorage.getItem('ianow_guest_id') || crypto.randomUUID()) 
+
+      const guestId = !localStorage.getItem('sb-auth-token')
+        ? (localStorage.getItem('ianow_guest_id') || crypto.randomUUID())
         : null
-      
+
       if (guestId && !localStorage.getItem('ianow_guest_id')) {
         localStorage.setItem('ianow_guest_id', guestId)
       }
 
       const response = await fetch('/api/ai/strategy', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           ...(guestId ? { 'X-Guest-Id': guestId } : {})
         },
@@ -128,7 +119,7 @@ export default function NovoDiagnosticoPage() {
             <div className="absolute inset-0 overflow-hidden rounded-[24px] md:rounded-[40px] pointer-events-none">
               <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-primary/5 rounded-full blur-2xl md:blur-3xl -mr-16 -mt-16 md:-mr-32 md:-mt-32" />
             </div>
-            
+
             <div className="absolute top-0 right-0 p-8 hidden md:block">
               <StepBadge current={currentStep + 1} total={STEPS.length} />
             </div>
@@ -142,17 +133,6 @@ export default function NovoDiagnosticoPage() {
                   </p>
                 </div>
 
-                <div className="pt-4 pb-8 border-b border-slate-100">
-                  <PartnerSelector 
-                    label="Puxar Dados do Hub de Contatos"
-                    onSelect={handleSelectPartner}
-                    placeholder="Buscar histórico ou empresa matriz..."
-                  />
-                  <p className="mt-3 text-[10px] text-slate-400 font-bold uppercase tracking-widest pl-1 leading-relaxed">
-                    Selecione um registro existente para preencher os dados básicos automaticamente.
-                  </p>
-                </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 mt-4">
                   <FormInput
                     label="Nome da Organização"
@@ -160,13 +140,6 @@ export default function NovoDiagnosticoPage() {
                     onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
                     placeholder="Ex: iaNow Intelligence"
                     tooltip="Razão social ou nome fantasia da sua organização. Será o identificador principal no dashboard."
-                  />
-                  <FormInput
-                    label="Site da Empresa (Opcional)"
-                    value={formData.website}
-                    onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                    placeholder="Ex: www.ianow.com.br"
-                    tooltip="Endereço eletrônico oficial. Opcional, mas ajuda no enriquecimento de dados setoriais."
                   />
                   <FormInput
                     label="Qual solução você oferece hoje?"
@@ -479,7 +452,7 @@ export default function NovoDiagnosticoPage() {
             )}
 
             {currentStep < STEPS.length - 1 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between mt-12 pt-12 border-t border-slate-100 relative z-10 gap-4">
+              <div className="flex flex-col sm:flex-row items-center justify-between mt-8 border-t border-slate-100 relative z-10 gap-4">
                 <Button
                   variant="ghost"
                   onClick={prevStep}

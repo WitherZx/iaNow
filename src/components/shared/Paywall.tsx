@@ -221,18 +221,6 @@ export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, o
                       <h3 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight leading-none">{current.label}</h3>
                     </div>
                   </div>
-
-                  {/* Dev Simulation Button */}
-                  {localTestMode && (
-                    <Button
-                      onClick={handleSimulate}
-                      disabled={simulating}
-                      className="bg-amber-500 hover:bg-amber-600 text-white border-none h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-amber-500/20"
-                    >
-                      {simulating ? <Clock className="w-3.5 h-3.5 animate-spin" /> : <Microscope className="w-3.5 h-3.5" />}
-                      {simulating ? 'Simulando...' : 'Liberar (Dev)'}
-                    </Button>
-                  )}
                 </div>
 
                 <div className="flex flex-col gap-5">
@@ -260,12 +248,28 @@ export function Paywall({ demandId, type, onUnlockSuccess, fullscreen = false, o
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor do {type}</span>
                   <span className="text-4xl font-black text-slate-900 tracking-tight leading-none">{current.price}</span>
                 </div>
-                <Button
-                  onClick={() => setCheckoutMode('avulso')}
-                  className="w-full h-14 rounded-xl bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-900 font-black text-xs uppercase tracking-[0.2em] shadow-sm flex items-center justify-center gap-3 active:scale-95 transition-all group"
-                >
-                  <CreditCard size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" /> Desbloquear Agora
-                </Button>
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={() => setCheckoutMode('avulso')}
+                    className="flex-1 h-14 rounded-xl bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-900 font-black text-xs uppercase tracking-[0.2em] shadow-sm flex items-center justify-center gap-3 active:scale-95 transition-all group"
+                  >
+                    <CreditCard size={18} className="text-slate-400 group-hover:text-slate-600 transition-colors" /> Desbloquear Agora
+                  </Button>
+                  
+                  {localTestMode && (
+                    <button
+                      onClick={handleSimulate}
+                      disabled={simulating}
+                      title="Liberar Acesso (Dev)"
+                      className={cn(
+                        "w-14 h-14 shrink-0 rounded-xl bg-slate-50 border-2 border-slate-200 flex items-center justify-center transition-all active:scale-90",
+                        simulating ? "opacity-50 cursor-not-allowed" : "hover:bg-amber-50 hover:border-amber-200 hover:text-amber-600 text-slate-400"
+                      )}
+                    >
+                      {simulating ? <Clock className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 

@@ -19,13 +19,10 @@ import {
   Clock,
   ChevronDown,
   Check,
-  Paperclip,
-  FileText,
-  Image as ImageIcon,
   X as CloseIcon
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter, usePathname } from 'next/navigation'
 import { FormSelect } from '@/components/shared/FormSelect'
 import { PartnerSelector } from '@/components/shared/PartnerSelector'
 import { toast } from 'sonner'
@@ -53,6 +50,11 @@ interface MinervaAssistantProps {
   defaultModule?: 'justica' | 'juridico' | 'estrategia'
 }
 
+// Persistent but volatile storage to track if we already started a session in THIS browser tab lifecycle.
+// This survives component re-mounts (like when switching tabs) but is cleared on Page Refresh (F5).
+let isScriptFirstLoad = true
+let lastActiveSessionId: string | null = null
+
 export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaultModule }: MinervaAssistantProps) {
   const ACTIVE_SESSION_KEY = 'minerva_active_session_id'
 
@@ -64,11 +66,8 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
   const [isTyping, setIsTyping] = useState(false)
   const [inputValue, setInputValue] = useState('')
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
-  const [attachedFiles, setAttachedFiles] = useState<{ name: string, type: string }[]>([])
   const [isMultiline, setIsMultiline] = useState(false)
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const [history, setHistory] = useState<{ id: string, title: string, date: string }[]>(() => {
@@ -91,6 +90,13 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
   const [latestResultPath, setLatestResultPath] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
+  const pathname = usePathname()
+  const isMounted = useRef(true)
+
+  useEffect(() => {
+    isMounted.current = true
+    return () => { isMounted.current = false }
+  }, [])
 
   const getOrCreateGuestId = () => {
     if (typeof window === 'undefined') return ''
@@ -164,8 +170,10 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
       case 'estrategia':
         return ['NEGÓCIO', 'DADOS', 'METAS', 'ANÁLISE', 'PLANO']
       case 'juridico':
-      default:
         return ['CONTRATO', 'DADOS', 'REVISÃO', 'ANÁLISE', 'RESULTADO']
+      case 'general':
+      default:
+        return ['SESSÃO', 'DADOS', 'REVISÃO', 'ANÁLISE', 'RESULTADO']
     }
   })()
 
@@ -177,71 +185,35 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
         const resolvedGuestId = getOrCreateGuestId()
         setGuestId(resolvedGuestId)
 
-        // 1. Check if the user had a specific session open (last viewed/interacted)
-        const savedActiveSessionId = localStorage.getItem(ACTIVE_SESSION_KEY)
+        // Check if we should recover a session from a re-mount or start fresh
+        const savedSessionId = localStorage.getItem(ACTIVE_SESSION_KEY) || lastActiveSessionId
 
-        // Helper to load a session by ID from the DB
-        // Returns true if the session exists in DB (even if it has 0 messages yet)
-        const loadSessionById = async (id: string) => {
-          const { messages: dbMessages, error } = await getChatMessages(id)
-          // If the call succeeded (null/undefined error), the session is valid
-          if (!error && dbMessages !== null && dbMessages !== undefined) {
-            setSessionId(id)
-            if (dbMessages.length > 0) {
-              setMessages(dbMessages.map((m: any) => ({
-                role: m.role === 'assistant' ? 'bot' : m.role,
-                content: m.content || '',
-                toolCalls: m.tool_calls
-              })))
-            }
-            return true
-          }
-          return false
+        if (!isScriptFirstLoad && savedSessionId) {
+          // It's a re-mount (e.g. tab switch), recover existing session
+          const { messages: msgs } = await getChatMessages(savedSessionId)
+          if (msgs) setMessages(msgs)
+          setSessionId(savedSessionId)
+          setIsInitializing(false)
+          return
         }
 
-        // 2. Try to restore the last active session first
-        if (savedActiveSessionId) {
-          const loaded = await loadSessionById(savedActiveSessionId)
-          if (loaded) {
-            setIsInitializing(false)
-            return
-          }
-          // Session no longer exists in DB — clear the stale key and fall through
-          localStorage.removeItem(ACTIVE_SESSION_KEY)
-        }
+        // It's a FRESH load (F5 or first visit) -> Create NEW session as requested
+        const { session: newSession } = await createChatSession(resolvedGuestId)
+        if (newSession) {
+          setSessionId(newSession.id)
+          lastActiveSessionId = newSession.id // Backup in module scope
+          isScriptFirstLoad = false // Mark as initialized
+          localStorage.setItem(ACTIVE_SESSION_KEY, newSession.id)
 
-        // 3. Fall back to most recent session from DB
-        const { session } = await getLatestSession(resolvedGuestId)
+          const greeting = `Olá, ${userName}. Sou a Minerva, sua inteligência estratégica e jurídica. Como posso te auxiliar na sua blindagem institucional hoje?`
+          const initialMsgs = [{ role: 'bot', content: greeting }] as Message[]
+          setMessages(initialMsgs)
 
-        if (session) {
-          setSessionId(session.id)
-          localStorage.setItem(ACTIVE_SESSION_KEY, session.id)
-          const { messages: dbMessages } = await getChatMessages(session.id)
-          if (dbMessages) {
-            setMessages(dbMessages.map((m: any) => ({
-              role: m.role === 'assistant' ? 'bot' : m.role,
-              content: m.content || '',
-              toolCalls: m.tool_calls
-            })))
-          }
-          if (session.metadata?.wizardData) {
-            setWizardData(session.metadata.wizardData)
-          }
-        } else {
-          // 4. Create a new session if none exists
-          const { session: newSession } = await createChatSession(resolvedGuestId)
-          if (newSession) {
-            setSessionId(newSession.id)
-            localStorage.setItem(ACTIVE_SESSION_KEY, newSession.id)
-            const greeting = `Olá, ${userName}. Sou a Minerva, sua inteligência estratégica e jurídica. Como posso te auxiliar na sua blindagem institucional hoje?`
-            const initialMsgs = [{ role: 'bot', content: greeting }] as Message[]
-            setMessages(initialMsgs)
-            await saveChatMessage({
-              sessionId: newSession.id,
-              role: 'assistant',
-              content: greeting
-            })
-          }
+          await saveChatMessage({
+            sessionId: newSession.id,
+            role: 'assistant',
+            content: greeting
+          })
         }
       } catch (e) {
         console.error('Failed to initialize session', e)
@@ -252,7 +224,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     }
 
     initSession()
-  }, [userName])
+  }, []) // Fix: Stable dependency array to prevent React hook size error
 
   // Save/Update current session in history
   const updateHistory = (firstUserMsg: string) => {
@@ -525,6 +497,59 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     }
   }
 
+  const filterSystemHallucinations = (content: string) => {
+    // Strips out lines that look like system "Informações de ... enviadas" messages
+    return content
+      .split('\n')
+      .filter(line => !line.trim().startsWith('Informações de') && !line.includes('enviadas:'))
+      .join('\n')
+      .trim()
+  }
+
+  const parseJsonForm = (content: string) => {
+    const rawContent = filterSystemHallucinations(content)
+    // Matches ```json ... ``` blocks or just a JSON object starting with { and containing "fields"
+    const jsonBlockRegex = /```json\n([\s\S]*?)\n```/g
+    const rawJsonRegex = /{[\s\S]*?"fields"[\s\S]*?}/g
+
+    let match = jsonBlockRegex.exec(content)
+    let potentialJson = ""
+    let cleanText = content
+
+    if (match) {
+      potentialJson = match[1]
+      cleanText = content.replace(match[0], '').trim()
+    } else {
+      // Small reset of the regex head
+      rawJsonRegex.lastIndex = 0
+      match = rawJsonRegex.exec(content)
+      if (match) {
+        potentialJson = match[0]
+        cleanText = content.replace(match[0], '').trim()
+      }
+    }
+
+    if (potentialJson) {
+      try {
+        const parsed = JSON.parse(potentialJson)
+        if (parsed.fields && Array.isArray(parsed.fields)) {
+          return {
+            fields: parsed.fields.map((f: any) => ({
+              ...f,
+              isContact: f.type === 'contact'
+            })),
+            title: parsed.title || '',
+            text: cleanText
+          }
+        }
+      } catch (e) {
+        // Not a valid JSON or not a form
+      }
+    }
+
+    return { fields: [], title: '', text: content }
+  }
+
   const handleFormSubmit = (fields: { id: string, label: string }[], data: Record<string, string>) => {
     // Update accumulated wizard data
     const updatedData = { ...wizardData, ...data }
@@ -591,17 +616,20 @@ Isso pode levar alguns segundos. Por favor, não feche esta janela.`
           endpoint = '/api/ai/strategy'
           payload = {
             diagnosticData: {
-              companyName: wizardData.companyName || wizardData.empresa || 'Empresa Confidencial',
+              companyName: wizardData.companyName || 'Empresa Confidencial',
               website: wizardData.website || '',
-              offeredSolution: wizardData.solution || wizardData.solucao || 'Solução não informada',
-              size: wizardData.size || wizardData.tamanho || 'Não informado',
-              revenue: wizardData.revenue || wizardData.faturamento || 'Não informado',
-              businessModel: wizardData.businessModel || wizardData.modelo_negocio || 'Indefinido',
-              digitalLevel: wizardData.digitalLevel || wizardData.nivel_digital || 'Indefinido',
-              mainPain: wizardData.mainPain || wizardData.dor_principal || 'Aumentar resultados',
+              sector: wizardData.sector || 'Tecnologia & Software',
+              offeredSolution: wizardData.offeredSolution || 'Solução não informada',
+              size: wizardData.size || '1-10',
+              revenue: wizardData.revenue || 'Até R$ 50k',
+              businessModel: wizardData.businessModel || 'B2B',
+              digitalLevel: wizardData.digitalLevel || '3',
+              mainPainPoint: wizardData.mainPainPoint || 'Crescimento e Escala',
               challenges: wizardData.challenges ? [wizardData.challenges] : [],
+              legalStatus: wizardData.legalStatus || 'Estável',
+              financialControl: wizardData.financialControl || 'Planilhas',
               goals: wizardData.goals ? [wizardData.goals] : [],
-              growthObstacle: wizardData.obstacle || wizardData.obstaculo || 'Não informado'
+              growthObstacle: wizardData.growthObstacle || 'Não informado'
             }
           }
         } else if (path.includes('juridico')) {
@@ -658,7 +686,8 @@ Isso pode levar alguns segundos. Por favor, não feche esta janela.`
               whenHappened: wizardData.when || wizardData.data_ocorrido || wizardData.when_happened || 'Não informado',
               materialDamage: wizardData.materialDamage || wizardData.dano_material || '0',
               moralDamage: wizardData.moralDamage || wizardData.dano_moral || '0',
-              estimatedValue: Number(wizardData.materialDamage || wizardData.dano_material || 0) + Number(wizardData.moralDamage || wizardData.dano_moral || 0)
+              estimatedValue: wizardData.valor_causa || wizardData.valor || wizardData.valor_total || wizardData.total || 
+                (Number(wizardData.materialDamage || wizardData.dano_material || 0) + Number(wizardData.moralDamage || wizardData.dano_moral || 0))
             }
           }
         }
@@ -674,6 +703,8 @@ Isso pode levar alguns segundos. Por favor, não feche esta janela.`
         }
 
         setIsProcessing(false)
+        if (!isMounted.current) return
+
         const moduleName = path.includes('estrategia') ? 'Estratégia' : path.includes('juridico') ? 'Contrato' : 'Caso'
         const resultId = data.strategyId || data.documentId || data.demandId
         const resolvedResultPath = `${path.replace('/novo', '')}${resultId ? '/' + resultId : ''}`
@@ -700,7 +731,14 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
           role: 'assistant',
           content: finalMsg.content
         })
+
+        // AUTO-NAVIGATE ONLY IF WE ARE STILL ON THE SAME PAGE WE STARTED
+        // This prevents "rollbacks" where the user is somewhere else and gets pulled back
+        if (pathname === '/justica/novo' || pathname === '/juridico/novo' || pathname === '/estrategia/novo') {
+          router.push(resolvedResultPath)
+        }
       } catch (error: any) {
+        if (!isMounted.current) return
         console.error('Action processing error:', error)
         setIsProcessing(false)
         setMessages(prev => [...prev, {
@@ -736,58 +774,6 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
     }
     const cleanText = content.replace(/\[SUGGESTION:\s*.*?\]/g, '').trim()
     return { cleanText, suggestions }
-  }
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || !sessionId) return
-
-    setIsUploading(true)
-    const toastId = toast.loading(`Minerva lendo ${file.name}...`)
-
-    try {
-      let extractedText = ''
-
-      if (file.type.startsWith('image/')) {
-        // AI-Powered OCR for images
-        const reader = new FileReader()
-        const base64 = await new Promise<string>((resolve) => {
-          reader.onload = () => resolve(reader.result as string)
-          reader.readAsDataURL(file)
-        })
-        extractedText = await transcribeDocument(base64)
-      } else if (file.type === 'application/pdf') {
-        // PDF Text Extraction Logic (Simplified for demonstration)
-        // Note: Real PDF parsing might need a helper function or worker
-        extractedText = `[CONTEÚDO DO PDF: ${file.name}] - O usuário anexou um PDF. Analise o contexto conforme necessário.`
-      } else {
-        extractedText = await file.text()
-      }
-
-      // Add to Session Knowledge Base
-      await addKnowledgeDocument({
-        title: `Documento: ${file.name}`,
-        content: extractedText,
-        category: 'geral',
-        tags: ['upload', 'sessao'],
-        sessionId: sessionId
-      })
-
-      setAttachedFiles(prev => [...prev, { name: file.name, type: file.type }])
-      toast.success(`Entendido! Minerva agora conhece o conteúdo de ${file.name}.`, { id: toastId })
-
-      // Proactive response
-      setMessages(prev => [...prev, {
-        role: 'bot',
-        content: `Li o seu arquivo **${file.name}**. Como posso te ajudar com as informações contidas nele?`
-      } as Message])
-
-    } catch (error) {
-      console.error('File processing error:', error)
-      toast.error('Erro ao ler o documento.', { id: toastId })
-    } finally {
-      setIsUploading(false)
-    }
   }
 
   const getActionIcon = (path: string | undefined) => {
@@ -918,9 +904,11 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
         >
           <div className="w-full space-y-8">
             {messages.map((msg, i) => {
-              const { cleanText: textWithSuggestions, suggestions } = parseSuggestions(msg.content)
+              const filteredContent = msg.role === 'user' ? msg.content : filterSystemHallucinations(msg.content)
+              const { cleanText: textWithSuggestions, suggestions } = parseSuggestions(filteredContent)
               const { text: textNoActions, actions: legacyActions } = parseActions(textWithSuggestions)
-              const { text, fields: legacyFields } = parseForm(textNoActions)
+              const { text: textNoLegacyForm, fields: legacyFields } = parseForm(textNoActions)
+              const { text, fields: jsonFields, title: jsonTitle } = parseJsonForm(textNoLegacyForm)
 
               const isLast = i === messages.length - 1
               const isBot = msg.role === 'bot' || msg.role === 'assistant'
@@ -929,8 +917,8 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
               const toolForm = msg.toolCalls?.find(tc => tc.function?.name === 'show_form')
               const toolAction = msg.toolCalls?.find(tc => tc.function?.name === 'trigger_action')
 
-              let formFields = legacyFields
-              let formTitle = ''
+              let formFields = toolForm ? [] : (jsonFields.length > 0 ? jsonFields : legacyFields)
+              let formTitle = jsonTitle || ''
               let actions = legacyActions
 
               if (toolForm) {
@@ -1004,7 +992,7 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
 
                         {/* Form Fields Rendering (Tool or Legacy) */}
                         {formFields.length > 0 && isBot && (
-                          <div className="mt-6 pt-6 border-t border-slate-100/50">
+                          <div>
                             <ChatForm
                               fields={formFields}
                               onSubmit={(data) => handleFormSubmit(formFields, data)}
@@ -1091,41 +1079,14 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
         {/* Input Area */}
         <div className="p-4 sm:p-6 bg-white border-t border-slate-100 shrink-0">
           <div className="w-fullmx-auto space-y-4">
-            {/* Attached Files List */}
-            {attachedFiles.length > 0 && (
-              <div className="flex flex-wrap gap-2 pb-2">
-                {attachedFiles.map((file, idx) => (
-                  <div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 animate-in fade-in slide-in-from-left-2 transition-all">
-                    {file.type.startsWith('image/') ? <ImageIcon size={12} /> : <FileText size={12} />}
-                    <span className="truncate max-w-[120px]">{file.name}</span>
-                    <button onClick={() => setAttachedFiles(f => f.filter((_, i) => i !== idx))} className="hover:text-red-500">
-                      <CloseIcon size={12} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
             <div className="relative group">
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                className="hidden"
-                accept=".pdf,.png,.jpg,.jpeg,.txt"
-              />
-
               <div className={cn(
                 "absolute left-4 flex items-center gap-2 transition-all duration-200",
                 isMultiline ? "top-3 sm:top-4" : "top-1/2 -translate-y-1/2"
               )}>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading || !sessionId}
-                  className="p-2 text-slate-400 hover:text-primary transition-colors disabled:opacity-30"
-                >
-                  {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Paperclip size={18} />}
-                </button>
+                <div className="p-2 text-primary/40">
+                  <Sparkles size={18} />
+                </div>
               </div>
 
               <textarea
@@ -1142,17 +1103,17 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
-                    if (!isProcessing && !isUploading && inputValue.trim()) handleSendMessage()
+                    if (!isProcessing && inputValue.trim()) handleSendMessage()
                   }
                 }}
-                placeholder={isUploading ? "Minerva está analisando seu arquivo..." : `Fale com a Minerva...`}
-                disabled={isProcessing || isUploading}
+                placeholder={`Fale com a Minerva...`}
+                disabled={isProcessing}
                 rows={1}
                 className="block w-full pl-14 pr-16 py-4 sm:py-5 bg-slate-50 border border-slate-200 rounded-[22px] text-sm sm:text-base outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all shadow-sm font-medium resize-none overflow-y-auto min-h-[56px] sm:min-h-[64px]"
               />
               <button
                 onClick={() => handleSendMessage()}
-                disabled={isProcessing || !inputValue.trim() || isUploading}
+                disabled={isProcessing || !inputValue.trim()}
                 className={cn(
                   "absolute right-2 p-2.5 sm:p-3 bg-slate-900 text-white rounded-[22px] hover:bg-primary transition-all active:scale-95 disabled:opacity-30 shadow-md shadow-slate-200 duration-200",
                   isMultiline ? "bottom-3 sm:bottom-4" : "top-1/2 -translate-y-1/2"
@@ -1305,16 +1266,16 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
   )
 }
 
-function AutoExpandingTextarea({ 
-  value, 
-  onChange, 
-  placeholder, 
-  disabled 
-}: { 
-  value: string, 
-  onChange: (val: string) => void, 
-  placeholder: string, 
-  disabled: boolean 
+function AutoExpandingTextarea({
+  value,
+  onChange,
+  placeholder,
+  disabled
+}: {
+  value: string,
+  onChange: (val: string) => void,
+  placeholder: string,
+  disabled: boolean
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
 
@@ -1349,7 +1310,20 @@ function ChatForm({
   isLastMessage,
   isGuest
 }: {
-  fields: { id: string, label: string, options?: string[], isContact?: boolean, defaultValue?: string }[],
+  fields: {
+    id: string,
+    label: string,
+    options?: string[],
+    isContact?: boolean,
+    defaultValue?: string,
+    // Pre-fill metadata
+    doc?: string,
+    address?: string,
+    entityType?: string,
+    contact?: string,
+    repName?: string,
+    repDoc?: string
+  }[],
   onSubmit: (data: Record<string, string>) => void,
   isLastMessage: boolean,
   isGuest?: boolean
@@ -1364,6 +1338,17 @@ function ChatForm({
         if (f.isContact && !isUuid && f.defaultValue !== 'manual') {
           initials[f.id] = f.defaultValue
           initials[`${f.id}_name`] = f.defaultValue
+
+          // Apply extra metadata if present
+          if (f.doc || f.address || f.entityType || f.contact || f.repName || f.repDoc) {
+            initials[f.id] = 'manual' // Force manual mode if AI provided details
+            if (f.doc) initials[`${f.id}_doc`] = f.doc
+            if (f.address) initials[`${f.id}_address`] = f.address
+            if (f.entityType) initials[`${f.id}_type`] = f.entityType
+            if (f.contact) initials[`${f.id}_contact`] = f.contact
+            if (f.repName) initials[`${f.id}_rep_name`] = f.repName
+            if (f.repDoc) initials[`${f.id}_rep_doc`] = f.repDoc
+          }
         } else {
           initials[f.id] = f.defaultValue
         }
@@ -1430,6 +1415,11 @@ function ChatForm({
                     label="Selecionar Contato do Hub"
                     selectedId={formData[`${field.id}`]}
                     onSelect={(partner) => {
+                      if (partner.id === 'manual') {
+                        setFormData(prev => ({ ...prev, [field.id]: 'manual' }))
+                        return
+                      }
+
                       setFormData(prev => ({
                         ...prev,
                         [field.id]: partner.id,
@@ -1618,8 +1608,8 @@ function ChatForm({
         })}
         className={cn(
           "w-full flex items-center justify-center gap-2 py-3 font-black uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg",
-          isSubmitted 
-            ? "bg-emerald-500 text-white shadow-emerald-200 cursor-default" 
+          isSubmitted
+            ? "bg-emerald-500 text-white shadow-emerald-200 cursor-default"
             : "bg-primary text-white hover:bg-slate-900 shadow-primary/20 disabled:opacity-50 disabled:shadow-none"
         )}
       >
