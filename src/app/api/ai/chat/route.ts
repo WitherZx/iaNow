@@ -15,31 +15,38 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const { messages, sessionId, wizardData } = body
+    const { messages, sessionId, wizardData, currentStep, activeModule, lastSubmittedStep, isContinuation, partialResponse } = body
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: 'Missing messages or invalid format' }, { status: 400 })
     }
 
-    // Build "already collected" summary for the AI to not re-ask
+    // Build "already collected" summary for the AI to pre-fill forms
     const collectedDataStr = wizardData && Object.keys(wizardData).length > 0
-      ? `\n\nDADOS JÁ COLETADOS PELO SISTEMA (NÃO PEÇA NOVAMENTE):\n${
+      ? `\n\nDADOS JÁ EXTRAÍDOS DA CONVERSA (USE APENAS PARA PRÉ-PREENCHER OS FORMULÁRIOS - NÃO PULE ETAPAS):\n${
           Object.entries(wizardData)
             .filter(([, v]) => v && String(v).trim())
             .map(([k, v]) => `- ${k}: ${v}`)
             .join('\n')
-        }\nUse esses dados diretamente na geração do documento sem solicitar confirmação.`
+        }\nUse esses dados no campo 'defaultValue' de cada etapa correspondente. Exiba o formulário para confirmação mesmo se já tiver todos os dados.`
       : ''
 
     // --- PHASE 2: ROUTER & RAG ---
     const lastMessage = messages[messages.length - 1]?.content?.toLowerCase() || ''
     
-    // Detect Domain
+    // Detect Domain with improved priority and scoring
     let domain: 'juridico' | 'estrategia' | 'geral' = 'geral'
-    if (lastMessage.includes('contrato') || lastMessage.includes('justiça') || lastMessage.includes('processo') || lastMessage.includes('jurídico')) {
-      domain = 'juridico'
-    } else if (lastMessage.includes('empresa') || lastMessage.includes('estratégia') || lastMessage.includes('lucro') || lastMessage.includes('negócio')) {
+    const strategySignals = ['diagnóstico', 'estratégia', 'lucro', 'negócio', 'faturamento', 'equipe', 'vendas', 'empresa', 'b2b', 'b2c', 'crescimento']
+    const juridicoSignals = ['contrato', 'justiça', 'processo', 'jurídico', 'comarca', 'foro', 'demanda', 'liminar']
+    
+    let stratScore = strategySignals.reduce((acc, word) => acc + (lastMessage.includes(word) ? 1 : 0), 0)
+    let juridScore = juridicoSignals.reduce((acc, word) => acc + (lastMessage.includes(word) ? 1 : 0), 0)
+
+    // Diagnósticos geralmente têm muitas palavras-chave de estratégia. Se houver um mix, estratégia ganha pela densidade.
+    if (stratScore > juridScore) {
       domain = 'estrategia'
+    } else if (juridScore > 0) {
+      domain = 'juridico'
     }
 
     // Query Knowledge Base (RAG)
@@ -100,6 +107,12 @@ export async function POST(req: Request) {
     ];
 
     const systemPrompt = `Você é a Minerva, a inteligência estratégica e jurídica da plataforma iaNow (Agente Especialista em: ${domain.toUpperCase()}).
+CONTEXTO ATUAL DE FLUXO:
+- Módulo Ativo: ${activeModule || domain}
+- Etapa UI (Display): ${currentStep || 1}
+- Última Etapa Confirmada (Submitted): ${lastSubmittedStep || 0}
+- Status dos Dados: Preenchimento pró-ativo habilitado
+
 
 MISSÃO E ESCOPO:
 Você é estritamente limitada às seguintes 7 capacidades. Se o usuário solicitar algo fora disso, explique polidamente que não faz parte do seu escopo atual.
@@ -152,14 +165,21 @@ Etapa 2 - Qualificação. Chame show_form com:
 Etapa 3 - Valores. Chame show_form com:
 [{id: 'danoMaterial', label: 'Prejuízo Material (R$)', type: 'text'}, {id: 'danoMoral', label: 'Danos Morais (R$)', type: 'text'}]
 
-REGRA FUNDAMENTAL PARA FORMULÁRIOS E CONCLUSÃO:
-1. Sempre inicie um fluxo avançando ETAPA POR ETAPA. Nunca envie os campos de duas etapas no mesmo form.
-2. Caso o usuário responda a uma etapa, ou se parte dos dados já constar em 'DADOS JÁ COLETADOS PELO SISTEMA', você NÃO DEVE pedir nem renderizar esses campos novamente no form. Avance automaticamente para a próxima etapa apropriada do módulo.
-3. EFICIÊNCIA FINAL: Assim que você detectar que TODAS as informações necessárias foram coletadas, apresente o resumo final e utilize OBRIGATORIAMENTE a funcionalidade nativa de 'Function Calling' (JSON) para chamar a ferramenta 'trigger_action' na MESMA RESPOSTA.
-   - JAMAIS escreva o nome da ferramenta, comandos, ou 'print(default_api...)' no corpo do texto. 
-   - A chamada de ferramenta deve ser técnica e invisível no texto, resultando apenas no botão renderizado pela interface. 
-   - O resumo deve vir acompanhado do botão de execução imediatamente abaixo.
-   - Elimine redundâncias: se o resumo está na tela, o botão de gerar também deve estar.
+REGRA FUNDAMENTAL PARA FORMULÁRIOS E CONCLUSÃO (FLUXO LINEAR OBRIGATÓRIO):
+1. **Confirmação por Etapa**: Você DEVE conduzir o usuário avançando ETAPA POR ETAPA. 
+2. **Uso de show_form**: Para cada etapa dos fluxos oficiais (Jurídico, Estratégia, Justiça), você OBRIGATORIAMENTE deve chamar a ferramenta 'show_form'.
+3. **Proibição de Saltos**: Mesmo que você já possua todos os dados necessários (via histórico ou 'DADOS JÁ COLETADOS'), você NUNCA deve pular uma etapa. Em vez disso, apresente o formulário ('show_form') com os campos pré-preenchidos (usando 'defaultValue') para que o usuário revise e confirme clicando no botão de envio do sistema.
+4. **Próximo Passo Baseado em Confirmação**: A ÚNICA forma de avançar para a Etapa N+1 é se o 'lastSubmittedStep' for igual a N. Como você está recebendo 'lastSubmittedStep: ${lastSubmittedStep || 0}', sua obrigação atual é garantir a conclusão da etapa ${Math.min((lastSubmittedStep || 0) + 1, 4)}. 
+5. **EFICIÊNCIA FINAL**: A ferramenta 'trigger_action' só pode ser chamada APÓS a conclusão bem-sucedida de TODAS as etapas de coleta (quando todos os forms foram preenchidos e enviados). Na resposta final, apresente o resumo e chame 'trigger_action' via Function Calling (JSON).
+6. **Transparência**: Explique ao usuário o que está fazendo (ex: "Agora vamos para a Etapa 2 para qualificar as partes...").
+7. **TAG DE REDUNDÂNCIA (MANDATÁRIO)**: No final de cada mensagem onde você for renderizar um formulário, inclua a tag de texto invisível no seguinte formato: \`[FORM_TRIGGER: módulo_etapa]\`. Isso garante que o sistema renderize o form mesmo se a ferramenta falhar.
+
+EXEMPLO DE RESPOSTA PERFEITA:
+Usuário: "Quero criar um contrato de TI"
+Minerva: "Com certeza, Marcos. Vamos começar com o contexto do documento. [FORM_TRIGGER: juridico_1]"
+(Acompanhado da chamada técnica: tools: [{name: "show_form", arguments: {title: "Contexto", fields: [...]}}])
+
+
 
 RECOLETA E INTELIGÊNCIA DE DADOS (CRÍTICO - REGRAS DE OURO):
 1. **workflow Step-by-Step (NUNCA PULE)**:
@@ -184,7 +204,7 @@ RECOLETA E INTELIGÊNCIA DE DADOS (CRÍTICO - REGRAS DE OURO):
    - Deixar um campo em branco quando o usuário já forneceu a informação na conversa é considerado uma falha grave de inteligência e utilidade.
 
 FORA DE ESCOPO:
-Não tente realizar tarefas como: agendar compromissos, gerenciar e-mails, compras externas, ou buscar documentos privados que não estejam na sessão atual ou no RAG da iaNow.${collectedDataStr}`
+Não tente realizar tarefas como: agendar compromissos, gerenciar e-mails, compras externas, ou buscar documentos privados que não estejam na sessão atual ou no RAG da iaNow.${collectedDataStr}${isContinuation ? `\n\n[AVISO DE CONTINUIDADE]: Sua resposta anterior foi cortada devido ao limite de tokens. CONTINUE EXATAMENTE DE ONDE PAROU abaixo. Não peça desculpas, não repita o que já escreveu e não use saudações. O que você já escreveu até agora foi: "${partialResponse?.slice(-100)}..."` : ''}`
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     const response = await fetch(`${OPENROUTER_URL}/chat/completions`, {

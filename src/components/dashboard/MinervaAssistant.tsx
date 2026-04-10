@@ -79,6 +79,11 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
   })
 
   const [wizardData, setWizardData] = useState<Record<string, any>>({})
+  const [lastSubmittedStep, setLastSubmittedStep] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const saved = localStorage.getItem(`minerva_last_step_${sessionId}`)
+    return saved ? parseInt(saved) : 0
+  })
   const [isProcessing, setIsProcessing] = useState(false)
 
   const [latestResultPath, setLatestResultPath] = useState<string | null>(null)
@@ -100,10 +105,8 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
     if (isProcessing) return 4
 
-    const keys = Object.keys(wizardData)
-    if (keys.length >= 5) return 3
-    if (keys.length > 0 || defaultModule) return 2
-    return 1
+    // O progresso agora é ditado pelo que foi realmente enviado + 1
+    return Math.min(lastSubmittedStep + 1, 3)
   })()
 
   const activeModule = (() => {
@@ -235,6 +238,9 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
     const savedResult = localStorage.getItem(`minerva_result_${targetSessionId}`)
     setLatestResultPath(savedResult || null)
+
+    const savedStep = localStorage.getItem(`minerva_last_step_${targetSessionId}`)
+    setLastSubmittedStep(savedStep ? parseInt(savedStep) : 0)
   }
 
   // Auto-scroll logic
@@ -295,124 +301,145 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     setIsTyping(true)
 
     try {
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        body: JSON.stringify({
-          messages: [...messages, userMsg].map(m => ({
-            role: m.role === 'bot' ? 'assistant' : 'user',
-            content: m.content
-          })),
-          wizardData: wizardData,
-          currentStep: wizardStep,
-          activeModule: activeModule
-        })
-      })
-
-      if (!response.ok) throw new Error(response.status === 401 ? 'Sessão não autorizada' : 'Erro na comunicação com a API')
-
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('Não foi possível iniciar o stream de dados')
-
-      const decoder = new TextDecoder()
       let accumulatedContent = ''
-      let toolCalls: any[] = []
+    let toolCalls: any[] = []
+    let recursionCount = 0
+    const MAX_RECURSIONS = 3
 
-      // Initialize the bot message placeholder
-      setMessages(prev => [...prev, { role: 'bot', content: '' } as Message])
-      setIsTyping(false)
+    // Initialize the bot message placeholder
+    setMessages(prev => [...prev, { role: 'bot', content: '' } as Message])
+    setIsTyping(false)
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+    const performRequest = async (isContinuation = false): Promise<string | null> => {
+      try {
+        const response = await fetch('/api/ai/chat', {
+          method: 'POST',
+          body: JSON.stringify({
+            messages: [...messages, userMsg].map(m => ({
+              role: m.role === 'bot' ? 'assistant' : 'user',
+              content: m.content
+            })),
+            wizardData: wizardData,
+            currentStep: wizardStep,
+            activeModule: activeModule,
+            lastSubmittedStep: lastSubmittedStep,
+            isContinuation: isContinuation,
+            partialResponse: accumulatedContent // Send what we have for context
+          })
+        })
 
-        const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split('\n')
+        if (!response.ok) throw new Error('Falha na comunicação')
 
-        for (const line of lines) {
-          const trimmedLine = line.trim()
-          if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue
+        const reader = response.body?.getReader()
+        if (!reader) throw new Error('Reader indisponível')
 
-          const dataStr = trimmedLine.replace('data: ', '')
-          if (dataStr === '[DONE]') break
+        const decoder = new TextDecoder()
+        let lastFinishReason: string | null = null
 
-          try {
-            const data = JSON.parse(dataStr)
-            const delta = data.choices[0]?.delta
-            const content = delta?.content || ''
-            const incomingToolCalls = delta?.tool_calls
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
 
-            if (content) {
-              accumulatedContent += content
-            }
+          const chunk = decoder.decode(value, { stream: true })
+          const lines = chunk.split('\n')
 
-            if (incomingToolCalls) {
-              incomingToolCalls.forEach((tc: any) => {
-                const index = tc.index ?? 0
-                if (!toolCalls[index]) {
-                  toolCalls[index] = {
-                    id: tc.id,
-                    type: 'function',
-                    function: { name: tc.function?.name, arguments: '' }
-                  }
-                }
-                if (tc.function?.arguments) {
-                  toolCalls[index].function.arguments += tc.function.arguments
-                }
-              })
-            }
+          for (const line of lines) {
+            const trimmedLine = line.trim()
+            if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue
 
-            setMessages(prev => {
-              const newMessages = [...prev]
-              if (newMessages.length > 0) {
-                newMessages[newMessages.length - 1] = {
-                  role: 'bot',
-                  content: accumulatedContent,
-                  toolCalls: toolCalls.length > 0 ? toolCalls : undefined
-                } as Message
+            const dataStr = trimmedLine.replace('data: ', '')
+            if (dataStr === '[DONE]') break
+
+            try {
+              const data = JSON.parse(dataStr)
+              const choice = data.choices[0]
+              const delta = choice?.delta
+              const content = delta?.content || ''
+              const incomingToolCalls = delta?.tool_calls
+              lastFinishReason = choice?.finish_reason || null
+
+              if (content) {
+                accumulatedContent += content
               }
-              return newMessages
-            })
-          } catch (e) {
-            // Ignore parse errors for partial chunks
+
+              if (incomingToolCalls) {
+                incomingToolCalls.forEach((tc: any) => {
+                  const index = tc.index ?? 0
+                  if (!toolCalls[index]) {
+                    toolCalls[index] = {
+                      id: tc.id,
+                      type: 'function',
+                      function: { name: tc.function?.name, arguments: '' }
+                    }
+                  }
+                  if (tc.function?.arguments) {
+                    toolCalls[index].function.arguments += tc.function.arguments
+                  }
+                })
+              }
+
+              setMessages(prev => {
+                const newMessages = [...prev]
+                if (newMessages.length > 0) {
+                  newMessages[newMessages.length - 1] = {
+                    role: 'bot',
+                    content: accumulatedContent,
+                    toolCalls: toolCalls.length > 0 ? toolCalls : undefined
+                  } as Message
+                }
+                return newMessages
+              })
+            } catch (e) { }
           }
         }
+        return lastFinishReason
+      } catch (err) {
+        console.error('Request failed:', err)
+        return 'error'
       }
+    }
 
-      // Process tool calls once finished if they exist
-      if (toolCalls.length > 0) {
-        toolCalls.forEach(tc => {
-          try {
-            const args = JSON.parse(tc.function.arguments)
-            if (tc.function.name === 'show_form') {
-              // The logic for forms is handled by the renderer, but we can set metadata here
-            } else if (tc.function.name === 'trigger_action') {
-              // Automatic trigger could go here if we want it fully agentic
-            }
-          } catch (e) { }
-        })
-      }
+    // Execute first request
+    let finishReason = await performRequest()
 
-      // Final save to storage and database after stream ends
-      setMessages(prev => {
-        saveMessagesToStorage(sessionId!, prev)
-        return prev
+    // Auto-continue loop if needed
+    while (finishReason === 'length' && recursionCount < MAX_RECURSIONS) {
+      recursionCount++
+      console.log(`[Minerva] Auto-continuing response (${recursionCount}/${MAX_RECURSIONS})...`)
+      finishReason = await performRequest(true)
+    }
+
+    // Process tool calls once fully finished
+    if (toolCalls.length > 0) {
+      toolCalls.forEach(tc => {
+        try {
+          const args = JSON.parse(tc.function.arguments)
+          if (tc.function.name === 'show_form') { /* Metadata only */ } 
+          else if (tc.function.name === 'trigger_action') { /* Future agentic logic */ }
+        } catch (e) { }
       })
+    }
 
-      // Persistir no banco apenas se houver conteúdo ou ferramentas
-      if (accumulatedContent || toolCalls.length > 0) {
-        await saveChatMessage({
-          sessionId: sessionId!,
-          role: 'assistant',
-          content: accumulatedContent,
-          toolCalls: toolCalls.length > 0 ? toolCalls : null
-        })
-      }
+    // Final save
+    setMessages(prev => {
+      saveMessagesToStorage(sessionId!, prev)
+      return prev
+    })
+
+    if (accumulatedContent || toolCalls.length > 0) {
+      await saveChatMessage({
+        sessionId: sessionId!,
+        role: 'assistant',
+        content: accumulatedContent,
+        toolCalls: toolCalls.length > 0 ? toolCalls : null
+      })
+    }
 
     } catch (error) {
       console.error('Chat Error:', error)
       setMessages(prev => {
         const updated = [...prev, { role: 'bot', content: "Desculpe, tive um problema de comunicação. Poderia tentar novamente?" } as Message]
-        saveMessagesToStorage(sessionId, updated)
+        saveMessagesToStorage(sessionId!, updated)
         return updated
       })
     } finally {
@@ -458,11 +485,12 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
   }
 
   const filterSystemHallucinations = (content: string) => {
-    // Strips out lines that look like system "Informações de ... enviadas" messages
+    // Strips out technical tags and system-generated messages
     return content
       .split('\n')
       .filter(line => !line.trim().startsWith('Informações de') && !line.includes('enviadas:'))
       .join('\n')
+      .replace(/\[FORM_TRIGGER:.*?\]/g, '') // Remove redundant trigger tags
       .trim()
   }
 
@@ -527,10 +555,16 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     const updatedData = { ...wizardData, ...data }
     setWizardData(updatedData)
 
-    // Persistir no banco (metadata da sessão)
+    // Update Wizard progress markers
+    const nextStep = lastSubmittedStep + 1
+    setLastSubmittedStep(nextStep)
     if (sessionId) {
+      localStorage.setItem(`minerva_last_step_${sessionId}`, nextStep.toString())
+      
+      // Persistir no banco (metadata da sessão)
       updateSessionMetadata(sessionId, {
         wizardData: updatedData,
+        lastSubmittedStep: nextStep,
         last_active: new Date().toISOString()
       })
     }
@@ -939,6 +973,39 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
                     actions = [...actions, args.path]
                   }
                 } catch (e) { }
+              }
+
+              // FALLBACK RECOVERY: If no toolForm but [FORM_TRIGGER] exists, inject standard fields
+              if (!toolForm && msg.content.includes('[FORM_TRIGGER:')) {
+                const triggerMatch = msg.content.match(/\[FORM_TRIGGER:\s*(.*?)\]/)
+                const triggerId = triggerMatch ? triggerMatch[1].trim() : ''
+                
+                if (triggerId && formFields.length === 0) {
+                  // Mapeamento de campos padrão para situações de erro
+                  if (triggerId.includes('juridico_1')) {
+                    formFields = [
+                      {id: 'tipoContrato', label: 'Tipo de Documento', type: 'text'},
+                      {id: 'perfilPartes', label: 'Perfil das Partes', type: 'text'},
+                      {id: 'objetivo', label: 'Objetivo do Documento', type: 'text'},
+                      {id: 'foro', label: 'Foro / Comarca', type: 'text'}
+                    ]
+                    formTitle = 'Contexto do Contrato (Recuperado)'
+                  } else if (triggerId.includes('estrategia_1')) {
+                    formFields = [
+                      {id: 'companyName', label: 'Nome da Organização', type: 'text', defaultValue: wizardData.companyName},
+                      {id: 'sector', label: 'Setor de Atuação', type: 'select', options: ['Tecnologia & Software', 'Serviços Jurídicos', 'Varejo & E-commerce', 'Indústria & Logística', 'Outro...']},
+                      {id: 'offeredSolution', label: 'Solução Oferecida', type: 'text'}
+                    ]
+                    formTitle = 'Contexto da Empresa (Recuperado)'
+                  } else if (triggerId.includes('justica_1')) {
+                    formFields = [
+                      {id: 'tipoProblema', label: 'Tipo de Problema', type: 'select', options: ['Consumidor', 'Trabalhista', 'Cível Geral', 'Imobiliário', 'Outro']},
+                      {id: 'relato', label: 'O que aconteceu?', type: 'text'},
+                      {id: 'quando', label: 'Quando aconteceu?', type: 'text'}
+                    ]
+                    formTitle = 'Problema (Recuperado)'
+                  }
+                }
               }
 
               return (
