@@ -56,6 +56,268 @@ interface MinervaAssistantProps {
 let isScriptFirstLoad = true
 let lastActiveSessionId: string | null = null
 
+// CONFIGURAÇÃO ESTÁTICA DO WIZARD (DETERMINISMO)
+const WIZARD_CONFIG = {
+  estrategia: {
+    1: {
+      title: 'Contexto da Empresa',
+      fields: [
+        { id: 'companyName', label: 'Nome da Organização', type: 'text' },
+        { id: 'sector', label: 'Setor de Atuação', type: 'select', options: ['Tecnologia & Software', 'Serviços Jurídicos', 'Varejo & E-commerce', 'Indústria & Logística', 'Serviços em Geral', 'Outro...'] },
+        { id: 'offeredSolution', label: 'Solução Oferecida', type: 'text' },
+        { id: 'size', label: 'Tamanho da Equipe', type: 'select', options: ['1-10', '11-50', '51-200', '200+'] },
+        { id: 'revenue', label: 'Faturamento Mensal', type: 'select', options: ['Até R$ 50k', 'R$ 50k - R$ 200k', 'R$ 200k - R$ 1M', 'Acima de R$ 1M'] }
+      ]
+    },
+    2: {
+      title: 'Operação & Digitalização',
+      fields: [
+        { id: 'businessModel', label: 'Modelo de Negócio', type: 'select', options: ['B2B', 'B2C', 'Híbrido', 'SaaS', 'Marketplace'] },
+        { id: 'digitalLevel', label: 'Nível Digital (1-5)', type: 'select', options: ['1 - Analógico/Manual', '2 - Digitalização Básica', '3 - Intermediário', '4 - Avançado', '5 - Transformado'] },
+        { id: 'mainPainPoint', label: 'Maior Gargalo/Incêndio hoje', type: 'text' }
+      ]
+    },
+    3: {
+      title: 'Riscos & Blindagem',
+      fields: [
+        { id: 'legalStatus', label: 'Status Jurídico', type: 'select', options: ['Estável', 'Riscos Trabalhistas', 'Fragilidade Contratual', 'Conflitos Societários'] },
+        { id: 'financialControl', label: 'Controle Financeiro', type: 'select', options: ['Software ERP', 'Planilhas', 'Sem controle'] }
+      ]
+    },
+    4: {
+      title: 'Visão & Futuro',
+      fields: [
+        { id: 'goals', label: 'Objetivos Principais', type: 'text' },
+        { id: 'growthObstacle', label: 'O que te impede de dobrar hoje?', type: 'text' }
+      ]
+    }
+  },
+  juridico: {
+    1: {
+      title: 'Contexto do Contrato',
+      fields: [
+        { id: 'tipoContrato', label: 'Tipo de Documento', type: 'text' },
+        { id: 'perfilPartes', label: 'Perfil das Partes', type: 'text' },
+        { id: 'objetivo', label: 'Objetivo do Contrato', type: 'text' },
+        { id: 'foro', label: 'Foro / Comarca', type: 'text' }
+      ]
+    },
+    2: {
+      title: 'DADOS - Qualificação das Partes',
+      fields: [
+        { id: 'parteA', label: 'Contratante (Parte A)', type: 'contact', isContact: true },
+        { id: 'parteB', label: 'Contratado (Parte B)', type: 'contact', isContact: true }
+      ]
+    },
+    3: {
+      title: 'REVISÃO - Parâmetros Finais',
+      fields: [
+        { id: 'parametros', label: 'Observações ou Cláusulas Específicas', type: 'text' }
+      ]
+    }
+  },
+  justica: {
+    1: {
+      title: 'Fatos & Ocorrência',
+      fields: [
+        { id: 'tipoProblema', label: 'Tipo de Problema', type: 'select', options: ['Consumidor', 'Trabalhista', 'Cível Geral', 'Imobiliário', 'Danificados', 'Outro'] },
+        { id: 'relato', label: 'O que aconteceu?', type: 'text' },
+        { id: 'quando', label: 'Quando aconteceu?', type: 'text' }
+      ]
+    }
+  }
+} as const;
+
+// --- HELPERS (Hoisted/Outside) ---
+
+/**
+ * Smart Context Scraper: Varre o histórico em busca de padrões de diagnóstico
+ * para preencher formulários de fallback.
+ */
+const scrapeConversationContext = (msgs: { role: string, content: string }[]) => {
+  const context: Record<string, string> = {}
+  const allText = msgs.map(m => m.content).join('\n')
+
+  const patterns = [
+    { id: 'companyName', regex: /(?:^|\n)[*#\s-]*Nome da Organização[*#\s]*[:\-]\s*(.*)/i },
+    { id: 'sector', regex: /(?:^|\n)[*#\s-]*Setor de Atuação[*#\s]*[:\-]\s*(.*)/i },
+    { id: 'offeredSolution', regex: /(?:^|\n)[*#\s-]*Solução Oferecida[*#\s]*[:\-]\s*(.*)/i },
+    { id: 'size', regex: /(?:^|\n)[*#\s-]*Tamanho da Equipe[*#\s]*[:\-]\s*(.*)/i },
+    { id: 'revenue', regex: /(?:^|\n)[*#\s-]*Faturamento Mensal[*#\s]*[:\-]\s*(.*)/i },
+    { id: 'businessModel', regex: /(?:^|\n)[*#\s-]*Modelo de Negócio[*#\s\?]*[:\-]\s*(.*)/i },
+    { id: 'digitalLevel', regex: /(?:^|\n)[*#\s-]*Nível Digital[*#\s\?]*[:\-]\s*(.*)/i },
+    { id: 'mainPainPoint', regex: /(?:^|\n)[*#\s-]*Maior Gargalo\/Incêndio[*#\s\?]*[:\-]\s*(.*)/i },
+    { id: 'legalStatus', regex: /(?:^|\n)[*#\s-]*Status Jurídico[*#\s\?]*[:\-]\s*(.*)/i },
+    { id: 'financialControl', regex: /(?:^|\n)[*#\s-]*Controle Financeiro[*#\s\?]*[:\-]\s*(.*)/i },
+    { id: 'goals', regex: /(?:^|\n)[*#\s-]*Objetivos Principais[*#\s\?]*[:\-]\s*(.*)/i },
+    { id: 'growthObstacle', regex: /(?:^|\n)[*#\s-]*O que (?:te )?impede de dobrar hoje[*#\s\?]*[:\-]\s*(.*)/i },
+    // Jurídico Fallbacks (Fuzzy)
+    { id: 'tipoContrato', regex: /(?:^|\n)[*#\s-]*Tipo de Documento[*#\s]*[:\-]\s*(.*)/i },
+    { id: 'perfilPartes', regex: /(?:^|\n)[*#\s-]*Perfil das Partes[*#\s]*[:\-]\s*(.*)/i },
+    { id: 'objetivo', regex: /(?:^|\n)[*#\s-]*Objetivo(?: (?:do )?Documento| (?:do )?Contrato)?[*#\s]*[:\-]\s*(.*)/i },
+    { id: 'foro', regex: /(?:^|\n)[*#\s-]*Foro[*#\s]*(?:\/ Comarca)?[*#\s]*[:\-]\s*(.*)/i }
+  ]
+
+  patterns.forEach(p => {
+    const match = allText.match(p.regex)
+    if (match && match[1]) {
+      // Limpeza profunda: Remove asteriscos, cerquilhas e espaços do início/fim
+      context[p.id] = match[1].replace(/[*_#~]/g, '').trim()
+    }
+  })
+
+  return context
+}
+
+/**
+ * Identifica qual etapa de um wizard uma mensagem da Minerva se refere
+ * baseado em palavras-chave no conteúdo.
+ */
+const detectStepFromContent = (content: string): number | null => {
+  const c = content.toLowerCase()
+  if (c.includes('contexto da empresa') || c.includes('etapa 1') || c.includes('etapa um')) return 1
+  if (c.includes('operação') || c.includes('digitalização') || c.includes('etapa 2') || c.includes('etapa dois')) return 2
+  if (c.includes('riscos') || c.includes('blindagem') || c.includes('etapa 3') || c.includes('etapa três')) return 3
+  if (c.includes('visão') || c.includes('futuro') || c.includes('etapa 4') || c.includes('etapa quatro')) return 4
+  if (c.includes('resumo do diagnóstico') || c.includes('plano de ação') || c.includes('gerar diagnóstico')) return 5
+  return null
+}
+
+const parseSuggestions = (content: string) => {
+  const suggestions: string[] = []
+  const regex = /\[SUGGESTION:\s*(.*?)\]/g
+  let match
+  while ((match = regex.exec(content)) !== null) {
+    if (match[1]) suggestions.push(match[1])
+  }
+  const cleanText = content.replace(/\[SUGGESTION:\s*.*?\]/g, '').trim()
+  return { cleanText, suggestions }
+}
+
+const parseActions = (text: string) => {
+  const actionRegex = /\[ACTION: (.*?)\]/g
+  const matches = Array.from(text.matchAll(actionRegex))
+  const cleanText = text.replace(actionRegex, '').trim()
+
+  return {
+    text: cleanText,
+    actions: matches.map(m => m[1])
+  }
+}
+
+const parseForm = (text: string) => {
+  const formRegex = /\[FORM: (.*?)\]/g
+  const match = formRegex.exec(text)
+  const cleanText = text.replace(formRegex, '').trim()
+
+  if (!match) return { text: cleanText, fields: [] }
+
+  const fields = match[1].split(',').map(f => {
+    const parts = f.split('|').map(s => s.trim())
+    const id = parts[0]
+    const label = parts[1] || id
+    const optionsStr = parts[2]
+    const defaultValue = parts[3]
+
+    const isContact = optionsStr === 'CONTACT'
+    const options = optionsStr && !isContact ? optionsStr.split(';').map(o => o.trim()) : undefined
+
+    return { id, label, options, isContact, defaultValue }
+  })
+
+  return {
+    text: cleanText,
+    fields
+  }
+}
+
+const filterSystemHallucinations = (content: string) => {
+  // Strips out technical tags and system-generated messages
+  return content
+    .split('\n')
+    .filter(line => !line.trim().startsWith('Informações de') && !line.includes('enviadas:'))
+    .join('\n')
+    .replace(/\[FORM_TRIGGER:.*?\]/g, '') // Remove redundant trigger tags
+    .trim()
+}
+
+const parseJsonMetadata = (content: string) => {
+  const rawContent = filterSystemHallucinations(content)
+  // Matches ```json ... ``` blocks or just a JSON object starting with { and containing key indicators
+  const jsonBlockRegex = /```json\n([\s\S]*?)\n```/g
+  const rawJsonRegex = /{[\s\S]*?("fields"|"tool_code")[\s\S]*?}/g
+
+  let match = jsonBlockRegex.exec(content)
+  let potentialJson = ""
+  let cleanText = content
+
+  if (match) {
+    potentialJson = match[1]
+    cleanText = content.replace(match[0], '').trim()
+  } else {
+    rawJsonRegex.lastIndex = 0
+    match = rawJsonRegex.exec(content)
+    if (match) {
+      potentialJson = match[0]
+      cleanText = content.replace(match[0], '').trim()
+    }
+  }
+
+  if (potentialJson) {
+    try {
+      const parsed = JSON.parse(potentialJson)
+
+      // CASE 1: Leaked Form
+      if (parsed.fields && Array.isArray(parsed.fields)) {
+        return {
+          fields: parsed.fields.map((f: any) => ({
+            ...f,
+            isContact: f.type === 'contact'
+          })),
+          title: parsed.title || '',
+          text: cleanText,
+          leakedAction: null
+        }
+      }
+
+      // CASE 2: Leaked Action Tool Call
+      if (parsed.tool_code === 'trigger_action' && parsed.parameters?.path) {
+        return {
+          fields: [],
+          title: '',
+          text: cleanText,
+          leakedAction: parsed.parameters.path
+        }
+      }
+    } catch (e) {
+      // Not a valid JSON or not recognized metadata
+    }
+  }
+
+  return { fields: [], title: '', text: content, leakedAction: null }
+}
+
+const getActionLabel = (path: string | undefined) => {
+  if (!path) return "Acessar Módulo"
+  if (path.includes('/juridico/novo')) return "Gerar Novo Contrato"
+  if (path.includes('/justica/novo')) return "Gerar Protocolo"
+  if (path.includes('/estrategia/novo')) return "Criar Diagnóstico"
+  if (path.match(/^\/juridico\/[^/]+/)) return "Ver Contrato Gerado"
+  if (path.match(/^\/justica\/[^/]+/)) return "Ver Caso Gerado"
+  if (path.match(/^\/estrategia\/[^/]+/)) return "Ver Estratégia Gerada"
+  if (path.includes('/parceiros')) return "Ver Hub de Parceiros"
+  return "Acessar Módulo"
+}
+
+const getActionIcon = (path: string | undefined) => {
+  if (!path) return null
+  if (path.includes('/juridico/novo')) return <Scale size={16} />
+  if (path.includes('/justica/novo')) return <ShieldCheck size={16} />
+  if (path.includes('/estrategia/novo')) return <Zap size={16} />
+  return null
+}
+
+
 export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaultModule }: MinervaAssistantProps) {
   const queryClient = useQueryClient()
   const ACTIVE_SESSION_KEY = 'minerva_active_session_id'
@@ -98,31 +360,51 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
   }, [])
 
 
-  const wizardStep = (() => {
-    // 1. Verificar se a ÚLTIMA mensagem do bot foi de sucesso
-    const lastBotMsg = [...messages].reverse().find(m => m.role === 'bot')
-    if (lastBotMsg?.content.includes('processado com sucesso')) return 5
-
-    if (isProcessing) return 4
-
-    // O progresso agora é ditado pelo que foi realmente enviado + 1
-    return Math.min(lastSubmittedStep + 1, 3)
-  })()
-
   const activeModule = (() => {
     if (defaultModule) return defaultModule
 
-    // Tentar detectar o módulo ativo baseado no histórico recente e wizardData
-    const lastContextMsg = [...messages].reverse().find(m =>
-      m.role === 'bot' && (m.content.includes('[FORM:') || m.content.includes('[ACTION:'))
-    )
-    const content = lastContextMsg?.content.toLowerCase() || ''
+    const rawContent = messages.map(m => m.content).join(' ').toLowerCase()
+    const content = rawContent.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 
-    if (content.includes('justica') || content.includes('processo') || content.includes('demanda') || content.includes('jus postulandi')) return 'justica'
-    if (content.includes('juridico') || content.includes('contrato') || content.includes('prestação de serviço')) return 'juridico'
-    if (content.includes('estrategia') || content.includes('diagnostico') || content.includes('crescimento')) return 'estrategia'
+    // 1. Check local progress (wizardData / scrapedData)
+    const scraped = scrapeConversationContext(messages)
+    if (scraped.companyName || scraped.sector || wizardData.companyName || wizardData.sector) return 'estrategia'
+    if (wizardData.tipoContrato || wizardData.perfilPartes || scraped.tipoContrato) return 'juridico'
+    if (wizardData.tipoProblema || wizardData.quando) return 'justica'
+
+    // 2. Keyword matching with PRIORITY
+    // Estratégia/Diagnóstico (High Priority)
+    if (content.includes('estrategia') || content.includes('diagnostico') || content.includes('crescimento') || content.includes('organizacao') || content.includes('faturamento')) {
+      return 'estrategia'
+    }
+
+    // Justiça/Processos
+    if (content.includes('justica') || content.includes('processo') || content.includes('demanda') || content.includes('jus postulandi')) {
+      return 'justica'
+    }
+
+    // Jurídico/Contratos
+    if (content.includes('juridico') || content.includes('contrato') || content.includes('prestacao de servico')) {
+      return 'juridico'
+    }
 
     return 'general'
+  })()
+
+  const currentModuleConfig = (WIZARD_CONFIG as any)[activeModule]
+  const maxSteps = currentModuleConfig ? Object.keys(currentModuleConfig).length : 4
+
+  const wizardStep = (() => {
+    // 1. Verificar se a ÚLTIMA mensagem do bot foi de sucesso
+    const lastBotMsg = [...messages].reverse().find(m => m.role === 'bot')
+    if (lastBotMsg?.content.includes('processado com sucesso')) return (maxSteps + 1)
+    // Removido o return 4 fixo durante processamento para evitar que o form reapareça no final
+    
+    // Se já enviou todas as etapas do módulo atual, passamos para o estado final
+    if (lastSubmittedStep >= maxSteps) return (maxSteps + 1)
+
+    // Caso contrário, progredimos linearmente
+    return Math.min(lastSubmittedStep + 1, maxSteps)
   })()
 
   const stepperLabels = (() => {
@@ -132,7 +414,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
       case 'estrategia':
         return ['NEGÓCIO', 'DADOS', 'METAS', 'ANÁLISE', 'PLANO']
       case 'juridico':
-        return ['CONTRATO', 'DADOS', 'REVISÃO', 'ANÁLISE', 'RESULTADO']
+        return ['CONTRATO', 'DADOS', 'REVISÃO', 'RESULTADO']
       case 'general':
       default:
         return ['SESSÃO', 'DADOS', 'REVISÃO', 'ANÁLISE', 'RESULTADO']
@@ -168,6 +450,8 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
           const greeting = `Olá, ${userName === 'Usuário' ? 'em que posso ajudar?' : userName + '! Como posso auxiliar sua empresa hoje?'}`
           const initialMsgs = [{ role: 'bot', content: greeting }] as Message[]
           setMessages(initialMsgs)
+          setLastSubmittedStep(0)
+          setWizardData({})
 
           // Fire and forget to avoid blocking UI
           saveChatMessage({
@@ -268,8 +552,8 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     // Mark this as the active session so the page restores it on next visit
     localStorage.setItem(ACTIVE_SESSION_KEY, sessionId)
 
-    // Salvar no banco (async)
-    saveChatMessage({
+    // Salvar no banco (async, mas aguardamos para garantir persistência)
+    await saveChatMessage({
       sessionId: sessionId,
       role: 'user',
       content: text
@@ -302,138 +586,139 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
     try {
       let accumulatedContent = ''
-    let toolCalls: any[] = []
-    let recursionCount = 0
-    const MAX_RECURSIONS = 3
+      let toolCalls: any[] = []
+      let recursionCount = 0
+      const MAX_RECURSIONS = 3
 
-    // Initialize the bot message placeholder
-    setMessages(prev => [...prev, { role: 'bot', content: '' } as Message])
-    setIsTyping(false)
+      // Initialize the bot message placeholder
+      setMessages(prev => [...prev, { role: 'bot', content: '' } as Message])
+      // setIsTyping(true) já foi definido acima, mantemos assim para mostrar os 3 pontinhos
 
-    const performRequest = async (isContinuation = false): Promise<string | null> => {
-      try {
-        const response = await fetch('/api/ai/chat', {
-          method: 'POST',
-          body: JSON.stringify({
-            messages: [...messages, userMsg].map(m => ({
-              role: m.role === 'bot' ? 'assistant' : 'user',
-              content: m.content
-            })),
-            wizardData: wizardData,
-            currentStep: wizardStep,
-            activeModule: activeModule,
-            lastSubmittedStep: lastSubmittedStep,
-            isContinuation: isContinuation,
-            partialResponse: accumulatedContent // Send what we have for context
-          })
-        })
 
-        if (!response.ok) throw new Error('Falha na comunicação')
-
-        const reader = response.body?.getReader()
-        if (!reader) throw new Error('Reader indisponível')
-
-        const decoder = new TextDecoder()
-        let lastFinishReason: string | null = null
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          const chunk = decoder.decode(value, { stream: true })
-          const lines = chunk.split('\n')
-
-          for (const line of lines) {
-            const trimmedLine = line.trim()
-            if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue
-
-            const dataStr = trimmedLine.replace('data: ', '')
-            if (dataStr === '[DONE]') break
-
-            try {
-              const data = JSON.parse(dataStr)
-              const choice = data.choices[0]
-              const delta = choice?.delta
-              const content = delta?.content || ''
-              const incomingToolCalls = delta?.tool_calls
-              lastFinishReason = choice?.finish_reason || null
-
-              if (content) {
-                accumulatedContent += content
-              }
-
-              if (incomingToolCalls) {
-                incomingToolCalls.forEach((tc: any) => {
-                  const index = tc.index ?? 0
-                  if (!toolCalls[index]) {
-                    toolCalls[index] = {
-                      id: tc.id,
-                      type: 'function',
-                      function: { name: tc.function?.name, arguments: '' }
-                    }
-                  }
-                  if (tc.function?.arguments) {
-                    toolCalls[index].function.arguments += tc.function.arguments
-                  }
-                })
-              }
-
-              setMessages(prev => {
-                const newMessages = [...prev]
-                if (newMessages.length > 0) {
-                  newMessages[newMessages.length - 1] = {
-                    role: 'bot',
-                    content: accumulatedContent,
-                    toolCalls: toolCalls.length > 0 ? toolCalls : undefined
-                  } as Message
-                }
-                return newMessages
-              })
-            } catch (e) { }
-          }
-        }
-        return lastFinishReason
-      } catch (err) {
-        console.error('Request failed:', err)
-        return 'error'
-      }
-    }
-
-    // Execute first request
-    let finishReason = await performRequest()
-
-    // Auto-continue loop if needed
-    while (finishReason === 'length' && recursionCount < MAX_RECURSIONS) {
-      recursionCount++
-      console.log(`[Minerva] Auto-continuing response (${recursionCount}/${MAX_RECURSIONS})...`)
-      finishReason = await performRequest(true)
-    }
-
-    // Process tool calls once fully finished
-    if (toolCalls.length > 0) {
-      toolCalls.forEach(tc => {
+      const performRequest = async (isContinuation = false): Promise<string | null> => {
         try {
-          const args = JSON.parse(tc.function.arguments)
-          if (tc.function.name === 'show_form') { /* Metadata only */ } 
-          else if (tc.function.name === 'trigger_action') { /* Future agentic logic */ }
-        } catch (e) { }
-      })
-    }
+          const response = await fetch('/api/ai/chat', {
+            method: 'POST',
+            body: JSON.stringify({
+              messages: [...messages, userMsg].map(m => ({
+                role: m.role === 'bot' ? 'assistant' : 'user',
+                content: m.content
+              })),
+              wizardData: wizardData,
+              currentStep: wizardStep,
+              activeModule: activeModule,
+              lastSubmittedStep: lastSubmittedStep,
+              isContinuation: isContinuation,
+              partialResponse: accumulatedContent // Send what we have for context
+            })
+          })
 
-    // Final save
-    setMessages(prev => {
-      saveMessagesToStorage(sessionId!, prev)
-      return prev
-    })
+          if (!response.ok) throw new Error('Falha na comunicação')
 
-    if (accumulatedContent || toolCalls.length > 0) {
-      await saveChatMessage({
-        sessionId: sessionId!,
-        role: 'assistant',
-        content: accumulatedContent,
-        toolCalls: toolCalls.length > 0 ? toolCalls : null
+          const reader = response.body?.getReader()
+          if (!reader) throw new Error('Reader indisponível')
+
+          const decoder = new TextDecoder()
+          let lastFinishReason: string | null = null
+
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            const chunk = decoder.decode(value, { stream: true })
+            const lines = chunk.split('\n')
+
+            for (const line of lines) {
+              const trimmedLine = line.trim()
+              if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue
+
+              const dataStr = trimmedLine.replace('data: ', '')
+              if (dataStr === '[DONE]') break
+
+              try {
+                const data = JSON.parse(dataStr)
+                const choice = data.choices[0]
+                const delta = choice?.delta
+                const content = delta?.content || ''
+                const incomingToolCalls = delta?.tool_calls
+                lastFinishReason = choice?.finish_reason || null
+
+                if (content) {
+                  accumulatedContent += content
+                }
+
+                if (incomingToolCalls) {
+                  incomingToolCalls.forEach((tc: any) => {
+                    const index = tc.index ?? 0
+                    if (!toolCalls[index]) {
+                      toolCalls[index] = {
+                        id: tc.id,
+                        type: 'function',
+                        function: { name: tc.function?.name, arguments: '' }
+                      }
+                    }
+                    if (tc.function?.arguments) {
+                      toolCalls[index].function.arguments += tc.function.arguments
+                    }
+                  })
+                }
+
+                setMessages(prev => {
+                  const newMessages = [...prev]
+                  if (newMessages.length > 0) {
+                    newMessages[newMessages.length - 1] = {
+                      role: 'bot',
+                      content: accumulatedContent,
+                      toolCalls: toolCalls.length > 0 ? toolCalls : undefined
+                    } as Message
+                  }
+                  return newMessages
+                })
+              } catch (e) { }
+            }
+          }
+          return lastFinishReason
+        } catch (err) {
+          console.error('Request failed:', err)
+          return 'error'
+        }
+      }
+
+      // Execute first request
+      let finishReason = await performRequest()
+
+      // Auto-continue loop if needed
+      while (finishReason === 'length' && recursionCount < MAX_RECURSIONS) {
+        recursionCount++
+        console.log(`[Minerva] Auto-continuing response (${recursionCount}/${MAX_RECURSIONS})...`)
+        finishReason = await performRequest(true)
+      }
+
+      // Process tool calls once fully finished
+      if (toolCalls.length > 0) {
+        toolCalls.forEach(tc => {
+          try {
+            const args = JSON.parse(tc.function.arguments)
+            if (tc.function.name === 'show_form') { /* Metadata only */ }
+            else if (tc.function.name === 'trigger_action') { /* Future agentic logic */ }
+          } catch (e) { }
+        })
+      }
+
+      // Final save
+      setMessages(prev => {
+        saveMessagesToStorage(sessionId!, prev)
+        return prev
       })
-    }
+
+      if (accumulatedContent || toolCalls.length > 0) {
+        await saveChatMessage({
+          sessionId: sessionId!,
+          role: 'assistant',
+          content: accumulatedContent,
+          toolCalls: toolCalls.length > 0 ? toolCalls : null
+        })
+      }
 
     } catch (error) {
       console.error('Chat Error:', error)
@@ -447,108 +732,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     }
   }
 
-  const parseActions = (text: string) => {
-    const actionRegex = /\[ACTION: (.*?)\]/g
-    const matches = Array.from(text.matchAll(actionRegex))
-    const cleanText = text.replace(actionRegex, '').trim()
 
-    return {
-      text: cleanText,
-      actions: matches.map(m => m[1])
-    }
-  }
-
-  const parseForm = (text: string) => {
-    const formRegex = /\[FORM: (.*?)\]/g
-    const match = formRegex.exec(text)
-    const cleanText = text.replace(formRegex, '').trim()
-
-    if (!match) return { text: cleanText, fields: [] }
-
-    const fields = match[1].split(',').map(f => {
-      const parts = f.split('|').map(s => s.trim())
-      const id = parts[0]
-      const label = parts[1] || id
-      const optionsStr = parts[2]
-      const defaultValue = parts[3]
-
-      const isContact = optionsStr === 'CONTACT'
-      const options = optionsStr && !isContact ? optionsStr.split(';').map(o => o.trim()) : undefined
-
-      return { id, label, options, isContact, defaultValue }
-    })
-
-    return {
-      text: cleanText,
-      fields
-    }
-  }
-
-  const filterSystemHallucinations = (content: string) => {
-    // Strips out technical tags and system-generated messages
-    return content
-      .split('\n')
-      .filter(line => !line.trim().startsWith('Informações de') && !line.includes('enviadas:'))
-      .join('\n')
-      .replace(/\[FORM_TRIGGER:.*?\]/g, '') // Remove redundant trigger tags
-      .trim()
-  }
-
-  const parseJsonMetadata = (content: string) => {
-    const rawContent = filterSystemHallucinations(content)
-    // Matches ```json ... ``` blocks or just a JSON object starting with { and containing key indicators
-    const jsonBlockRegex = /```json\n([\s\S]*?)\n```/g
-    const rawJsonRegex = /{[\s\S]*?("fields"|"tool_code")[\s\S]*?}/g
-
-    let match = jsonBlockRegex.exec(content)
-    let potentialJson = ""
-    let cleanText = content
-
-    if (match) {
-      potentialJson = match[1]
-      cleanText = content.replace(match[0], '').trim()
-    } else {
-      rawJsonRegex.lastIndex = 0
-      match = rawJsonRegex.exec(content)
-      if (match) {
-        potentialJson = match[0]
-        cleanText = content.replace(match[0], '').trim()
-      }
-    }
-
-    if (potentialJson) {
-      try {
-        const parsed = JSON.parse(potentialJson)
-        
-        // CASE 1: Leaked Form
-        if (parsed.fields && Array.isArray(parsed.fields)) {
-          return {
-            fields: parsed.fields.map((f: any) => ({
-              ...f,
-              isContact: f.type === 'contact'
-            })),
-            title: parsed.title || '',
-            text: cleanText,
-            leakedAction: null
-          }
-        }
-
-        // CASE 2: Leaked Action Tool Call
-        if (parsed.tool_code === 'trigger_action' && parsed.parameters?.path) {
-          return {
-            fields: [],
-            title: '',
-            text: cleanText,
-            leakedAction: parsed.parameters.path
-          }
-        }
-      } catch (e) {
-        // Not a valid JSON or not recognized metadata
-      }
-    }
-
-    return { fields: [], title: '', text: content, leakedAction: null }
-  }
 
   const handleFormSubmit = (fields: { id: string, label: string }[], data: Record<string, string>) => {
     // Update accumulated wizard data
@@ -560,7 +744,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     setLastSubmittedStep(nextStep)
     if (sessionId) {
       localStorage.setItem(`minerva_last_step_${sessionId}`, nextStep.toString())
-      
+
       // Persistir no banco (metadata da sessão)
       updateSessionMetadata(sessionId, {
         wizardData: updatedData,
@@ -577,6 +761,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     }).join(' • ')
 
     const submissionText = `Informações de **${fields[0]?.label || 'dados'}** enviadas: ${formattedData}`
+    // Aguardamos o envio para garantir que o estado seja consistente no histórico
     handleSendMessage(submissionText)
   }
 
@@ -649,30 +834,34 @@ Isso pode levar alguns segundos. Por favor, não feche esta janela.`
             objetivo: wizardData.objetivo || wizardData.resumo_objeto || 'Formalizar relação entre as partes',
             foro: wizardData.foro || wizardData.comarca || wizardData.foro_eleicao || 'São Paulo - SP',
             partyA: {
-              name: wizardData.partyA_name || wizardData.parteA_name || wizardData.parte1_name || wizardData.partea_name || 'Nome não qualificado',
-              document: wizardData.partyA_doc || wizardData.parteA_doc || wizardData.parte1_doc || wizardData.partea_doc || 'Documento não informado',
-              address: wizardData.partyA_address || wizardData.parteA_address || wizardData.parte1_address || wizardData.partea_address,
-              type: wizardData.partyA_type || wizardData.parteA_type || wizardData.parte1_type || wizardData.partea_type || 'PF',
-              contact: wizardData.partyA_contact || wizardData.parteA_contact || wizardData.parte1_contact || wizardData.partea_contact,
-              representedBy: wizardData.partyA_rep_name || wizardData.parteA_rep_name || wizardData.parte1_rep_name || wizardData.partea_rep_name,
-              representedByDoc: wizardData.partyA_rep_doc || wizardData.parteA_rep_doc || wizardData.parte1_rep_doc || wizardData.partea_rep_doc,
-              rg: wizardData.partyA_rg || wizardData.parteA_rg || wizardData.parte1_rg || wizardData.partea_rg,
-              nationality: wizardData.partyA_nationality || wizardData.parteA_nationality || wizardData.parte1_nationality || wizardData.partea_nationality,
-              maritalStatus: wizardData.partyA_maritalStatus || wizardData.parteA_maritalStatus || wizardData.parte1_maritalStatus || wizardData.partea_maritalStatus,
-              profession: wizardData.partyA_profession || wizardData.parteA_profession || wizardData.parte1_profession || wizardData.partea_profession
+              name: wizardData.parteA_name || wizardData.partyA_name || wizardData.parte1_name || 'Não informado',
+              document: wizardData.parteA_doc || wizardData.partyA_doc || wizardData.parte1_doc || 'Não informado',
+              address: wizardData.parteA_address || wizardData.partyA_address || wizardData.parte1_address || '',
+              type: wizardData.parteA_type || wizardData.partyA_type || wizardData.parte1_type || 'PF',
+              contact: wizardData.parteA_contact || wizardData.partyA_contact || wizardData.parte1_contact || '',
+              rg: wizardData.parteA_rg || wizardData.partyA_rg || wizardData.parte1_rg || '',
+              nationality: wizardData.parteA_nationality || wizardData.partyA_nationality || wizardData.parte1_nationality || '',
+              maritalStatus: wizardData.parteA_maritalStatus || wizardData.partyA_maritalStatus || wizardData.parte1_maritalStatus || '',
+              profession: wizardData.parteA_profession || wizardData.partyA_profession || wizardData.parte1_profession || '',
+              birthDate: wizardData.parteA_birthDate || wizardData.partyA_birthDate || wizardData.parte1_birthDate || '',
+              representedBy: wizardData.parteA_rep_name || wizardData.partyA_rep_name || '',
+              representedByDoc: wizardData.parteA_rep_doc || wizardData.partyA_rep_doc || '',
+              role: wizardData.parteA_role || 'Contratante'
             },
             partyB: {
-              name: wizardData.partyB_name || wizardData.parteB_name || wizardData.parte2_name || wizardData.parteb_name || 'Nome não qualificado',
-              document: wizardData.partyB_doc || wizardData.parteB_doc || wizardData.parte2_doc || wizardData.parteb_doc || 'Documento não informado',
-              address: wizardData.partyB_address || wizardData.parteB_address || wizardData.parte2_address || wizardData.parteb_address,
-              type: wizardData.partyB_type || wizardData.parteB_type || wizardData.parte2_type || wizardData.parteb_type || 'PF',
-              contact: wizardData.partyB_contact || wizardData.parteB_contact || wizardData.parte2_contact || wizardData.parteb_contact,
-              representedBy: wizardData.partyB_rep_name || wizardData.parteB_rep_name || wizardData.parte2_rep_name || wizardData.parteb_rep_name,
-              representedByDoc: wizardData.partyB_rep_doc || wizardData.parteB_rep_doc || wizardData.parte2_rep_doc || wizardData.parteb_rep_doc,
-              rg: wizardData.partyB_rg || wizardData.parteB_rg || wizardData.parte2_rg || wizardData.parteb_rg,
-              nationality: wizardData.partyB_nationality || wizardData.parteB_nationality || wizardData.parte2_nationality || wizardData.parteb_nationality,
-              maritalStatus: wizardData.partyB_maritalStatus || wizardData.parteB_maritalStatus || wizardData.parte2_maritalStatus || wizardData.parteb_maritalStatus,
-              profession: wizardData.partyB_profession || wizardData.parteB_profession || wizardData.parte2_profession || wizardData.parteb_profession
+              name: wizardData.parteB_name || wizardData.partyB_name || wizardData.parte2_name || 'Não informado',
+              document: wizardData.parteB_doc || wizardData.partyB_doc || wizardData.parte2_doc || 'Não informado',
+              address: wizardData.parteB_address || wizardData.partyB_address || wizardData.parte2_address || '',
+              type: wizardData.parteB_type || wizardData.partyB_type || wizardData.parte2_type || 'PF',
+              contact: wizardData.parteB_contact || wizardData.partyB_contact || wizardData.parte2_contact || '',
+              rg: wizardData.parteB_rg || wizardData.partyB_rg || wizardData.parte2_rg || '',
+              nationality: wizardData.parteB_nationality || wizardData.partyB_nationality || wizardData.parte2_nationality || '',
+              maritalStatus: wizardData.parteB_maritalStatus || wizardData.partyB_maritalStatus || wizardData.parte2_maritalStatus || '',
+              profession: wizardData.parteB_profession || wizardData.partyB_profession || wizardData.parte2_profession || '',
+              birthDate: wizardData.parteB_birthDate || wizardData.partyB_birthDate || wizardData.parte2_birthDate || '',
+              representedBy: wizardData.parteB_rep_name || wizardData.partyB_rep_name || '',
+              representedByDoc: wizardData.parteB_rep_doc || wizardData.partyB_rep_doc || '',
+              role: wizardData.parteB_role || 'Contratado'
             },
             parametros: wizardData.parametros || wizardData.clausulas || 'Termos padrão.'
           }
@@ -692,7 +881,7 @@ Isso pode levar alguns segundos. Por favor, não feche esta janela.`
               whenHappened: wizardData.when || wizardData.data_ocorrido || wizardData.when_happened || 'Não informado',
               materialDamage: wizardData.materialDamage || wizardData.dano_material || '0',
               moralDamage: wizardData.moralDamage || wizardData.dano_moral || '0',
-              estimatedValue: wizardData.valor_causa || wizardData.valor || wizardData.valor_total || wizardData.total || 
+              estimatedValue: wizardData.valor_causa || wizardData.valor || wizardData.valor_total || wizardData.total ||
                 (Number(wizardData.materialDamage || wizardData.dano_material || 0) + Number(wizardData.moralDamage || wizardData.dano_moral || 0))
             }
           }
@@ -776,37 +965,7 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
     router.push(path)
   }
 
-  const getActionLabel = (path: string | undefined) => {
-    if (!path) return "Acessar Módulo"
-    if (path.includes('/juridico/novo')) return "Gerar Novo Contrato"
-    if (path.includes('/justica/novo')) return "Iniciar Nova Demanda"
-    if (path.includes('/estrategia/novo')) return "Criar Diagnóstico"
-    if (path.match(/^\/juridico\/[^/]+/)) return "Ver Contrato Gerado"
-    if (path.match(/^\/justica\/[^/]+/)) return "Ver Caso Gerado"
-    if (path.match(/^\/estrategia\/[^/]+/)) return "Ver Estratégia Gerada"
-    if (path.includes('/parceiros')) return "Ver Hub de Parceiros"
-    return "Acessar Módulo"
-  }
 
-  // Helper to parse proactive suggestions
-  const parseSuggestions = (content: string) => {
-    const suggestions: string[] = []
-    const regex = /\[SUGGESTION:\s*(.*?)\]/g
-    let match
-    while ((match = regex.exec(content)) !== null) {
-      if (match[1]) suggestions.push(match[1])
-    }
-    const cleanText = content.replace(/\[SUGGESTION:\s*.*?\]/g, '').trim()
-    return { cleanText, suggestions }
-  }
-
-  const getActionIcon = (path: string | undefined) => {
-    if (!path) return null
-    if (path.includes('/juridico/novo')) return <Scale size={16} />
-    if (path.includes('/justica/novo')) return <ShieldCheck size={16} />
-    if (path.includes('/estrategia/novo')) return <Zap size={16} />
-    return null
-  }
 
   return (
     <div className="w-full flex-1 flex flex-row bg-white overflow-hidden animate-in fade-in duration-500">
@@ -815,7 +974,7 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
         {/* Header Contextual */}
         <div className="p-4 sm:p-6 border-b border-slate-100 bg-slate-50/50 flex flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-3 sm:gap-4 shrink-0 overflow-hidden">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white flex items-center justify-center overflow-hidden border border-slate-100 shadow-md relative shrink-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#1d4ed8] flex items-center justify-center overflow-hidden border border-slate-100 shadow-md relative shrink-0">
               <img src="/minerva-icon.png" alt="Minerva AI" className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
               <div className="absolute -bottom-1 -right-1 w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-emerald-500 border-2 border-white" />
             </div>
@@ -865,7 +1024,7 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
                 {isProcessing && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
                 {!isProcessing && wizardStep >= 2 && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
                 {!isProcessing && wizardStep < 2 && <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />}
-                {isProcessing ? 'Processando' : wizardStep >= 2 ? 'Em coleta' : (userName === 'Usuário' ? 'Conectado' : 'Sessão Ativa') }
+                {isProcessing ? 'Processando' : wizardStep >= 2 ? 'Em coleta' : (userName === 'Usuário' ? 'Conectado' : 'Sessão Ativa')}
               </div>
             </div>
 
@@ -944,6 +1103,7 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
               let formFields = toolForm ? [] : (jsonFields.length > 0 ? jsonFields : legacyFields)
               let formTitle = jsonTitle || ''
               let actions = [...legacyActions]
+
               if (leakedAction && !actions.includes(leakedAction)) {
                 actions.push(leakedAction)
               }
@@ -956,7 +1116,7 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
 
                   formFields = (args.fields || []).map((f: any) => ({
                     ...f,
-                    isContact: f.type === 'contact' // Mapear para o formato do ChatForm
+                    isContact: f.type === 'contact' || f.isContact
                   }))
                   formTitle = args.title || ''
                 } catch (e) {
@@ -975,37 +1135,33 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
                 } catch (e) { }
               }
 
-              // FALLBACK RECOVERY: If no toolForm but [FORM_TRIGGER] exists, inject standard fields
-              if (!toolForm && msg.content.includes('[FORM_TRIGGER:')) {
-                const triggerMatch = msg.content.match(/\[FORM_TRIGGER:\s*(.*?)\]/)
-                const triggerId = triggerMatch ? triggerMatch[1].trim() : ''
+              // REGRA DETERMINISTA: Injeção do Formulário da Etapa Atual ou Passada
+              const messageStep = isBot ? detectStepFromContent(msg.content) : null
+              
+              // O formulário aparece se:
+              // 1. É a última mensagem e estamos no passo atual (Wizard Ativo)
+              // 2. OU encontramos uma etapa específica no conteúdo da mensagem (Histórico)
+              if (isBot && activeModule && activeModule !== 'general') {
+                const targetStep = messageStep || (isLast && !isTyping ? wizardStep : null)
+                const config = (WIZARD_CONFIG as any)[activeModule]?.[targetStep || 0]
                 
-                if (triggerId && formFields.length === 0) {
-                  // Mapeamento de campos padrão para situações de erro
-                  if (triggerId.includes('juridico_1')) {
-                    formFields = [
-                      {id: 'tipoContrato', label: 'Tipo de Documento', type: 'text'},
-                      {id: 'perfilPartes', label: 'Perfil das Partes', type: 'text'},
-                      {id: 'objetivo', label: 'Objetivo do Documento', type: 'text'},
-                      {id: 'foro', label: 'Foro / Comarca', type: 'text'}
-                    ]
-                    formTitle = 'Contexto do Contrato (Recuperado)'
-                  } else if (triggerId.includes('estrategia_1')) {
-                    formFields = [
-                      {id: 'companyName', label: 'Nome da Organização', type: 'text', defaultValue: wizardData.companyName},
-                      {id: 'sector', label: 'Setor de Atuação', type: 'select', options: ['Tecnologia & Software', 'Serviços Jurídicos', 'Varejo & E-commerce', 'Indústria & Logística', 'Outro...']},
-                      {id: 'offeredSolution', label: 'Solução Oferecida', type: 'text'}
-                    ]
-                    formTitle = 'Contexto da Empresa (Recuperado)'
-                  } else if (triggerId.includes('justica_1')) {
-                    formFields = [
-                      {id: 'tipoProblema', label: 'Tipo de Problema', type: 'select', options: ['Consumidor', 'Trabalhista', 'Cível Geral', 'Imobiliário', 'Outro']},
-                      {id: 'relato', label: 'O que aconteceu?', type: 'text'},
-                      {id: 'quando', label: 'Quando aconteceu?', type: 'text'}
-                    ]
-                    formTitle = 'Problema (Recuperado)'
-                  }
+                if (config && formFields.length === 0) {
+                  formTitle = config.title
+                  const scrapedData = scrapeConversationContext(messages.slice(0, i + 1))
+
+                  formFields = config.fields.map((f: any) => ({
+                    ...f,
+                    defaultValue: wizardData[f.id] || scrapedData[f.id] || f.defaultValue
+                  }))
                 }
+              }
+
+              // Injeção de Ação Final Forçada (Conclusão do Wizard)
+              const isFinalStep = wizardStep > maxSteps || messageStep === 5
+              if (isBot && !isTyping && isFinalStep && actions.length === 0) {
+                if (activeModule === 'estrategia') actions = ['/estrategia/novo']
+                if (activeModule === 'juridico') actions = ['/juridico/novo']
+                if (activeModule === 'justica') actions = ['/justica/novo']
               }
 
               return (
@@ -1022,9 +1178,9 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
                   )}>
                     <div className={cn(
                       "w-8 h-8 sm:w-10 sm:h-10 rounded-xl shrink-0 flex items-center justify-center shadow-sm overflow-hidden",
-                      msg.role === 'user' ? "bg-slate-950 text-white" : "bg-white border border-slate-100"
+                      msg.role === 'user' ? "bg-slate-950 text-white" : "bg-[#1d4ed8] border border-slate-100"
                     )}>
-                      {msg.role === 'user' ? <User size={16} /> : <img src="/minerva-icon.png" alt="Minerva" className="w-7 h-7 object-contain" />}
+                      {msg.role === 'user' ? <User size={16} /> : <img src="/minerva-icon.png" alt="Minerva" className="w-8 h-8 object-contain" />}
                     </div>
 
                     <div className="space-y-4 flex-1">
@@ -1047,11 +1203,17 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
                         {formTitle && <div className="mb-2 text-[10px] font-black uppercase text-teal-600 tracking-widest">{formTitle}</div>}
 
                         <div className="prose prose-slate prose-sm max-w-none">
-                          {text}
+                          {text || (isTyping && isLast ? (
+                            <div className="flex gap-1 items-center py-2">
+                              <div className="w-1 h-1 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                              <div className="w-1 h-1 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                              <div className="w-1 h-1 bg-slate-400 rounded-full animate-bounce" />
+                            </div>
+                          ) : null)}
                         </div>
 
                         {/* Form Fields Rendering (Tool or Legacy) */}
-                        {formFields.length > 0 && isBot && (
+                        {formFields.length > 0 && isBot && !isTyping && (
                           <div>
                             <ChatForm
                               fields={formFields}
@@ -1101,24 +1263,8 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
               )
             })}
 
-            {isTyping && (
-              <div className="flex justify-start animate-in fade-in duration-300">
-                <div className="flex gap-4 max-w-[80%]">
-                  <div className="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center bg-white border border-slate-100 overflow-hidden shadow-sm">
-                    <img src="/minerva-icon.png" alt="Typing" className="w-7 h-7 object-contain animate-pulse" />
-                  </div>
-                  <div className="bg-slate-100/80 px-5 py-4 rounded-[22px] rounded-tl-none border-b border-slate-200 shadow-sm flex items-center justify-center min-w-[64px]">
-                    <div className="flex items-center">
-                      <span className="dot-typing" />
-                      <span className="dot-typing" />
-                      <span className="dot-typing" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
-        </div>
 
         {/* Quick Actions (Floating Chips) - Somente se não estiver digitando */}
         {!isTyping && messages.length === 1 && (
@@ -1231,6 +1377,7 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
                 setSessionId(newId)
                 localStorage.setItem('minerva_active_session_id', newId)
                 setWizardData({}) // Clear the wizard buffer for the new chat
+                setLastSubmittedStep(0) // Reset wizard progress
                 const greeting = `Olá, ${userName}. Sou a Minerva, sua inteligência estratégica e jurídica. Como posso te auxiliar hoje?`
                 const initialMsg: Message = { role: 'bot', content: greeting }
                 setMessages([initialMsg])
@@ -1396,7 +1543,7 @@ function ChatForm({
     fields.forEach(f => {
       if (f.defaultValue) {
         // Se for campo de contato e o valor não parecer um UUID, assumimos que é um nome para preenchimento manual
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(f.defaultValue)
+        const isUuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(f.defaultValue.replace(/[*_`]/g, ''))
 
         if (f.isContact && !isUuid && f.defaultValue !== 'manual') {
           initials[f.id] = f.defaultValue
@@ -1421,6 +1568,22 @@ function ChatForm({
     })
     return initials
   })
+
+  // Sincronizar formData se os campos mudarem ou novos dados forem detectados (Pre-fill Sync)
+  useEffect(() => {
+    setFormData(prev => {
+      let changed = false
+      const next = { ...prev }
+      fields.forEach(f => {
+        if (f.defaultValue && !prev[f.id] && f.defaultValue !== '...') {
+          next[f.id] = f.defaultValue
+          changed = true
+        }
+      })
+      return changed ? next : prev
+    })
+  }, [fields])
+
   const [isSubmitted, setIsSubmitted] = useState(false)
 
   const formatCpf = (value: string) => {

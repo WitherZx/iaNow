@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ianow-cache-v1';
+const CACHE_NAME = 'ianow-cache-v2';
 const STATIC_ASSETS = [
   '/dashboard',
   '/favicon.webp',
@@ -31,19 +31,29 @@ self.addEventListener('activate', (event) => {
 
 // 3. Estratégia de Cache: Stale-While-Revalidate
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
   // Ignora requisições de API e Supabase para não quebrar o Realtime/Sync
-  if (event.request.url.includes('/api/') || event.request.url.includes('supabase.co')) {
+  if (event.request.url.includes('/api/') || event.request.url.includes('supabase.co') || event.request.url.startsWith('chrome-extension')) {
     return;
   }
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {
+        // Clona a resposta imediatamente SÍNCRONA antes do body ser consumido
+        const responseToCache = networkResponse.clone();
+        
         caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, networkResponse.clone());
-        });
+          cache.put(event.request, responseToCache);
+        }).catch(err => console.log('SW Cache Put Error:', err));
+        
         return networkResponse;
+      }).catch(err => {
+        console.log('SW Fetch falhou (Offline?):', err);
+        return cachedResponse;
       });
+      
       return cachedResponse || fetchPromise;
     })
   );
