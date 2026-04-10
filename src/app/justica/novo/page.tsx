@@ -122,7 +122,7 @@ export default function NovoJusticaPage() {
   const generateMutation = useOptimisticMutation({
     actionName: 'createJusticeDemand',
     queryKey,
-    isCreate: true,
+    operation: 'create',
     getEntityId: () => 'new',
     mutationFn: async (variables: any) => {
       const response = await fetch('/api/justica/gerar', {

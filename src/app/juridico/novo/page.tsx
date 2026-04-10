@@ -75,7 +75,7 @@ export default function NewDocumentPage() {
   const generateMutation = useOptimisticMutation({
     actionName: 'createJuridicoDocument',
     queryKey,
-    isCreate: true,
+    operation: 'create',
     getEntityId: () => 'new',
     mutationFn: async (variables: any) => {
       const res = await fetch('/api/juridico/gerar', {
@@ -421,7 +421,7 @@ export default function NewDocumentPage() {
                       </Button>
                       <Button
                         size="lg"
-                        disabled={isSubmitting}
+                        disabled={generateMutation.isPending}
                         onClick={handleGenerate}
                         className="w-full md:w-auto bg-primary hover:bg-blue-700 font-black px-8 min-h-[56px] h-auto py-3 rounded-xl text-white shadow-[0_15px_30px_-10px_rgba(37,99,235,0.4)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-sm sm:text-base group overflow-hidden relative order-1 md:order-2 flex items-center justify-center text-center"
                       >

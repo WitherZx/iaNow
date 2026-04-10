@@ -51,7 +51,7 @@ export default function DashboardPage() {
     queryFn: async () => {
       const { getDashboardDataAction } = await import('@/app/actions/dashboard-actions')
       
-      const { data: dashboard, error } = await getDashboardDataAction(user?.id)
+      const { data: dashboard, error } = await getDashboardDataAction()
       if (error) throw new Error(error)
 
       const stats = dashboard || { strategies: [], legalDocs: [], justiceDemands: [] }

@@ -45,7 +45,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       fetchFn: async () => {
         if (!user) return []
         const { getStrategiesAction } = await import('@/app/actions/strategy-actions')
-        const { data, error } = await getStrategiesAction(user.id)
+        const { data, error } = await getStrategiesAction()
         if (error) throw new Error(error)
         return data || []
       }
@@ -55,7 +55,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       fetchFn: async () => {
         if (!user) return []
         const { getJuridicoDocumentsAction } = await import('@/app/actions/juridico-actions')
-        const { data, error } = await getJuridicoDocumentsAction(null, user.id)
+        const { data, error } = await getJuridicoDocumentsAction()
         if (error) throw new Error(error)
         return data || []
       }

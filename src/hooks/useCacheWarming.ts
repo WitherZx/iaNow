@@ -19,7 +19,7 @@ export function useCacheWarming() {
         queryKey: ['strategies'],
         queryFn: async () => {
           const { getStrategiesAction } = await import('@/app/actions/strategy-actions')
-          const { data, error } = await getStrategiesAction(user.id)
+          const { data, error } = await getStrategiesAction()
           if (error) throw new Error(error)
           return (data || []).map((s: any) => ({
             id: s.id,
