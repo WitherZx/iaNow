@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   Send,
   User,
@@ -56,6 +57,7 @@ let isScriptFirstLoad = true
 let lastActiveSessionId: string | null = null
 
 export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaultModule }: MinervaAssistantProps) {
+  const queryClient = useQueryClient()
   const ACTIVE_SESSION_KEY = 'minerva_active_session_id'
 
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -78,14 +80,6 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
   const [wizardData, setWizardData] = useState<Record<string, any>>({})
   const [isProcessing, setIsProcessing] = useState(false)
-  const [guestId, setGuestId] = useState<string>(() => {
-    if (typeof window === 'undefined') return ''
-    const current = localStorage.getItem('ianow_guest_id')
-    if (current) return current
-    const generated = `guest-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-    localStorage.setItem('ianow_guest_id', generated)
-    return generated
-  })
 
   const [latestResultPath, setLatestResultPath] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -98,41 +92,6 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     return () => { isMounted.current = false }
   }, [])
 
-  const getOrCreateGuestId = () => {
-    if (typeof window === 'undefined') return ''
-    const current = localStorage.getItem('ianow_guest_id')
-    if (current) return current
-    const generated = `guest-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-    localStorage.setItem('ianow_guest_id', generated)
-    return generated
-  }
-
-  const fetchWithGuest = async (url: string, options: RequestInit = {}, retryOn401 = false) => {
-    const resolvedGuestId = guestId || getOrCreateGuestId()
-    if (!guestId) setGuestId(resolvedGuestId)
-    const headers = {
-      'Content-Type': 'application/json',
-      'X-Guest-Id': resolvedGuestId,
-      ...(options.headers || {})
-    }
-
-    let response = await fetch(url, { ...options, headers })
-
-    if (retryOn401 && response.status === 401) {
-      const renewedGuestId = getOrCreateGuestId()
-      setGuestId(renewedGuestId)
-      toast.error('Sessao de visitante expirada. Reconectando...')
-      response = await fetch(url, {
-        ...options,
-        headers: {
-          ...headers,
-          'X-Guest-Id': renewedGuestId
-        }
-      })
-    }
-
-    return response
-  }
 
   const wizardStep = (() => {
     // 1. Verificar se a ÚLTIMA mensagem do bot foi de sucesso
@@ -182,8 +141,6 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     const initSession = async () => {
       setIsInitializing(true)
       try {
-        const resolvedGuestId = getOrCreateGuestId()
-        setGuestId(resolvedGuestId)
 
         // Check if we should recover a session from a re-mount or start fresh
         const savedSessionId = localStorage.getItem(ACTIVE_SESSION_KEY) || lastActiveSessionId
@@ -198,22 +155,23 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
         }
 
         // It's a FRESH load (F5 or first visit) -> Create NEW session as requested
-        const { session: newSession } = await createChatSession(resolvedGuestId)
+        const { session: newSession } = await createChatSession()
         if (newSession) {
           setSessionId(newSession.id)
           lastActiveSessionId = newSession.id // Backup in module scope
           isScriptFirstLoad = false // Mark as initialized
           localStorage.setItem(ACTIVE_SESSION_KEY, newSession.id)
 
-          const greeting = `Olá, ${userName}. Sou a Minerva, sua inteligência estratégica e jurídica. Como posso te auxiliar na sua blindagem institucional hoje?`
+          const greeting = `Olá, ${userName === 'Usuário' ? 'em que posso ajudar?' : userName + '! Como posso auxiliar sua empresa hoje?'}`
           const initialMsgs = [{ role: 'bot', content: greeting }] as Message[]
           setMessages(initialMsgs)
 
-          await saveChatMessage({
+          // Fire and forget to avoid blocking UI
+          saveChatMessage({
             sessionId: newSession.id,
             role: 'assistant',
             content: greeting
-          })
+          }).catch(e => console.error('Error auto-saving greeting:', e))
         }
       } catch (e) {
         console.error('Failed to initialize session', e)
@@ -337,16 +295,18 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     setIsTyping(true)
 
     try {
-      const response = await fetchWithGuest('/api/ai/chat', {
+      const response = await fetch('/api/ai/chat', {
         method: 'POST',
         body: JSON.stringify({
           messages: [...messages, userMsg].map(m => ({
             role: m.role === 'bot' ? 'assistant' : 'user',
             content: m.content
           })),
-          wizardData: wizardData
+          wizardData: wizardData,
+          currentStep: wizardStep,
+          activeModule: activeModule
         })
-      }, true)
+      })
 
       if (!response.ok) throw new Error(response.status === 401 ? 'Sessão não autorizada' : 'Erro na comunicação com a API')
 
@@ -506,11 +466,11 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
       .trim()
   }
 
-  const parseJsonForm = (content: string) => {
+  const parseJsonMetadata = (content: string) => {
     const rawContent = filterSystemHallucinations(content)
-    // Matches ```json ... ``` blocks or just a JSON object starting with { and containing "fields"
+    // Matches ```json ... ``` blocks or just a JSON object starting with { and containing key indicators
     const jsonBlockRegex = /```json\n([\s\S]*?)\n```/g
-    const rawJsonRegex = /{[\s\S]*?"fields"[\s\S]*?}/g
+    const rawJsonRegex = /{[\s\S]*?("fields"|"tool_code")[\s\S]*?}/g
 
     let match = jsonBlockRegex.exec(content)
     let potentialJson = ""
@@ -520,7 +480,6 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
       potentialJson = match[1]
       cleanText = content.replace(match[0], '').trim()
     } else {
-      // Small reset of the regex head
       rawJsonRegex.lastIndex = 0
       match = rawJsonRegex.exec(content)
       if (match) {
@@ -532,6 +491,8 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     if (potentialJson) {
       try {
         const parsed = JSON.parse(potentialJson)
+        
+        // CASE 1: Leaked Form
         if (parsed.fields && Array.isArray(parsed.fields)) {
           return {
             fields: parsed.fields.map((f: any) => ({
@@ -539,15 +500,26 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
               isContact: f.type === 'contact'
             })),
             title: parsed.title || '',
-            text: cleanText
+            text: cleanText,
+            leakedAction: null
+          }
+        }
+
+        // CASE 2: Leaked Action Tool Call
+        if (parsed.tool_code === 'trigger_action' && parsed.parameters?.path) {
+          return {
+            fields: [],
+            title: '',
+            text: cleanText,
+            leakedAction: parsed.parameters.path
           }
         }
       } catch (e) {
-        // Not a valid JSON or not a form
+        // Not a valid JSON or not recognized metadata
       }
     }
 
-    return { fields: [], title: '', text: content }
+    return { fields: [], title: '', text: content, leakedAction: null }
   }
 
   const handleFormSubmit = (fields: { id: string, label: string }[], data: Record<string, string>) => {
@@ -692,7 +664,7 @@ Isso pode levar alguns segundos. Por favor, não feche esta janela.`
           }
         }
 
-        const response = await fetchWithGuest(endpoint, {
+        const response = await fetch(endpoint, {
           method: 'POST',
           body: JSON.stringify(payload)
         })
@@ -732,6 +704,23 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
           content: finalMsg.content
         })
 
+        // GLOBAL CACHE INVALIDATION: 
+        // Force all repositories to refetch their lists and dashboard to update counts
+        // We add a small 500ms delay to ensure Supabase DB persistence is fully committed
+        setTimeout(async () => {
+          const keysToInvalidate = ['dashboard-stats']
+          if (path.includes('estrategia')) keysToInvalidate.push('strategies')
+          if (path.includes('juridico')) keysToInvalidate.push('juridico-documents')
+          if (path.includes('justica')) keysToInvalidate.push('justice-cases')
+
+          for (const key of keysToInvalidate) {
+            // Emite invalidação e força refetch imediato em background
+            await queryClient.invalidateQueries({ queryKey: [key] })
+            await queryClient.refetchQueries({ queryKey: [key] })
+          }
+          console.log(`[MinervaSync] Global refetch triggered for keys:`, keysToInvalidate)
+        }, 500)
+
         // AUTO-NAVIGATE ONLY IF WE ARE STILL ON THE SAME PAGE WE STARTED
         // This prevents "rollbacks" where the user is somewhere else and gets pulled back
         if (pathname === '/justica/novo' || pathname === '/juridico/novo' || pathname === '/estrategia/novo') {
@@ -753,7 +742,8 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
     router.push(path)
   }
 
-  const getActionLabel = (path: string) => {
+  const getActionLabel = (path: string | undefined) => {
+    if (!path) return "Acessar Módulo"
     if (path.includes('/juridico/novo')) return "Gerar Novo Contrato"
     if (path.includes('/justica/novo')) return "Iniciar Nova Demanda"
     if (path.includes('/estrategia/novo')) return "Criar Diagnóstico"
@@ -841,7 +831,7 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
                 {isProcessing && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
                 {!isProcessing && wizardStep >= 2 && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
                 {!isProcessing && wizardStep < 2 && <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />}
-                {isProcessing ? 'Processando' : wizardStep >= 2 ? 'Em coleta' : 'Visitante'}
+                {isProcessing ? 'Processando' : wizardStep >= 2 ? 'Em coleta' : (userName === 'Usuário' ? 'Conectado' : 'Sessão Ativa') }
               </div>
             </div>
 
@@ -908,7 +898,7 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
               const { cleanText: textWithSuggestions, suggestions } = parseSuggestions(filteredContent)
               const { text: textNoActions, actions: legacyActions } = parseActions(textWithSuggestions)
               const { text: textNoLegacyForm, fields: legacyFields } = parseForm(textNoActions)
-              const { text, fields: jsonFields, title: jsonTitle } = parseJsonForm(textNoLegacyForm)
+              const { text, fields: jsonFields, title: jsonTitle, leakedAction } = parseJsonMetadata(textNoLegacyForm)
 
               const isLast = i === messages.length - 1
               const isBot = msg.role === 'bot' || msg.role === 'assistant'
@@ -919,7 +909,10 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
 
               let formFields = toolForm ? [] : (jsonFields.length > 0 ? jsonFields : legacyFields)
               let formTitle = jsonTitle || ''
-              let actions = legacyActions
+              let actions = [...legacyActions]
+              if (leakedAction && !actions.includes(leakedAction)) {
+                actions.push(leakedAction)
+              }
 
               if (toolForm) {
                 try {
@@ -997,7 +990,7 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
                               fields={formFields}
                               onSubmit={(data) => handleFormSubmit(formFields, data)}
                               isLastMessage={isLast}
-                              isGuest={userName === 'Visitante'}
+                              isGuest={false}
                             />
                           </div>
                         )}
@@ -1047,9 +1040,12 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
                   <div className="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center bg-white border border-slate-100 overflow-hidden shadow-sm">
                     <img src="/minerva-icon.png" alt="Typing" className="w-7 h-7 object-contain animate-pulse" />
                   </div>
-                  <div className="bg-slate-200 px-6 py-4 rounded-[22px] rounded-tl-none border-b border-slate-300/50 shadow-sm flex items-center gap-4">
-                    <Loader2 size={18} className="text-primary animate-spin" />
-                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">Sintonizando Minerva...</span>
+                  <div className="bg-slate-100/80 px-5 py-4 rounded-[22px] rounded-tl-none border-b border-slate-200 shadow-sm flex items-center justify-center min-w-[64px]">
+                    <div className="flex items-center">
+                      <span className="dot-typing" />
+                      <span className="dot-typing" />
+                      <span className="dot-typing" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1353,8 +1349,8 @@ function ChatForm({
           initials[f.id] = f.defaultValue
         }
       }
-      // Se for visitante e for um campo de contato sem valor padrão, inicia como manual
-      if (isGuest && f.isContact && !initials[f.id]) initials[f.id] = 'manual'
+      // Se não houver dados no Hub e for um campo de contato sem valor padrão, inicia como manual
+      if (f.isContact && !initials[f.id]) initials[f.id] = 'manual'
     })
     return initials
   })
@@ -1410,40 +1406,33 @@ function ChatForm({
                   />
                 </div>
 
-                {!isGuest && (
-                  <PartnerSelector
-                    label="Selecionar Contato do Hub"
-                    selectedId={formData[`${field.id}`]}
-                    onSelect={(partner) => {
-                      if (partner.id === 'manual') {
-                        setFormData(prev => ({ ...prev, [field.id]: 'manual' }))
-                        return
-                      }
+                <PartnerSelector
+                  label="Selecionar Contato do Hub"
+                  selectedId={formData[`${field.id}`]}
+                  onSelect={(partner) => {
+                    if (partner.id === 'manual') {
+                      setFormData(prev => ({ ...prev, [field.id]: 'manual' }))
+                      return
+                    }
 
-                      setFormData(prev => ({
-                        ...prev,
-                        [field.id]: partner.id,
-                        [`${field.id}_name`]: partner.name,
-                        [`${field.id}_doc`]: partner.document,
-                        [`${field.id}_address`]: partner.address || '',
-                        [`${field.id}_contact`]: partner.email || partner.phone || '',
-                        [`${field.id}_rg`]: partner.metadata?.rg || '',
-                        [`${field.id}_nationality`]: partner.metadata?.nacionalidade || partner.metadata?.nationality || '',
-                        [`${field.id}_maritalStatus`]: partner.metadata?.estado_civil || partner.metadata?.maritalStatus || '',
-                        [`${field.id}_profession`]: partner.metadata?.profissao || partner.metadata?.profession || '',
-                      }))
-                    }}
-                    className={cn((!isLastMessage || isSubmitted) && "opacity-60 pointer-events-none")}
-                  />
-                )}
+                    setFormData(prev => ({
+                      ...prev,
+                      [field.id]: partner.id,
+                      [`${field.id}_name`]: partner.name,
+                      [`${field.id}_doc`]: partner.document,
+                      [`${field.id}_address`]: partner.address || '',
+                      [`${field.id}_contact`]: partner.email || partner.phone || '',
+                      [`${field.id}_rg`]: partner.metadata?.rg || '',
+                      [`${field.id}_nationality`]: partner.metadata?.nacionalidade || partner.metadata?.nationality || '',
+                      [`${field.id}_maritalStatus`]: partner.metadata?.estado_civil || partner.metadata?.maritalStatus || '',
+                      [`${field.id}_profession`]: partner.metadata?.profissao || partner.metadata?.profession || '',
+                    }))
+                  }}
+                  className={cn((!isLastMessage || isSubmitted) && "opacity-60 pointer-events-none")}
+                />
 
                 {formData[field.id] === 'manual' && (
-                  <div className={cn("flex flex-col gap-4 p-5 bg-amber-50/50 border border-amber-100 rounded-2xl animate-in fade-in duration-300", (!isLastMessage || isSubmitted) && "opacity-60 pointer-events-none", isGuest && "mt-2")}>
-                    {isGuest && (
-                      <div className="text-[10px] font-black uppercase text-amber-700/50 tracking-widest mb-1">
-                        Dados da {field.label}
-                      </div>
-                    )}
+                  <>
 
                     {/* Tipo de Pessoa Toggle */}
                     <div className="flex bg-white rounded-xl p-1 border border-amber-200/50 shadow-sm self-start">
@@ -1567,7 +1556,7 @@ function ChatForm({
                         />
                       </div>
                     </div>
-                  </div>
+                  </>
                 )}
               </div>
             ) : field.options ? (

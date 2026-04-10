@@ -1,21 +1,15 @@
-'use client'
-
-import { useState, useEffect, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/hooks/useAuth'
 
 export function useOnboardingGuard() {
-  const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const { user } = useAuth()
   const supabase = createClient()
 
-  const checkStatus = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setNeedsOnboarding(false)
-        return
-      }
+  const { data: onboardingStatus, isLoading, refetch } = useQuery({
+    queryKey: ['onboarding-status', user?.id],
+    queryFn: async () => {
+      if (!user) return { needsOnboarding: false }
 
       // Check if there is a completed onboarding session
       const { data, error } = await supabase
@@ -27,18 +21,18 @@ export function useOnboardingGuard() {
 
       if (error) throw error
 
-      setNeedsOnboarding(data.length === 0)
-    } catch (err) {
-      console.error('Error checking onboarding status:', err)
-      setNeedsOnboarding(false) // Erring on the side of caution
-    } finally {
-      setIsLoading(false)
-    }
-  }, [supabase])
+      return {
+        needsOnboarding: data.length === 0
+      }
+    },
+    enabled: !!user?.id,
+    staleTime: 1000 * 60 * 60 * 24, // 24 hours (status transitions are handled manually or via invalidation)
+    gcTime: 1000 * 60 * 60 * 24 * 7, // 7 days in IDB
+  })
 
-  useEffect(() => {
-    checkStatus()
-  }, [checkStatus])
-
-  return { needsOnboarding, isLoading, refresh: checkStatus }
+  return { 
+    needsOnboarding: onboardingStatus?.needsOnboarding ?? null, 
+    isLoading, 
+    refresh: refetch 
+  }
 }

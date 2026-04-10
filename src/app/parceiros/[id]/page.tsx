@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
@@ -21,6 +22,7 @@ import {
   RotateCcw
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/utils/cn'
@@ -30,108 +32,109 @@ export default function PartnerDetailPage() {
   const router = useRouter()
   const { session } = useAuth()
   const supabase = createClient()
+  const queryClient = useQueryClient()
   
-  const [loading, setLoading] = useState(true)
-  const [partner, setPartner] = useState<any>(null)
-  const [items, setItems] = useState({
-    contracts: [] as any[],
-    strategies: [] as any[],
-    protocols: [] as any[]
-  })
-
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!session?.user?.id || !id) return
+  const { data = { partner: null, items: { contracts: [], strategies: [], protocols: [] } }, isLoading: loading } = useQuery({
+    queryKey: ['partner', id],
+    queryFn: async () => {
+      if (!session?.user?.id || !id) return { partner: null, items: { contracts: [], strategies: [], protocols: [] } }
       
-      try {
-        setLoading(true)
-        
-        // 1. Fetch Partner (or Org if it's the Matriz)
-        // Check if ID is a partner or organization
-        const { data: partnerData } = await supabase
-          .from('partners')
+      const { data: partnerData } = await supabase
+        .from('partners')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle() as any
+
+      let finalPartner = partnerData
+      
+      if (!partnerData) {
+        const { data: orgData } = await supabase
+          .from('organizations')
           .select('*')
           .eq('id', id)
           .maybeSingle() as any
-
-        let finalPartner = partnerData
         
-        if (!partnerData) {
-          const { data: orgData } = await supabase
-            .from('organizations')
-            .select('*')
-            .eq('id', id)
-            .maybeSingle() as any
-          
-          if (orgData) {
-            finalPartner = {
-              ...orgData,
-              isMatriz: true,
-              type: (orgData.metadata as any)?.tipo || 'pj',
-              document: (orgData.metadata as any)?.documento || ''
-            }
+        if (orgData) {
+          finalPartner = {
+            ...orgData,
+            isMatriz: true,
+            type: (orgData.metadata as any)?.tipo || 'pj',
+            document: (orgData.metadata as any)?.documento || ''
           }
-        } else {
-            finalPartner = {
-                ...partnerData,
-                type: (partnerData.metadata as any)?.tipo || 'pj',
-                document: (partnerData.metadata as any)?.documento || ''
-            }
         }
+      } else {
+          finalPartner = {
+              ...partnerData,
+              type: (partnerData.metadata as any)?.tipo || 'pj',
+              document: (partnerData.metadata as any)?.documento || ''
+          }
+      }
 
-        if (!finalPartner) {
-          router.push('/parceiros')
-          return
-        }
+      if (!finalPartner) {
+        return { partner: null, items: { contracts: [], strategies: [], protocols: [] } }
+      }
 
-        setPartner(finalPartner)
+      const contractQuery = supabase.from('generated_documents').select('*')
+      if (finalPartner.isMatriz) {
+        contractQuery.eq('organization_id', id)
+      } else {
+        contractQuery.or(`metadata->partyA->>id.eq.${id},metadata->partyB->>id.eq.${id},metadata->>partnerId.eq.${id}`)
+      }
+      const { data: contracts } = await contractQuery.order('created_at', { ascending: false }) as any
 
-        // 2. Fetch Linked Items
-        // Contracts (using metadata->partyA->id or metadata->partyB->id or metadata->partnerId)
-        // If Matriz, show all organization's contracts
-        const contractQuery = supabase.from('generated_documents').select('*')
-        if (finalPartner.isMatriz) {
-          contractQuery.eq('organization_id', id)
-        } else {
-          contractQuery.or(`metadata->partyA->>id.eq.${id},metadata->partyB->>id.eq.${id},metadata->>partnerId.eq.${id}`)
-        }
-        const { data: contracts } = await contractQuery.order('created_at', { ascending: false }) as any
+      const strategyQuery = supabase.from('strategies').select('*')
+      if (finalPartner.isMatriz) {
+        strategyQuery.eq('organization_id', id)
+      } else {
+        strategyQuery.or(`metadata->>partnerId.eq.${id}`)
+      }
+      const { data: strategies } = await strategyQuery.order('created_at', { ascending: false }) as any
 
-        // Strategies (using metadata->partnerId)
-        // If Matriz, show all organization's strategies
-        const strategyQuery = supabase.from('strategies').select('*')
-        if (finalPartner.isMatriz) {
-          strategyQuery.eq('organization_id', id)
-        } else {
-          strategyQuery.or(`metadata->>partnerId.eq.${id}`)
-        }
-        const { data: strategies } = await strategyQuery.order('created_at', { ascending: false }) as any
+      const protocolQuery = supabase.from('justice_demands').select('*')
+      if (finalPartner.isMatriz) {
+          protocolQuery.eq('organization_id', id)
+      } else {
+          protocolQuery.or(`metadata->>authorId.eq.${id},metadata->>defendantId.eq.${id}`)
+      }
+      const { data: protocols } = await protocolQuery.order('created_at', { ascending: false }) as any
 
-        // Protocolos (justice_demands)
-        // If Matriz, show all organization's demands
-        const protocolQuery = supabase.from('justice_demands').select('*')
-        if (finalPartner.isMatriz) {
-            protocolQuery.eq('organization_id', id)
-        } else {
-            protocolQuery.or(`metadata->>authorId.eq.${id},metadata->>defendantId.eq.${id}`)
-        }
-        const { data: protocols } = await protocolQuery.order('created_at', { ascending: false }) as any
-
-        setItems({
+      return {
+        partner: finalPartner,
+        items: {
           contracts: (contracts || []).map((c: any) => ({ ...c, __table: 'generated_documents' })),
           strategies: (strategies || []).map((s: any) => ({ ...s, __table: 'strategies' })),
           protocols: (protocols || []).map((p: any) => ({ ...p, __table: 'justice_demands' }))
-        })
-
-      } catch (err) {
-        console.error('Error loading partner detail:', err)
-      } finally {
-        setLoading(false)
+        }
       }
+    },
+    initialData: () => {
+      const allPartners = queryClient.getQueryData<any>(['partners'])?.partners || []
+      const match = allPartners.find((p: any) => p.id === id)
+      if (match) {
+        return {
+          partner: match,
+          items: { contracts: [], strategies: [], protocols: [] }
+        }
+      }
+      return undefined
     }
+  })
 
-    fetchData()
-  }, [id, session, supabase, router])
+  // To allow optimistic local delete/restore operations to work immediately without complex cache invalidations, we hold local state
+  const [items, setItems] = useState(data.items)
+  
+  useEffect(() => {
+    // Sincroniza cache inicial para o estado local, garantindo que Realtime ou Loading inicial não fiquem defasados
+    setItems(data.items)
+  }, [data.items])
+
+  const partner = data.partner
+
+  useEffect(() => {
+    if (!loading && !partner) {
+      router.push('/parceiros')
+    }
+  }, [loading, partner, router])
 
   const handleRestore = async (item: any) => {
     try {
@@ -145,9 +148,9 @@ export default function PartnerDetailPage() {
       
       // Refresh local state
       setItems(prev => ({
-        contracts: prev.contracts.map(c => c.id === item.id ? { ...c, deleted_at: null } : c),
-        strategies: prev.strategies.map(s => s.id === item.id ? { ...s, deleted_at: null } : s),
-        protocols: prev.protocols.map(p => p.id === item.id ? { ...p, deleted_at: null } : p)
+        contracts: prev.contracts.map((c: any) => c.id === item.id ? { ...c, deleted_at: null } : c),
+        strategies: prev.strategies.map((s: any) => s.id === item.id ? { ...s, deleted_at: null } : s),
+        protocols: prev.protocols.map((p: any) => p.id === item.id ? { ...p, deleted_at: null } : p)
       }))
     } catch (err: any) {
       console.error('Error restoring item:', err)
@@ -169,9 +172,9 @@ export default function PartnerDetailPage() {
       
       // Refresh local state
       setItems(prev => ({
-        contracts: prev.contracts.filter(c => c.id !== item.id),
-        strategies: prev.strategies.filter(s => s.id !== item.id),
-        protocols: prev.protocols.filter(p => p.id !== item.id)
+        contracts: prev.contracts.filter((c: any) => c.id !== item.id),
+        strategies: prev.strategies.filter((s: any) => s.id !== item.id),
+        protocols: prev.protocols.filter((p: any) => p.id !== item.id)
       }))
     } catch (err: any) {
       console.error('Error deleting item permanently:', err)
@@ -179,18 +182,7 @@ export default function PartnerDetailPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <PageContainer>
-          <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-slate-500 font-medium">Carregando itens vinculados...</p>
-          </div>
-        </PageContainer>
-      </DashboardLayout>
-    )
-  }
+
 
   const renderDashboardItem = (item: any, href: string) => {
     const isDeleted = !!item.deleted_at

@@ -9,8 +9,10 @@ import {
 import { cn } from '@/utils/cn'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
+import { useQueryClient } from '@tanstack/react-query'
 
 import { NAV_ITEMS } from '@/constants/navigation'
+import { db } from '@/lib/storage/db'
 
 interface SidebarProps {
   isOpen?: boolean
@@ -20,12 +22,66 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
+  const queryClient = useQueryClient()
 
   const handleLogout = async () => {
+    // 1. Limpa o IndexedDB fisicamente para garantir privacidade
+    try {
+      await db.clearAll()
+    } catch (err) {
+      console.error('Erro ao limpar cache local:', err)
+    }
+    
+    // 2. Logout no Supabase e redirecionamento
     await supabase.auth.signOut()
     router.push('/login')
     onClose?.()
+  }
+
+  const PREFETCH_MAP: Record<string, { queryKey: string[], fetchFn: () => Promise<any> }> = {
+    '/estrategia': {
+      queryKey: ['strategies'],
+      fetchFn: async () => {
+        if (!user) return []
+        const { getStrategiesAction } = await import('@/app/actions/strategy-actions')
+        const { data, error } = await getStrategiesAction(user.id)
+        if (error) throw new Error(error)
+        return data || []
+      }
+    },
+    '/juridico': {
+      queryKey: ['juridico-documents'],
+      fetchFn: async () => {
+        if (!user) return []
+        const { getJuridicoDocumentsAction } = await import('@/app/actions/juridico-actions')
+        const { data, error } = await getJuridicoDocumentsAction(null, user.id)
+        if (error) throw new Error(error)
+        return data || []
+      }
+    },
+    '/configuracoes': {
+      queryKey: ['user-config', user?.id || 'anonymous'],
+      fetchFn: async () => {
+        const { fetchUserConfigAction } = await import('@/app/actions/user-config-actions')
+        const res = await fetchUserConfigAction()
+        if (!res.success) throw new Error(res.error)
+        return res.data
+      }
+    }
+  }
+
+  const handleIntentPrefetch = (path: string) => {
+    const routeData = PREFETCH_MAP[path]
+    if (!routeData || !user) return
+
+    // PREFETCH INTELIGENTE (SEM DUPLICAÇÃO)
+    if (!queryClient.getQueryData(routeData.queryKey)) {
+      queryClient.prefetchQuery({
+        queryKey: routeData.queryKey,
+        queryFn: routeData.fetchFn,
+      })
+    }
   }
 
   return (
@@ -58,8 +114,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         {NAV_ITEMS.map((item) => {
           const { href, label, icon: Icon } = item;
           const isLockedByDef = 'locked' in item ? item.locked : false;
-          const isLockedByGuest = href === '/parceiros' && !isAuthenticated;
-          const locked = isLockedByDef || isLockedByGuest;
+          const locked = isLockedByDef;
           const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href));
 
           if (locked) {
@@ -83,6 +138,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               key={href}
               href={href}
               onClick={onClose}
+              onMouseEnter={() => handleIntentPrefetch(href)}
+              onFocus={() => handleIntentPrefetch(href)}
               className={cn(
                 "flex items-center gap-x-3 px-3 py-[10px] rounded-lg text-sm transition-all duration-150 font-montserrat",
                 isActive

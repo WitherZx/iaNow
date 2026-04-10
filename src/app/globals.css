@@ -130,3 +130,28 @@ button, [role="button"] {
     display: none !important;
   }
 }
+
+/* ── Animação de Digitação (Minerva) ──────────────── */
+@keyframes typing {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+.dot-typing {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--brand-primary);
+  display: inline-block;
+  animation: typing 1.2s infinite ease-in-out;
+}
+
+.dot-typing:nth-child(2) {
+  animation-delay: 0.2s;
+  margin-left: 4px;
+}
+
+.dot-typing:nth-child(3) {
+  animation-delay: 0.4s;
+  margin-left: 4px;
+}

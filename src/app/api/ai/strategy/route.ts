@@ -8,9 +8,7 @@ export async function POST(req: Request) {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    const guestId = req.headers.get('X-Guest-Id')
-
-    if (!user && !guestId) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -63,7 +61,6 @@ Gere o plano estratégico em JSON agora.`
     let userId = user?.id
 
     if (!orgId) {
-      if (user) {
         // ── AUTO-PROVISIONING: Criar organização para o usuário no primeiro uso ──
         console.log('Criando organização padrão para o usuário:', user.email)
         
@@ -92,26 +89,6 @@ Gere o plano estratégico em JSON agora.`
 
         if (memError) throw memError
         userId = user.id
-      } else {
-        // Support Guest Mode
-        const { data: sandbox } = await adminClient.from('organizations').select('id').limit(1).single() as any
-        orgId = sandbox?.id
-        
-        if (orgId) {
-          // Fallback user_id: Pegar um admin da organização sandbox
-          const { data: adminMember } = await adminClient
-            .from('memberships')
-            .select('user_id')
-            .eq('organization_id', orgId)
-            .limit(1)
-            .single() as any
-          userId = adminMember?.user_id
-        }
-
-        if (!orgId) {
-           return NextResponse.json({ error: 'Organização não encontrada para convidados' }, { status: 404 })
-        }
-      }
     }
 
     // 2. Salvar o Diagnóstico
@@ -126,7 +103,7 @@ Gere o plano estratégico em JSON agora.`
         revenue_range: diagnosticData.revenue,
         main_challenges: diagnosticData.challenges,
         goals: diagnosticData.goals,
-        metadata: { raw_answers: diagnosticData, guest_id: guestId },
+        metadata: { raw_answers: diagnosticData },
         status: 'completed'
       } as any)
       .select().single() as any
@@ -144,7 +121,7 @@ Gere o plano estratégico em JSON agora.`
         description: 'A Inteligência Artificial está processando seu diagnóstico e construindo seu plano de atuação imediato.',
         ai_model: aiModel,
         content: {},
-        metadata: { guest_id: guestId },
+        metadata: {},
         status: 'processing'
       } as any)
       .select().single() as any

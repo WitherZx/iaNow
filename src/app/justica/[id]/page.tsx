@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { PageContainer } from '@/components/layout/PageContainer'
 import {
@@ -34,6 +35,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getDocumentVersionsAction, getVersionContentAction } from '@/app/actions/version-actions'
 import { Button } from '@/components/shared/Button'
 import { Card } from '@/components/shared/Card'
+import { markDeleted } from '@/lib/optimistic/optimisticRegistry'
 import { DocumentAuditLayout } from '@/components/shared/DocumentAuditLayout'
 import { DocumentHero } from '@/components/shared/DocumentHero'
 import { DocumentActionBar } from '@/components/shared/DocumentActionBar'
@@ -42,6 +44,7 @@ import { toast } from 'sonner'
 import { cn } from '@/utils/cn'
 import { Paywall } from '@/components/shared/Paywall'
 import { getJusticeDemandAction } from '@/app/actions/justice-actions'
+import { deleteJusticeDemandAction } from '@/app/actions/justice-actions'
 import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
 
 export default function DemandDetailPage() {
@@ -50,7 +53,7 @@ export default function DemandDetailPage() {
   const supabase = createClient()
 
   const [demand, setDemand] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+
   const [saving, setSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
@@ -89,48 +92,68 @@ export default function DemandDetailPage() {
   const [loadingVersions, setLoadingVersions] = useState(false)
   const [showHistoryDropdown, setShowHistoryDropdown] = useState(false)
 
-  const loadDemand = async () => {
-    try {
-      setLoading(true)
-      const guestId = localStorage.getItem('ianow_guest_id')
-      const res = await getJusticeDemandAction(id as string, guestId)
+  const queryClient = useQueryClient()
 
+  const { data: demandData, isLoading: loading } = useQuery({
+    queryKey: ['justice-case', id],
+    queryFn: async () => {
+      if (!id) return null
+      const { getJusticeDemandAction } = await import('@/app/actions/justice-actions')
+      const res = await getJusticeDemandAction(id as string)
       if (res.error) throw new Error(res.error)
+      
+      // Auto-sync process remote status if missing
+      const processNumber = res.data?.metadata?.process_number
+      const cachedStatus = res.data?.metadata?.last_remote_status
+      if (processNumber && !cachedStatus) {
+        // Roda em background sem bloquear
+        setTimeout(async () => {
+             // Let internal component function fetchProcessStatus handle it via button or event if we cannot mutate easily, 
+             // but we will expose a flag to trigger it.
+        }, 500)
+      }
 
-      const data = res.data
+      return {
+        demand: res.data,
+        config: res.config || { isAllAccess: false, isTestMode: false }
+      }
+    },
+    initialData: () => {
+      const allCases = queryClient.getQueryData<any[]>(['justice-cases'])
+      const match = allCases?.find(c => c.id === id)
+      if (match) {
+        return { demand: match, config: { isAllAccess: false, isTestMode: false } }
+      }
+      return undefined
+    }
+  })
+
+  // Sincronização do Data Source Immutable para os Mutable States do Editor
+  useEffect(() => {
+    if (demandData?.demand) {
+      const data = demandData.demand
       setDemand(data)
+      
       const content = data.metadata?.petition_content || ''
       setEditContent(content)
       setProcessStatus(data.metadata?.last_remote_status || null)
       setProcessAnalysis(data.metadata?.last_analysis || null)
       setProcessDocuments(data.metadata?.last_documents || [])
       setRecommendedEvidence(data.metadata?.auditoria?.provas_recomendadas || [])
-      setConfig(res.config || { isAllAccess: false, isTestMode: false })
+      setConfig(demandData.config)
 
-      // Redirecionamento Inteligente: Se não tem petição, foca no acompanhamento
+      // Redirecionamento Inteligente
       if (!content && activeTab === 'minuta') {
         setActiveTab('acompanhamento')
       }
 
-      // Auto-sync: Se tem número de processo mas não tem status em cache, sincroniza automaticamente
-      const processNumber = data.metadata?.process_number
-      const cachedStatus = data.metadata?.last_remote_status
-      if (processNumber && !cachedStatus) {
-        // Roda em background sem bloquear o carregamento da página
-        setTimeout(() => fetchProcessStatus(data), 500)
-      }
-
       // Check paywall
       const alreadyPaid = data.is_paid || localStorage.getItem(`ianow_unlock_processo_${id}`) === 'true'
-      if (!alreadyPaid && !res.config?.isAllAccess) {
+      if (!alreadyPaid && !demandData.config.isAllAccess) {
         setShowPaywall(true)
       }
-    } catch (err: any) {
-      toast.error(err.message)
-    } finally {
-      setLoading(false)
     }
-  }
+  }, [demandData, activeTab, id])
 
   const activeTokenRef = useRef<string | null>(null)
 
@@ -175,10 +198,6 @@ export default function DemandDetailPage() {
     return `${digits.substring(0, 2)}/${digits.substring(2, 4)}/${digits.substring(4)}`
   }
 
-  useEffect(() => {
-    if (id) loadDemand()
-  }, [id])
-
   // Gatilho Automático: Análise Minerva
   useEffect(() => {
     if (activeTab === 'analise' && !processAnalysis && !isAnalysisLoading && processStatus) {
@@ -196,8 +215,7 @@ export default function DemandDetailPage() {
   const loadVersions = async () => {
     try {
       setLoadingVersions(true)
-      const guestId = localStorage.getItem('ianow_guest_id')
-      const res = await getDocumentVersionsAction(id as string, 'justice', guestId)
+      const res = await getDocumentVersionsAction(id as string, 'justice')
       if (res.success) setVersions(res.data)
     } finally {
       setLoadingVersions(false)
@@ -211,7 +229,7 @@ export default function DemandDetailPage() {
       return
     }
     try {
-      setLoading(true)
+      setLoadingVersions(true)
       const res = await getVersionContentAction(v.id)
       if (res.success) {
         setViewingVersion(v)
@@ -219,7 +237,7 @@ export default function DemandDetailPage() {
         toast.info(`Visualizando versão de ${new Date(v.created_at).toLocaleString('pt-BR')}`)
       }
     } finally {
-      setLoading(false)
+      setLoadingVersions(false)
       setShowHistoryDropdown(false)
     }
   }
@@ -229,10 +247,9 @@ export default function DemandDetailPage() {
   const handleSave = async () => {
     try {
       setSaving(true)
-      const guestId = localStorage.getItem('ianow_guest_id')
       const { updateJusticeDemandMetadataAction } = await import('@/app/actions/justice-actions')
       const newMetadata = { ...demand.metadata, petition_content: editContent }
-      const res = await updateJusticeDemandMetadataAction(id as string, newMetadata, guestId)
+      const res = await updateJusticeDemandMetadataAction(id as string, newMetadata)
 
       if (res.error) throw new Error(res.error)
       setDemand({ ...demand, metadata: newMetadata })
@@ -282,11 +299,17 @@ export default function DemandDetailPage() {
   const handleDelete = async () => {
     if (!window.confirm('Tem certeza que deseja excluir esta demanda?')) return
     try {
-      const guestId = localStorage.getItem('ianow_guest_id')
-      const { deleteJusticeDemandAction } = await import('@/app/actions/justice-actions')
-      const res = await deleteJusticeDemandAction(id as string, guestId)
+      const res = await deleteJusticeDemandAction(id as string)
 
       if (res.error) throw new Error(res.error)
+
+      // Marca como deletado localmente para evitar ghosting na lista principal
+      markDeleted(id as string)
+
+      // Invalida o cache da lista e do dashboard
+      queryClient.invalidateQueries({ queryKey: ['justice-cases'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+
       router.push('/justica')
       toast.success('Demanda excluída.')
     } catch (err: any) {
@@ -317,7 +340,6 @@ export default function DemandDetailPage() {
       }
 
       // Persistir no banco
-      const guestId = localStorage.getItem('ianow_guest_id')
       const { updateJusticeDemandAction } = await import('@/app/actions/justice-actions')
       const updatedMetadata = { ...demandData.metadata, last_remote_status: newStatus }
 
@@ -326,7 +348,7 @@ export default function DemandDetailPage() {
         updates.valor_causa = numericValorCausa
       }
 
-      const res = await updateJusticeDemandAction(demandData.id || id, updates, guestId)
+      const res = await updateJusticeDemandAction(demandData.id || id, updates)
       if (res.error) throw new Error(res.error)
 
       setDemand((prev: any) => ({ ...prev, metadata: updatedMetadata, ...(numericValorCausa !== undefined && { valor_causa: numericValorCausa }) }))
@@ -349,12 +371,10 @@ export default function DemandDetailPage() {
     if (!processStatus) return
     try {
       setIsAnalysisLoading(true)
-      const guestId = localStorage.getItem('ianow_guest_id') || ''
       const response = await fetch('/api/justica/analisar', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'X-Guest-Id': guestId
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ 
           processData: processStatus,
@@ -373,7 +393,7 @@ export default function DemandDetailPage() {
       const updatedMetadata = { ...demand.metadata, last_analysis: analysis }
 
       const { updateJusticeDemandMetadataAction } = await import('@/app/actions/justice-actions')
-      const saveRes = await updateJusticeDemandMetadataAction(id as string, updatedMetadata, guestId)
+      const saveRes = await updateJusticeDemandMetadataAction(id as string, updatedMetadata)
 
       if (saveRes.error) {
         console.error('[Analysis Save] Error:', saveRes.error)
@@ -415,9 +435,8 @@ export default function DemandDetailPage() {
         }
 
         // Salva no cache do documento
-        const guestId = localStorage.getItem('ianow_guest_id')
         const updatedMetadata = { ...demand.metadata, last_documents: docs }
-        await updateJusticeDemandMetadataAction(id as string, updatedMetadata, guestId)
+        await updateJusticeDemandMetadataAction(id as string, updatedMetadata)
         
         if (docs.length > 0) {
           toast.success(`${docs.length} documentos encontrados no Escavador!`)
@@ -439,7 +458,6 @@ export default function DemandDetailPage() {
     setIsExtracting(true)
     try {
       const { extractTextFromPdfAction, updateJusticeDemandMetadataAction } = await import('@/app/actions/justice-actions')
-      const guestId = localStorage.getItem('ianow_guest_id')
       const result = await extractTextFromPdfAction(url, demand?.metadata?.process_number || '')
       if (result.success && result.text) {
         setEditContent(result.text)
@@ -448,7 +466,7 @@ export default function DemandDetailPage() {
           ...demand.metadata, 
           petition_content: result.text,
           is_external_petition: true 
-        }, guestId)
+        })
       }
     } catch (err) {
       console.error('Extraction error:', err)
@@ -457,7 +475,7 @@ export default function DemandDetailPage() {
     }
   }
 
-  if (loading) return <DashboardLayout><div className="flex h-full w-full items-center justify-center min-h-[400px]"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div></DashboardLayout>
+
   if (!demand) return <DashboardLayout><PageContainer>Não encontrado.</PageContainer></DashboardLayout>
 
   if (showPaywall) {
@@ -473,7 +491,7 @@ export default function DemandDetailPage() {
             onUnlockSuccess={() => {
               localStorage.setItem(`ianow_unlock_processo_${id as string}`, 'true')
               setShowPaywall(false)
-              loadDemand()
+              window.location.reload()
             }}
           />
         </div>
@@ -587,17 +605,16 @@ export default function DemandDetailPage() {
                           // Persiste no banco imediatamente
                           try {
                             setSaving(true)
-                            const guestId = localStorage.getItem('ianow_guest_id')
                             const { updateJusticeDemandMetadataAction } = await import('@/app/actions/justice-actions')
                             const { createDocumentVersionAction } = await import('@/app/actions/version-actions')
 
                             const newMetadata = { ...demand.metadata, petition_content: finalContent }
-                            const res = await updateJusticeDemandMetadataAction(id as string, newMetadata, guestId)
+                            const res = await updateJusticeDemandMetadataAction(id as string, newMetadata)
 
                             if (res.error) throw new Error(res.error)
 
                             setDemand({ ...demand, metadata: newMetadata })
-                            await createDocumentVersionAction(id as string, 'justice', newMetadata, guestId)
+                            await createDocumentVersionAction(id as string, 'justice', newMetadata)
 
                             toast.success('Variáveis aplicadas e salvas!')
                             loadVersions()

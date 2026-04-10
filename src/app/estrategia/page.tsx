@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { PageContainer } from '@/components/layout/PageContainer'
+import { useOptimisticMutation } from '@/hooks/useOptimisticMutation'
 import { Card } from '@/components/shared/Card'
 import { Button } from '@/components/shared/Button'
 import { StatusBadge } from '@/components/shared/StatusBadge'
@@ -25,11 +26,16 @@ import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { cn } from '@/utils/cn'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { PrefetchWrapper } from '@/components/shared/PrefetchWrapper'
+import { isDeleted } from '@/lib/optimistic/optimisticRegistry'
 import { CTAButton } from '@/components/shared/CTAButton'
 import { DocumentCard } from '@/components/shared/DocumentCard'
 import { ModuleStatsSidebar } from '@/components/shared/ModuleStatsSidebar'
 import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
 import { useRouter } from 'next/navigation'
+import { deleteStrategyAction } from '@/app/actions/strategy-actions'
+
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 interface Strategy {
   id: string
@@ -43,12 +49,12 @@ interface Strategy {
 }
 
 export default function EstrategiaPage() {
+  const queryClient = useQueryClient()
   const router = useRouter()
-  const { session } = useAuth()
+  const { session, user } = useAuth()
   const supabase = createClient()
-  const [loading, setLoading] = useState(true)
-  const [strategies, setStrategies] = useState<Strategy[]>([])
   const [filter, setFilter] = useState<'all' | 'ready' | 'generating'>('all')
+  const [searchTerm, setSearchTerm] = useState('')
   const [showOnboarding, setShowOnboarding] = useState(false)
   const { needsOnboarding, isLoading: isLoadingOnboarding } = useOnboardingGuard()
 
@@ -60,46 +66,78 @@ export default function EstrategiaPage() {
     }
   }
 
-  useEffect(() => {
-    async function fetchStrategies() {
-      try {
-        setLoading(true)
-        const guestId = localStorage.getItem('ianow_guest_id')
-        const { data: { session: currentSession } } = await supabase.auth.getSession()
+  // React Query Fetcher (Conecta-se ao Cache Warming + IDB)
+  const { data: strategies = [], isLoading: loading } = useQuery({
+    queryKey: ['strategies'],
+    queryFn: async () => {
+      const { getStrategiesAction } = await import('@/app/actions/strategy-actions')
+      const { data, error } = await getStrategiesAction()
 
-        const { getStrategiesAction } = await import('@/app/actions/strategy-actions')
-        const { data: allStrats, error } = await getStrategiesAction(guestId, currentSession?.user?.id)
+      if (error) throw new Error(error)
 
-        if (error) throw new Error(error)
-
-        setStrategies((allStrats || []).map((s: any) => ({
-          id: s.id,
-          title: s.title,
-          description: s.description,
-          status: s.status === 'active' ? 'ready' : s.status === 'processing' ? 'generating' : s.status,
-          created_at: new Date(s.created_at).toLocaleDateString('pt-BR', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-          }),
-          raw_created_at: s.created_at,
-          version: s.version || 1,
-          ai_model: s.ai_model || 'Minerva'
-        })))
-      } catch (err) {
-        console.error('Erro ao buscar estratégias:', err)
-      } finally {
-        setLoading(false)
-      }
+      return (data || []).map((s: any) => ({
+        id: s.id,
+        title: s.title,
+        description: s.description,
+        status: s.status === 'active' ? 'ready' : s.status === 'processing' ? 'generating' : s.status,
+        created_at: new Date(s.created_at).toLocaleDateString('pt-BR', {
+          day: '2-digit', month: 'short', year: 'numeric'
+        }),
+        raw_created_at: s.created_at,
+        version: s.version || 1,
+        ai_model: s.ai_model || 'Minerva'
+      })) as Strategy[]
     }
-
-    fetchStrategies()
-  }, [session, supabase])
-
-  const filteredStrategies = strategies.filter(s => {
-    if (filter === 'all') return true
-    return s.status === filter
   })
+
+  const deleteMutation = useOptimisticMutation({
+    actionName: 'excluir estratégia',
+    mutationFn: (id: string) => deleteStrategyAction(id),
+    queryKey: ['strategies'],
+    operation: 'delete',
+    getEntityId: (id: string) => id,
+    updater: (old: any, id: string) => {
+      if (!Array.isArray(old)) return old
+      return old.filter((s: any) => s.id !== id)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+    }
+  })
+
+  // Filtro robusto com deduplicação e busca
+  const filteredStrategies = React.useMemo(() => {
+    if (!strategies || !Array.isArray(strategies)) return []
+    
+    // 1. Deduplicação por ID e Filtro de Exclusão Otimista
+    const seen = new Set()
+    const uniqueStrategies = strategies.filter(s => {
+      const id = s.id || (s as any).uuid
+      if (!id || seen.has(id) || isDeleted(id)) return false
+      seen.add(id)
+      return true
+    })
+
+    // 2. Aplicação de Filtros (Status + Busca)
+    return uniqueStrategies.filter((s: Strategy) => {
+      const matchesSearch = !searchTerm || 
+        s.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.description?.toLowerCase().includes(searchTerm.toLowerCase())
+
+      if (filter === 'all') return matchesSearch
+      
+      // Mapeamento de status otimista vs real
+      const currentStatus = s.status as string
+      if (filter === 'generating') {
+        return (currentStatus === 'generating' || currentStatus === 'creating' || currentStatus === 'processing') && matchesSearch
+      }
+      if (filter === 'ready') {
+        return (currentStatus === 'ready' || currentStatus === 'active') && matchesSearch
+      }
+      
+      return currentStatus === filter && matchesSearch
+    })
+  }, [strategies, filter, searchTerm])
 
   return (
     <DashboardLayout>
@@ -187,8 +225,10 @@ export default function EstrategiaPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                 <input
                   type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Buscar estratégia..."
-                  className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                  className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-semibold text-slate-700 placeholder:text-slate-400"
                 />
               </div>
             </div>
@@ -207,8 +247,17 @@ export default function EstrategiaPage() {
                   const isReady = strategy.status === 'ready'
 
                   return (
-                    <DocumentCard
+                    <PrefetchWrapper
                       key={strategy.id}
+                      queryKey={['strategy', strategy.id]}
+                      queryFn={async () => {
+                        const { getStrategyAction } = await import('@/app/actions/strategy-actions')
+                        const { data, error } = await getStrategyAction(strategy.id)
+                        if (error) throw new Error(error)
+                        return data || {}
+                      }}
+                    >
+                    <DocumentCard
                       id={strategy.id}
                       href={`/estrategia/${strategy.id}`}
                       title={strategy.title}
@@ -216,6 +265,7 @@ export default function EstrategiaPage() {
                       date={strategy.created_at}
                       isGenerating={isGenerating}
                       isTimeout={isStale}
+                      onDelete={() => deleteMutation.mutate(strategy.id)}
                       icon={<Lightbulb size={22} />}
                       generatingIcon={<Clock size={16} className="animate-spin" />}
                       timeoutIcon={<AlertCircle size={22} />}
@@ -241,6 +291,7 @@ export default function EstrategiaPage() {
                         }
                       ]}
                     />
+                    </PrefetchWrapper>
                   )
                 })
               ) : (

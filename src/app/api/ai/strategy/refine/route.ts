@@ -10,10 +10,8 @@ export async function POST(req: Request) {
     const adminClient = createAdminClient() as any
 
     const body = await req.json()
-    const { strategyId, prompt, guestId } = body
-
-    if (!strategyId || !prompt) {
-      return NextResponse.json({ error: 'Missing logic' }, { status: 400 })
+    if (!strategyId || !prompt || !user) {
+      return NextResponse.json({ error: 'Missing logic or unauthorized' }, { status: 400 })
     }
 
     // 1. Fetch existing strategy
@@ -28,14 +26,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Strategy not found' }, { status: 404 })
     }
 
-    // Security check: temporariamente desativada para permitir ajustes em documentos legados
-    /*
     const isOwner = user && strategy.user_id === user.id
-    const isGuestOwner = guestId && strategy.metadata?.guest_id === guestId
     
-    if (!isOwner && !isGuestOwner) {
-       // Check org membership if user exists
-       if (user && strategy.organization_id) {
+    if (!isOwner) {
+       // Check org membership
+       if (strategy.organization_id) {
           const { data: membership } = await adminClient
             .from('memberships')
             .select('id')
@@ -48,7 +43,6 @@ export async function POST(req: Request) {
          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
        }
     }
-    */
 
     const currentContent = JSON.stringify(strategy.content, null, 2)
 
@@ -89,12 +83,12 @@ Gere o novo JSON completo com os ajustes aplicados.`
     // ── REGISTRAR ATIVIDADE ─────────────────────────────────────
     await adminClient.from('activity_logs').insert({
       organization_id: strategy.organization_id,
-      user_id: user?.id || null, // Allow guest logs
+      user_id: user.id,
       resource_type: 'strategy',
       resource_id: strategyId,
       action: 'refine',
       description: `Ajustou a estratégia: ${parsedContent.title}`,
-      metadata: { strategy_id: strategyId, prompt, is_guest: !!guestId }
+      metadata: { strategy_id: strategyId, prompt }
     })
 
     return NextResponse.json({ 

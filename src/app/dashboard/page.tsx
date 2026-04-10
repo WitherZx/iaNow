@@ -1,6 +1,7 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { PageContainer } from '@/components/layout/PageContainer'
@@ -14,7 +15,7 @@ import { CTAButton } from '@/components/shared/CTAButton'
 import { Lightbulb, Scale, Gavel, PlayCircle, Eye, Loader2, Play, ShieldCheck, PlusCircle, Cpu } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { ExecutionShield } from '@/components/dashboard/ExecutionShield'
 import { MinervaAssistant } from '@/components/dashboard/MinervaAssistant'
 import { cn } from '@/utils/cn'
@@ -41,91 +42,59 @@ interface DashboardItem {
 }
 
 export default function DashboardPage() {
-  const { session } = useAuth()
-  const supabase = createClient()
-  const [loading, setLoading] = useState(true)
+  const { session, user } = useAuth()
   const [viewMode, setViewMode] = useState<'assistant' | 'traditional'>('traditional')
-  const userName = session?.user?.user_metadata?.full_name?.split(' ')[0] || 'Visitante'
+  const userName = session?.user?.user_metadata?.full_name?.split(' ')[0] || 'Usuário'
 
-  const [data, setData] = useState<{
-    metrics: Metric[]
-    strategies: DashboardItem[]
-    legalDocs: DashboardItem[]
-    justiceDemands: DashboardItem[]
-    insightsCount: number
-  }>({
-    metrics: [],
-    strategies: [],
-    legalDocs: [],
-    justiceDemands: [],
-    insightsCount: 0
-  })
+  const { data = { metrics: [] as any[], strategies: [], legalDocs: [], justiceDemands: [], insightsCount: 0 }, isLoading: loading } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: async () => {
+      const { getDashboardDataAction } = await import('@/app/actions/dashboard-actions')
+      
+      const { data: dashboard, error } = await getDashboardDataAction(user?.id)
+      if (error) throw new Error(error)
 
-  useEffect(() => {
-    async function fetchDashboardData() {
-      try {
-        if (data.metrics.length === 0) setLoading(true)
-        const guestId = typeof window !== 'undefined' ? localStorage.getItem('ianow_guest_id') : null
-        
-        console.log('[DashboardPage] Fetching unified data. Session:', !!session)
-        
-        // Busca unificada via Server Action (Bypassa RLS e Merges Guest/Org)
-        const { data: dashboard, error } = await getDashboardDataAction(guestId, session?.user?.id)
-        
-        if (error) {
-          console.error('[DashboardPage] Error:', error)
-          return
-        }
+      const stats = dashboard || { strategies: [], legalDocs: [], justiceDemands: [] }
 
-        const stats = dashboard || { strategies: [], legalDocs: [], justiceDemands: [] }
+      const metrics = [
+        { label: 'Estratégias Ativas', value: stats.strategies.filter((s: any) => s.status === 'active').length, icon: <Lightbulb size={22} />, change: undefined },
+        { label: 'Documentos Jurídicos', value: stats.legalDocs.filter((d: any) => d.status === 'ready').length, icon: <Scale size={22} />, change: undefined },
+        { label: 'Jus Postulandi', value: stats.justiceDemands.length, icon: <Gavel size={22} />, change: undefined },
+      ]
 
-        // Mapeamento de Métricas
-        const metrics = [
-          { label: 'Estratégias Ativas', value: stats.strategies.filter((s: any) => s.status === 'active').length, icon: <Lightbulb size={22} />, change: undefined },
-          { label: 'Documentos Jurídicos', value: stats.legalDocs.filter((d: any) => d.status === 'ready').length, icon: <Scale size={22} />, change: undefined },
-          { label: 'Jus Postulandi', value: stats.justiceDemands.length, icon: <Gavel size={22} />, change: undefined },
-        ]
-
-        setData({
-          metrics,
-          strategies: (stats.strategies || []).slice(0, 4).map((s: any) => ({
-            id: s.id,
-            title: s.title,
-            description: s.description || '',
-            status: s.status === 'active' ? 'ready' : 'generating',
-            date: new Date(s.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
-            rawDate: s.created_at,
-            href: `/estrategia/${s.id}`
-          })),
-          legalDocs: (stats.legalDocs || []).slice(0, 4).map((d: any) => ({
-            id: d.id,
-            title: d.title || 'Documento jurídico',
-            description: d.metadata?.description || 'Gerado via IA',
-            status: d.status,
-            date: new Date(d.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
-            rawDate: d.created_at,
-            href: `/juridico/${d.id}`
-          })),
-          justiceDemands: (stats.justiceDemands || []).slice(0, 3).map((d: any) => ({
-            id: d.id,
-            title: d.tipo_acao || 'Ação não classificada',
-            description: `Valor: ${(d.valor_causa || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`,
-            status: d.status,
-            date: new Date(d.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
-            rawDate: d.created_at,
-            href: `/justica/${d.id}`
-          })),
-          insightsCount: stats.strategies.reduce((acc: number, curr: any) => acc + (curr.content?.aiInsights?.length || 0), 0)
-        })
-      } catch (err) {
-        console.error('Erro ao carregar Dashboard:', err)
-      } finally {
-        setLoading(false)
+      return {
+        metrics,
+        strategies: (stats.strategies || []).slice(0, 4).map((s: any) => ({
+          id: s.id,
+          title: s.title,
+          description: s.description || '',
+          status: s.status === 'active' ? 'ready' : 'generating',
+          date: new Date(s.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
+          rawDate: s.created_at,
+          href: `/estrategia/${s.id}`
+        })),
+        legalDocs: (stats.legalDocs || []).slice(0, 4).map((d: any) => ({
+          id: d.id,
+          title: d.title || 'Documento jurídico',
+          description: d.metadata?.description || 'Gerado via IA',
+          status: d.status,
+          date: new Date(d.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
+          rawDate: d.created_at,
+          href: `/juridico/${d.id}`
+        })),
+        justiceDemands: (stats.justiceDemands || []).slice(0, 3).map((d: any) => ({
+          id: d.id,
+          title: d.tipo_acao || 'Ação não classificada',
+          description: `Valor: ${(d.valor_causa || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`,
+          status: d.status,
+          date: new Date(d.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }),
+          rawDate: d.created_at,
+          href: `/justica/${d.id}`
+        })),
+        insightsCount: stats.strategies.reduce((acc: number, curr: any) => acc + (curr.content?.aiInsights?.length || 0), 0)
       }
     }
-
-    fetchDashboardData()
-  }, [session])
+  })
 
   // Persistência da preferência de view
   useEffect(() => {
@@ -143,7 +112,7 @@ export default function DashboardPage() {
     handleViewChange(newMode)
   }
 
-  if (loading) {
+  if (loading && data.metrics.length === 0) {
     return (
       <DashboardLayout>
         <div className="flex h-full w-full items-center justify-center min-h-[400px]" suppressHydrationWarning>
@@ -284,7 +253,7 @@ export default function DashboardPage() {
                 action={<Link href="/estrategia"><Button variant="link" className="text-primary font-bold px-0">Ver todas</Button></Link>}
               />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {recentStrategies.length > 0 ? recentStrategies.map((item, idx) => renderItemCard(item, idx, recentStrategies.length)) : renderGhostCards(4)}
+                {recentStrategies.length > 0 ? recentStrategies.map((item: any, idx: number) => renderItemCard(item, idx, recentStrategies.length)) : renderGhostCards(4)}
                 {recentStrategies.length === 0 && (
                   <Card className="col-span-full py-6 text-center bg-primary/5 border-dashed border-primary/20">
                     <p className="text-sm text-slate-600 mb-3">Pronto para começar?</p>
@@ -302,7 +271,7 @@ export default function DashboardPage() {
                 action={<Link href="/juridico"><Button variant="link" className="text-primary font-bold px-0">Ver todos</Button></Link>}
               />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {recentDocs.length > 0 ? recentDocs.map((item, idx) => renderItemCard(item, idx, recentDocs.length)) : renderGhostCards(4)}
+                {recentDocs.length > 0 ? recentDocs.map((item: any, idx: number) => renderItemCard(item, idx, recentDocs.length)) : renderGhostCards(4)}
                 {recentDocs.length === 0 && (
                   <Card className="col-span-full py-6 text-center bg-primary/5 border-dashed border-primary/20">
                     <p className="text-sm text-slate-600 mb-3">Nenhum documento gerado.</p>
@@ -321,7 +290,7 @@ export default function DashboardPage() {
                 action={<Link href="/justica"><Button variant="link" className="text-primary font-bold px-0">Ver todas</Button></Link>}
              />
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               {recentDemands.length > 0 ? recentDemands.map((item, idx) => renderItemCard(item, idx, recentDemands.length)) : renderGhostCards(4)}
+               {recentDemands.length > 0 ? recentDemands.map((item: any, idx: number) => renderItemCard(item, idx, recentDemands.length)) : renderGhostCards(4)}
                {recentDemands.length === 0 && (
                  <Card className="col-span-full py-6 text-center bg-primary/5 border-dashed border-primary/20">
                    <p className="text-sm text-slate-600 mb-3">Nenhuma demanda ativa no momento.</p>

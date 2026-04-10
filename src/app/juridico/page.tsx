@@ -1,9 +1,11 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { PageContainer } from '@/components/layout/PageContainer'
+import { useOptimisticMutation } from '@/hooks/useOptimisticMutation'
 import { Button } from '@/components/shared/Button'
 import { MetricCard } from '@/components/shared/MetricCard'
 import { SectionTitle } from '@/components/shared/SectionTitle'
@@ -11,14 +13,19 @@ import { Card } from '@/components/shared/Card'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { FileText, ShieldAlert, Scale, FileSignature, Loader2, Search, Clock, PlusCircle, Sparkles, AlertCircle } from 'lucide-react'
 import { DocumentCard } from '@/components/shared/DocumentCard'
+import { PrefetchWrapper } from '@/components/shared/PrefetchWrapper'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/utils/cn'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { isDeleted } from '@/lib/optimistic/optimisticRegistry'
 import { CTAButton } from '@/components/shared/CTAButton'
 import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
 import { useRouter } from 'next/navigation'
-import { getJuridicoDocumentsAction } from '@/app/actions/juridico-actions'
+import { 
+  getJuridicoDocumentsAction,
+  deleteJuridicoDocumentAction 
+} from '@/app/actions/juridico-actions'
 import { ModuleStatsSidebar } from '@/components/shared/ModuleStatsSidebar'
 
 interface LegalDocument {
@@ -31,14 +38,12 @@ interface LegalDocument {
 }
 
 export default function JuridicoPage() {
+  const queryClient = useQueryClient()
   const router = useRouter()
   const { session } = useAuth()
   const supabase = createClient()
-  const [loading, setLoading] = useState(true)
-  const [documents, setDocuments] = useState<LegalDocument[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState<'all' | 'ready' | 'generating'>('all')
-  const [showOnboarding, setShowOnboarding] = useState(false)
   const { needsOnboarding } = useOnboardingGuard()
 
   const handleNewDocument = () => {
@@ -48,88 +53,74 @@ export default function JuridicoPage() {
       router.push('/juridico/novo')
     }
   }
-  
-  const [metrics, setMetrics] = useState({
-    total: 0,
-    generating: 0,
-    complianceStatus: 'Seguro',
-  })
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout
+  const { data: documents = [], isLoading: loading } = useQuery({
+    queryKey: ['juridico-documents'],
+    queryFn: async () => {
+      const { data: allDocs, error } = await getJuridicoDocumentsAction()
 
-    async function loadData() {
-      try {
-        setLoading(true)
-        const guestId = localStorage.getItem('ianow_guest_id')
-        const { data: { session: currentSession } } = await supabase.auth.getSession()
-        
-        console.log('[JuridicoPage] Fetching repository. Session active:', !!currentSession)
-
-        // Busca unificada via Server Action (Bypassa RLS e Merges Guest/Org)
-        // Passamos o userId como 'hint' para garantir identificação se o getUser do server falhar.
-        const { data: allDocs, config, error } = await getJuridicoDocumentsAction(guestId, currentSession?.user?.id)
-        
-        if (error) {
-          console.error('[JuridicoPage] Fetch error:', error)
-          throw new Error(error)
-        }
-
-        // Sincroniza o modo de teste para exibir botões Dev se ativo
-        if (config && typeof config.isTestMode !== 'undefined') {
-          // Se precisar usar na lista, podemos adicionar um state, 
-          // mas o Paywall é mostrado na página de DETALHE ([id]/page.tsx).
-          // No entanto, vamos garantir que a action enviou os dados.
-        }
-
-        const docs = allDocs || []
-        console.log(`[JuridicoPage] Received ${docs.length} documents.`, docs)
-        setDocuments(docs)
-
-        // Cálculo dinâmico das métricas de compliance
-        const hasHighRisk = docs.some(d => d.metadata?.audit?.risk_level === 'alto')
-        const hasMediumRisk = docs.some(d => d.metadata?.audit?.risk_level === 'médio')
-        
-        const complianceStatus = hasHighRisk 
-          ? 'Risco Crítico' 
-          : hasMediumRisk 
-            ? 'Alertas Médios' 
-            : 'Seguro'
-
-        setMetrics({
-          total: docs.length,
-          generating: docs.filter(d => d.status === 'generating').length,
-          complianceStatus
-        })
-
-        // Se houver documentos gerando, ativa o polling
-        if (docs.some(d => d.status === 'generating')) {
-          if (!interval) {
-            interval = setInterval(loadData, 5000)
-          }
-        } else {
-          if (interval) clearInterval(interval)
-        }
-
-      } catch (err) {
-        console.error('Erro ao buscar documentos:', err)
-      } finally {
-        setLoading(false)
+      if (error) {
+        console.error('[JuridicoPage] Fetch error:', error)
+        throw new Error(error)
       }
-    }
 
-    loadData()
-    return () => {
-      if (interval) clearInterval(interval)
+      return (allDocs || []) as LegalDocument[]
+    },
+    // Polling dinâmico do TanStack! Se houver algum generating, refaz em 5 seg.
+    refetchInterval: (query) => {
+       const docs = query.state.data as LegalDocument[] | undefined
+       return docs?.some(d => d.status === 'generating') ? 5000 : false
     }
-  }, [session, supabase])
-
-  const filteredDocuments = documents.filter(doc => {
-    const matchesSearch = doc.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          doc.document_type.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesFilter = filter === 'all' || doc.status === filter
-    return matchesSearch && matchesFilter
   })
+
+  const metrics = React.useMemo(() => {
+    const hasHighRisk = documents.some(d => d.metadata?.audit?.risk_level === 'alto')
+    const hasMediumRisk = documents.some(d => d.metadata?.audit?.risk_level === 'médio')
+    
+    const complianceStatus = hasHighRisk 
+      ? 'Risco Crítico' 
+      : hasMediumRisk 
+        ? 'Alertas Médios' 
+        : 'Seguro'
+
+    return {
+      total: documents.length,
+      generating: documents.filter(d => d.status === 'generating').length,
+      complianceStatus
+    }
+  }, [documents])
+
+  const deleteMutation = useOptimisticMutation({
+    actionName: 'excluir documento',
+    mutationFn: (id: string) => deleteJuridicoDocumentAction(id),
+    queryKey: ['juridico-documents'],
+    operation: 'delete',
+    getEntityId: (id: string) => id,
+    updater: (old: any, id: string) => {
+      if (!Array.isArray(old)) return old
+      return old.filter((doc: any) => doc.id !== id)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+    }
+  })
+
+  const filteredDocuments = React.useMemo(() => {
+    const filtered = documents.filter(doc => {
+      const matchesSearch = doc.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            doc.document_type.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesFilter = filter === 'all' || doc.status === filter
+      return matchesSearch && matchesFilter
+    })
+
+    // Deduplicação por ID (Proteção Realtime) e Filtro de Exclusão Otimista
+    const seen = new Set()
+    return filtered.filter(doc => {
+      if (!doc.id || seen.has(doc.id) || isDeleted(doc.id)) return false
+      seen.add(doc.id)
+      return true
+    })
+  }, [documents, searchTerm, filter])
 
   if (loading) {
     return (
@@ -216,19 +207,32 @@ export default function JuridicoPage() {
                 filteredDocuments.map((doc) => {
                   const isGenerating = doc.status === 'generating'
                   const isStale = isGenerating && (new Date().getTime() - new Date(doc.created_at).getTime() > 180000)
-                  const displayStatus = isStale ? 'timeout' : doc.status
                   const isReady = doc.status === 'ready'
                   
                   return (
-                    <DocumentCard
+                    <PrefetchWrapper
                       key={doc.id}
+                      queryKey={['juridico-doc', doc.id]}
+                      queryFn={async () => {
+                        const { getJuridicoDocumentAction } = await import('@/app/actions/juridico-actions')
+                        const { data, config, error } = await getJuridicoDocumentAction(doc.id)
+                        if (error) throw new Error(error)
+                        return {
+                          document: data,
+                          config: config || { isTestMode: false },
+                          showPaywall: false
+                        }
+                      }}
+                    >
+                    <DocumentCard
                       id={doc.id}
                       href={`/juridico/${doc.id}`}
-                      title={doc.title}
-                      subtitle={doc.document_type}
+                      title={doc.title || 'Documento sem título'}
+                      subtitle={doc.metadata?.description || 'Documento gerado pela Minerva'}
                       date={new Date(doc.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
                       isGenerating={isGenerating}
                       isTimeout={isStale}
+                      onDelete={() => deleteMutation.mutate(doc.id)}
                       icon={<Scale size={22} />}
                       generatingIcon={<Clock size={16} className="animate-spin" />}
                       timeoutIcon={<AlertCircle size={22} />}
@@ -254,6 +258,7 @@ export default function JuridicoPage() {
                         }
                       ]}
                     />
+                    </PrefetchWrapper>
                   )
                 })
               ) : (

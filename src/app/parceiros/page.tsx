@@ -1,8 +1,10 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
+import { PrefetchWrapper } from '@/components/shared/PrefetchWrapper'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { Card } from '@/components/shared/Card'
 import { Button } from '@/components/shared/Button'
@@ -17,8 +19,6 @@ import {
   Mail,
   Phone,
   MapPin,
-  FileText,
-  Gavel,
   ShieldCheck,
   CheckCircle2,
   AlertCircle,
@@ -33,36 +33,82 @@ import {
   X
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { 
+  createPartnerAction, 
+  getPartnersAction, 
+  updatePartnerAction,
+  deletePartnerAction 
+} from '../actions/partner-actions'
 import { createClient } from '@/lib/supabase/client'
-import { useEffect } from 'react'
+
 import { cn } from '@/utils/cn'
 import { FormInput } from '@/components/shared/FormInput'
 import { FormTextArea } from '@/components/shared/FormTextArea'
 import { toast } from 'sonner'
 import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
+import { useAppData } from '@/providers/AppDataProvider'
 import { useRouter } from 'next/navigation'
+import { useOptimisticMutation } from '@/hooks/useOptimisticMutation'
 
 export default function PartnerHubPage() {
-  const { session } = useAuth()
+  const { session, user } = useAuth()
   const router = useRouter()
   const { needsOnboarding, isLoading: guardLoading } = useOnboardingGuard()
   const supabase = createClient()
-  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'all' | 'pf' | 'pj'>('all')
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [partners, setPartners] = useState<any[]>([])
-  const [orgInfo, setOrgInfo] = useState<any>(null)
-  const [counts, setCounts] = useState<{ contracts: Record<string, number>, cases: Record<string, number> }>({
-    contracts: {},
-    cases: {}
-  })
   const [isSaving, setIsSaving] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const { org: currentOrg } = useAppData()
+  const queryKey = ['partners', currentOrg?.id]
+
+  const { data: qData, isLoading: loading, isFetching } = useQuery({
+    queryKey,
+    queryFn: async () => {
+      if (!user) return { partners: [], orgInfo: null }
+
+      let orgId = currentOrg?.id
+
+      // 1. Fallback if org is not in AppData yet
+      if (!orgId) {
+        const { data: membership } = await supabase
+          .from('memberships')
+          .select('organization_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .maybeSingle() as any
+        orgId = membership?.organization_id
+      }
+
+      if (!orgId) return { partners: [], orgInfo: null }
+
+      // 2. Parallel fetch
+      const res = await Promise.all([
+        supabase.from('organizations').select('*').eq('id', orgId).single(),
+        supabase.from('partners').select('*').eq('organization_id', orgId).order('created_at', { ascending: false })
+      ]) as any[]
+
+      const [orgRes, partnersRes] = res
+      
+      return {
+        orgInfo: orgRes.data || null,
+        partners: partnersRes.data || []
+      }
+    },
+    enabled: !!user?.id && !!currentOrg?.id
+  })
+
+  // Destructure from query data with safe fallbacks
+  const partners = qData?.partners || []
+  const orgInfo = qData?.orgInfo || null
 
   useEffect(() => {
     if (needsOnboarding === true) {
       router.push('/onboarding?redirect=/parceiros')
     }
   }, [needsOnboarding, router])
+
 
   // Form State
   const [newPartner, setNewPartner] = useState({
@@ -76,76 +122,10 @@ export default function PartnerHubPage() {
     representative: { nome: '', cpf: '', cargo: '' }
   })
 
-  const loadData = async () => {
-    if (!session?.user?.id) return
-
-    try {
-      setLoading(true)
-
-      // 1. Fetch Org Info (Profile Matriz)
-      const { data: membership } = await supabase
-        .from('memberships')
-        .select('organization_id')
-        .eq('user_id', session.user.id)
-        .limit(1)
-        .maybeSingle() as any
-
-      const orgId = membership?.organization_id
-
-      if (orgId) {
-        // 2. Fetch data in parallel for better performance
-        const res = await Promise.all([
-          supabase.from('organizations').select('*').eq('id', orgId).single(),
-          supabase.from('partners').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }),
-          supabase.from('generated_documents').select('metadata').eq('organization_id', orgId).is('deleted_at', null),
-          supabase.from('justice_demands').select('metadata').eq('organization_id', orgId).is('deleted_at', null)
-        ]) as any[]
-
-        const [orgRes, partnersRes, contractsRes, demandsRes] = res
-
-        if (orgRes.data) setOrgInfo(orgRes.data)
-
-        // 3. Process Counts
-        const contractMap: Record<string, number> = {}
-        const caseMap: Record<string, number> = {}
-
-        contractsRes.data?.forEach((doc: any) => {
-          const pA = doc.metadata?.requestPayload?.partyA?.id
-          const pB = doc.metadata?.requestPayload?.partyB?.id
-          if (pA) contractMap[pA] = (contractMap[pA] || 0) + 1
-          if (pB) contractMap[pB] = (contractMap[pB] || 0) + 1
-        })
-
-        demandsRes.data?.forEach((dem: any) => {
-          const authId = dem.metadata?.authorId
-          const defId = dem.metadata?.defendantId
-          if (authId) caseMap[authId] = (caseMap[authId] || 0) + 1
-          if (defId) caseMap[defId] = (caseMap[defId] || 0) + 1
-        })
-
-        setCounts({ contracts: contractMap, cases: caseMap })
-
-        const processedPartners = (partnersRes.data || []).map((p: any) => ({
-          ...p,
-          contractsCount: contractMap[p.id] || 0,
-          casesCount: caseMap[p.id] || 0
-        }))
-
-        setPartners(processedPartners)
-      } else {
-        setPartners([])
-      }
-    } catch (err) {
-      console.error('Error loading partners:', err)
-    } finally {
-      setLoading(false)
-    }
+  const queryClient = useQueryClient()
+  const loadData = () => {
+    queryClient.invalidateQueries({ queryKey: ['partners'] })
   }
-
-  useEffect(() => {
-    loadData()
-  }, [session, supabase])
-
 
   const allPartners = [
     ...(orgInfo ? [{
@@ -160,11 +140,9 @@ export default function PartnerHubPage() {
       representative: (orgInfo.metadata as any)?.representante_legal?.nome || '',
       representative_cpf: (orgInfo.metadata as any)?.representante_legal?.cpf || '',
       isDefault: true,
-      metadata: orgInfo.metadata,
-      contractsCount: counts.contracts[orgInfo.id] || 0,
-      casesCount: counts.cases[orgInfo.id] || 0
+      metadata: orgInfo.metadata
     }] : []),
-    ...partners.map(p => ({
+    ...(partners || []).map((p: any) => ({
       ...p,
       type: (p.metadata as any)?.tipo || 'pj',
       document: (p.metadata as any)?.documento || p.category || '',
@@ -176,10 +154,9 @@ export default function PartnerHubPage() {
       website: (p.metadata as any)?.website || (p.metadata as any)?.site || '',
       representative: (p.metadata as any)?.representante_legal?.nome || '',
       representative_cpf: (p.metadata as any)?.representante_legal?.cpf || '',
-      isDefault: false,
-      contractsCount: p.contractsCount || 0,
-      casesCount: p.casesCount || 0
+      isDefault: false
     }))
+
   ]
 
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -191,7 +168,7 @@ export default function PartnerHubPage() {
       document: partner.document,
       email: partner.email,
       phone: partner.phone,
-      address: partner.address,
+      address: partner.address || '',
       website: partner.website || (partner.metadata as any)?.website || '',
       representative: {
         nome: partner.representative || '',
@@ -203,99 +180,130 @@ export default function PartnerHubPage() {
     setIsModalOpen(true)
   }
 
-  const handleDelete = async (partner: any) => {
-    if (partner.isDefault) return
-    if (!confirm(`Tem certeza que deseja remover "${partner.name}"? Esta ação não pode ser desfeita.`)) return
-    try {
-      const { error } = await (supabase.from('partners') as any).delete().eq('id', partner.id)
-      if (error) throw error
-      toast.success(`"${partner.name}" removido com sucesso.`)
-      await loadData()
-    } catch (err: any) {
-      toast.error('Erro ao remover parceiro: ' + (err.message || 'Erro desconhecido'))
-    }
+  const deleteMutation = useOptimisticMutation({
+    actionName: 'excluir parceiro',
+    mutationFn: (id: string) => deletePartnerAction(id),
+    queryKey: ['partners', currentOrg?.id],
+    operation: 'delete',
+    getEntityId: (id: string) => id,
+    updater: (old: any, id: string) => {
+      if (!old) return old
+      return {
+        ...old,
+        partners: old.partners.filter((p: any) => p.id !== id)
+      }
+    },
+  })
+
+  const handleDelete = async (id: string) => {
+    if (!id || !window.confirm('Tem certeza que deseja remover este contato?')) return
+    deleteMutation.mutate(id)
   }
+
+  const saveMutation = useOptimisticMutation({
+    actionName: editingId ? (editingId === orgInfo?.id ? 'updateOrganization' : 'updatePartner') : 'createPartner',
+    queryKey,
+    operation: editingId ? 'update' : 'create',
+    getEntityId: () => editingId || 'new',
+    mutationFn: async (variables: any) => {
+      const isEditingMatriz = editingId === orgInfo?.id
+
+      if (isEditingMatriz) {
+        const { data, error } = await (supabase.from('organizations') as any)
+          .update({
+            name: variables.name,
+            metadata: variables.metadata
+          })
+          .eq('id', editingId as string)
+          .select('*')
+          .single()
+        if (error) throw error
+        return data
+      } else if (editingId) {
+        const { data, error } = await (supabase.from('partners') as any)
+          .update({
+            name: variables.name,
+            contact_email: variables.contact_email,
+            metadata: variables.metadata
+          })
+          .eq('id', editingId as string)
+          .select('*')
+          .single()
+        if (error) throw error
+        return data
+      } else {
+        const { data, error } = await (supabase.from('partners') as any).insert({
+          organization_id: currentOrg?.id,
+          name: variables.name,
+          slug: variables.name.toLowerCase().replace(/ /g, '-') + '-' + Math.random().toString(36).substring(7),
+          contact_email: variables.contact_email,
+          metadata: variables.metadata
+        }).select('*').single()
+        if (error) throw error
+        return data
+      }
+    },
+    updater: (old: any, variables: any) => {
+      if (!old) return old
+      // Se variables.id existe, é um update. Caso contrário (ou se for o newItem otimista), é um create.
+      const isUpdate = variables.id && old.partners.some((p: any) => p.id === variables.id)
+
+      if (isUpdate) {
+        return {
+          ...old,
+          partners: old.partners.map((p: any) => p.id === variables.id ? { ...p, ...variables } : p)
+        }
+      }
+
+      // Lógica de Create: Inserir no início da lista partners do objeto
+      return {
+        ...old,
+        partners: [variables, ...old.partners]
+      }
+    },
+    onSuccess: () => {
+      setIsModalOpen(false)
+      setEditingId(null)
+      setNewPartner({ name: '', type: 'pj', document: '', email: '', phone: '', address: '', website: '', representative: { nome: '', cpf: '', cargo: '' } })
+      toast.success(editingId ? 'Parceiro atualizado!' : 'Parceiro cadastrado com sucesso!')
+    }
+  })
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newPartner.name) return
 
-    try {
-      setIsSaving(true)
-
-      const payload = {
-        name: newPartner.name,
-        metadata: {
-          tipo: newPartner.type,
-          documento: newPartner.document.trim() || 'Sem Documento',
-          email: newPartner.email,
-          telefone: newPartner.phone,
-          endereco: newPartner.address,
-          website: newPartner.website,
-          representante_legal: newPartner.representative
-        }
+    const payload = {
+      name: newPartner.name,
+      contact_email: newPartner.email,
+      metadata: {
+        tipo: newPartner.type,
+        documento: newPartner.document.trim() || 'Sem Documento',
+        email: newPartner.email,
+        telefone: newPartner.phone,
+        endereco: newPartner.address,
+        website: newPartner.website,
+        representante_legal: newPartner.representative
       }
-
-      const isEditingMatriz = editingId === orgInfo?.id
-
-      if (isEditingMatriz) {
-        // Update Organization
-        const { error } = await (supabase.from('organizations') as any)
-          .update({
-            name: payload.name,
-            metadata: payload.metadata
-          })
-          .eq('id', editingId as string)
-        if (error) throw error
-      } else if (editingId) {
-        // Update Partner
-        const { error } = await (supabase.from('partners') as any)
-          .update({
-            name: payload.name,
-            contact_email: newPartner.email,
-            metadata: payload.metadata
-          })
-          .eq('id', editingId as string)
-        if (error) throw error
-      } else {
-        // Insert Partner
-        const { error } = await (supabase.from('partners') as any).insert({
-          organization_id: orgInfo?.id,
-          name: newPartner.name,
-          slug: newPartner.name.toLowerCase().replace(/ /g, '-') + '-' + Math.random().toString(36).substring(7),
-          contact_email: newPartner.email,
-          metadata: payload.metadata
-        })
-        if (error) throw error
-      }
-
-      setIsModalOpen(false)
-      setEditingId(null)
-      await loadData()
-      setNewPartner({ name: '', type: 'pj', document: '', email: '', phone: '', address: '', website: '', representative: { nome: '', cpf: '', cargo: '' } })
-      toast.success(editingId ? 'Parceiro atualizado!' : 'Parceiro cadastrado com sucesso!')
-    } catch (err: any) {
-      console.error('CRITICAL SAVE ERROR:', err)
-      console.log('Error Type:', typeof err)
-      console.log('Payload sent:', {
-        editingId,
-        newPartner,
-        orgInfoId: orgInfo?.id
-      })
-
-      const errorMsg = err.message || JSON.stringify(err)
-      toast.error('Impossível salvar: ' + errorMsg)
-    } finally {
-      setIsSaving(false)
     }
+
+    saveMutation.mutate(payload)
   }
 
-  const filteredPartners = allPartners.filter(p => {
-    if (activeTab === 'all') return true
-    return p.type === activeTab
+
+  const filteredPartners = allPartners.filter((p: any) => {
+    const matchesSearch = (p.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.document || '').toLowerCase().includes(searchTerm.toLowerCase())
+
+    if (activeTab === 'all') return matchesSearch
+    return p.type === activeTab && matchesSearch
   })
 
-  if (loading || guardLoading || needsOnboarding === true) {
+  // Performance: Solo mostramos el spinner de pantalla completa si NO hay datos
+  // Si hay datos en cache (aunque sea stale), renderizamos la UI inmediatamente.
+  const hasNoData = loading && partners.length === 0
+  
+  if ((hasNoData || guardLoading) && needsOnboarding !== false) {
     return (
       <DashboardLayout>
         <PageContainer>
@@ -364,6 +372,8 @@ export default function PartnerHubPage() {
                   <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" />
                   <input
                     type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Buscar parceiro..."
                     className="h-12 pl-12 pr-6 rounded-2xl bg-slate-200/60 border-none text-sm font-black focus:ring-4 focus:ring-primary/10 transition-all outline-none w-full md:w-64 placeholder:text-slate-500 shadow-inner-sm"
                   />
@@ -375,119 +385,112 @@ export default function PartnerHubPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
 
               {filteredPartners.map((partner) => (
-                <Card
+                <PrefetchWrapper
                   key={partner.id}
-                  padding="none"
-                  className={cn(
-                    "group relative overflow-hidden bg-white hover:border-primary/30 transition-all hover:shadow-xl hover:shadow-primary/5",
-                    partner.isDefault && "border-primary/40 bg-primary/[0.01]"
-                  )}
+                  queryKey={['partner', partner.id]}
+                  queryFn={async () => {
+                    return { partner: partner, items: { contracts: [], strategies: [], protocols: [] } }
+                  }}
                 >
-                  {partner.isDefault && (
-                    <div className="hidden lg:block absolute top-4 right-4 z-10">
-                      <span className="bg-primary text-white text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-lg shadow-primary/20 flex items-center gap-1.5">
-                        <ShieldCheck size={10} /> Perfil Matriz
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="p-5 md:p-8 space-y-6">
-                    <div className="flex items-center gap-4 md:gap-5">
-                      <div className={cn(
-                        "w-14 h-14 md:w-16 md:h-16 rounded-[20px] md:rounded-[24px] flex items-center justify-center shadow-inner transition-transform group-hover:scale-110 duration-500 shrink-0",
-                        partner.type === 'pj' ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"
-                      )}>
-                        {partner.type === 'pj' ? <Building2 size={24} className="md:size-[32px]" /> : <User size={24} className="md:size-[32px]" />}
-                      </div>
-                      <div className="space-y-1.5 flex-1">
-                        <div className="flex flex-col md:flex-row md:items-center gap-2">
-                          <h3 className="font-black text-slate-900 text-lg leading-tight group-hover:text-primary transition-colors line-clamp-1">{partner.name}</h3>
-                          {partner.isDefault && (
-                            <span className="lg:hidden w-fit bg-primary text-white text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1">
-                              <ShieldCheck size={8} /> Matriz
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                          {partner.type === 'pj' ? 'CNPJ' : 'CPF'} • {partner.document}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 pb-6 border-b border-slate-50">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400"><FileText size={14} /></div>
-                        <div>
-                          <p className="text-xs font-black text-slate-900">{partner.contractsCount}</p>
-                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Contratos</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400"><Gavel size={14} /></div>
-                        <div>
-                          <p className="text-xs font-black text-slate-900">{partner.casesCount}</p>
-                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Processos</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3 text-slate-500 hover:text-primary transition-colors cursor-pointer group/item">
-                        <Mail size={14} className="group-hover/item:scale-110 transition-transform" />
-                        <span className="text-[11px] font-medium truncate">{partner.email}</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-slate-500">
-                        <Phone size={14} />
-                        <span className="text-[11px] font-medium">{partner.phone}</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-slate-500">
-                        <MapPin size={14} className="shrink-0" />
-                        <span className="text-[11px] font-medium truncate">{partner.address}</span>
-                      </div>
-                    </div>
-
-                    {partner.representative && (
-                      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2 bg-slate-100">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-black text-primary uppercase tracking-[0.1em]">Representante</span>
-                          <CheckCircle2 size={12} className="text-primary" />
-                        </div>
-                        <p className="text-[11px] font-bold text-slate-900 truncate">
-                          {partner.representative}
-                          {partner.representative_cpf && (
-                            <span className="text-slate-400 font-medium ml-2 text-[9px]">({partner.representative_cpf})</span>
-                          )}
-                        </p>
+                  <Card
+                    className={cn(
+                      "group relative overflow-hidden bg-white hover:border-primary/30 transition-all hover:shadow-xl hover:shadow-primary/5",
+                      partner.isDefault && "border-primary/40 bg-primary/[0.01]"
+                    )}
+                  >
+                    {partner.isDefault && (
+                      <div className="hidden lg:block absolute top-4 right-4 z-10">
+                        <span className="bg-primary text-white text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-lg shadow-primary/20 flex items-center gap-1.5">
+                          <ShieldCheck size={10} /> Perfil Matriz
+                        </span>
                       </div>
                     )}
-                  </div>
 
-                  <div className="p-3 bg-slate-50/50 border-t border-slate-50 flex items-center gap-2">
-                    <Button
-                      onClick={() => handleEdit(partner)}
-                      variant="ghost"
-                      size="sm"
-                      className="flex-1 h-10 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-primary border border-transparent hover:border-primary/10"
-                    >
-                      Editar
-                    </Button>
-                    <Link href={`/parceiros/${partner.id}`} className="flex-1">
-                      <Button variant="outline" size="sm" className="w-full h-10 text-[9px] md:text-[10px] font-black uppercase tracking-widest border-slate-200 hover:bg-white active:scale-95 transition-all">
-                        Ver itens vinculados
-                      </Button>
-                    </Link>
-                    {!partner.isDefault && (
+                    <div className="p-5 md:p-8 space-y-6">
+                      <div className="flex items-center gap-4 md:gap-5">
+                        <div className={cn(
+                          "w-14 h-14 md:w-16 md:h-16 rounded-[20px] md:rounded-[24px] flex items-center justify-center shadow-inner transition-transform group-hover:scale-110 duration-500 shrink-0",
+                          partner.type === 'pj' ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"
+                        )}>
+                          {partner.type === 'pj' ? <Building2 size={24} className="md:size-[32px]" /> : <User size={24} className="md:size-[32px]" />}
+                        </div>
+                        <div className="space-y-1.5 flex-1">
+                          <div className="flex flex-col md:flex-row md:items-center gap-2">
+                            <h3 className="font-black text-slate-900 text-lg leading-tight group-hover:text-primary transition-colors line-clamp-1">{partner.name}</h3>
+                            {partner._optimistic && (
+                              <span className="w-fit flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-50 text-[8px] font-black text-amber-600 uppercase tracking-widest border border-amber-100 animate-pulse">
+                                <Loader2 size={10} className="animate-spin" />
+                                Sincronizando...
+                              </span>
+                            )}
+                            {partner.isDefault && (
+                              <span className="lg:hidden w-fit bg-primary text-white text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1">
+                                <ShieldCheck size={8} /> Matriz
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            {partner.type === 'pj' ? 'CNPJ' : 'CPF'} • {partner.document}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pb-2 border-b border-blue-300" />
+
+
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3 text-slate-500 hover:text-primary transition-colors cursor-pointer group/item">
+                          <Mail size={14} className="group-hover/item:scale-110 transition-transform" />
+                          <span className="text-[11px] font-medium truncate">{partner.email}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-slate-500">
+                          <Phone size={14} />
+                          <span className="text-[11px] font-medium">{partner.phone}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-slate-500">
+                          <MapPin size={14} className="shrink-0" />
+                          <span className="text-[11px] font-medium truncate">{partner.address}</span>
+                        </div>
+                      </div>
+
+                      {partner.representative && (
+                        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2 bg-slate-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[9px] font-black text-primary uppercase tracking-[0.1em]">Representante</span>
+                            <CheckCircle2 size={12} className="text-primary" />
+                          </div>
+                          <p className="text-[11px] font-bold text-slate-900 truncate">
+                            {partner.representative}
+                            {partner.representative_cpf && (
+                              <span className="text-slate-400 font-medium ml-2 text-[9px]">({partner.representative_cpf})</span>
+                            )}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center gap-2">
                       <Button
-                        onClick={() => handleDelete(partner)}
-                        variant="ghost"
+                        onClick={() => handleEdit(partner)}
+                        variant="outline"
                         size="sm"
-                        className="h-10 w-10 shrink-0 text-slate-300 hover:text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-xl transition-all"
+                        className="flex-1 h-10 text-[10px] font-black uppercase tracking-widest text-slate-600 border-slate-200 hover:border-primary hover:text-primary hover:bg-white shadow-sm rounded-xl transition-all"
                       >
-                        <Trash2 size={14} />
+                        Editar
                       </Button>
-                    )}
-                  </div>
-                </Card>
+                      {!partner.isDefault && (
+                          <Button
+                            onClick={() => handleDelete(partner.id)}
+                            variant="outline"
+                            size="sm"
+                            className="h-10 w-10 shrink-0 text-slate-400 hover:text-red-600 hover:bg-red-50 border-slate-200 hover:border-red-200 rounded-xl transition-all shadow-sm"
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                      )}
+                    </div>
+                  </Card>
+                </PrefetchWrapper>
               ))}
             </div>
           </div>
@@ -670,7 +673,7 @@ export default function PartnerHubPage() {
 
                   <div className="p-5 md:p-8 bg-slate-50 flex items-center gap-3 md:gap-4">
                     <Button type="button" onClick={() => setIsModalOpen(false)} variant="outline" className="flex-1 h-12 md:h-14 rounded-xl md:rounded-2xl font-bold border-slate-200 text-xs md:text-base">Cancelar</Button>
-                    <Button isLoading={isSaving} type="submit" className="flex-[2] h-12 md:h-14 rounded-xl md:rounded-2xl bg-primary text-white font-bold shadow-xl shadow-primary/20 text-xs md:text-base">Salvar Parceiro</Button>
+                    <Button isLoading={saveMutation.isPending} type="submit" className="flex-[2] h-12 md:h-14 rounded-xl md:rounded-2xl bg-primary text-white font-bold shadow-xl shadow-primary/20 text-xs md:text-base">Salvar Parceiro</Button>
                   </div>
                 </form>
               </Card>

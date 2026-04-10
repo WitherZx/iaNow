@@ -1,8 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
+import { markDeleted } from '@/lib/optimistic/optimisticRegistry'
 import { supabase } from '@/lib/supabase/client'
+import { deleteStrategyAction } from '@/app/actions/strategy-actions'
 import { 
   TrendingUp,
   ShieldCheck,
@@ -15,7 +18,8 @@ import {
   History as HistoryIcon,
   Clock,
   CheckCircle2,
-  RotateCcw
+  RotateCcw,
+  AlertTriangle
 } from 'lucide-react'
 import { Card } from "@/components/shared/Card"
 import { Button } from "@/components/shared/Button"
@@ -30,6 +34,8 @@ import { DocumentAuditLayout } from '@/components/shared/DocumentAuditLayout'
 import { TechnicalReportCard } from '@/components/shared/TechnicalReportCard'
 import { SidebarRefineSection } from '@/components/shared/SidebarRefineSection'
 import { Paywall } from '@/components/shared/Paywall'
+import { db } from '@/lib/storage/db'
+import { conflictStore } from '@/lib/conflict/conflictStore'
 
 // Standard local components
 const Badge = ({ children, className }: { children: React.ReactNode, className?: string }) => (
@@ -45,59 +51,89 @@ const Skeleton = ({ className }: { className?: string }) => (
 export default function EstrategiaDetalhePage() {
   const { id } = useParams()
   const router = useRouter()
-  const [strategy, setStrategy] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
+  const initialCache = typeof window !== 'undefined' 
+    ? queryClient.getQueryData<any[]>(['strategies'])?.find((s: any) => s.id === id) || null
+    : null
+    
+  const [strategy, setStrategy] = useState<any>(initialCache)
+  // If we have initialCache, we skip the blocking loader!
+  const [loading, setLoading] = useState(!initialCache)
   const [refining, setRefining] = useState(false)
   const [refinePrompt, setRefinePrompt] = useState('')
-  const [isGuest, setIsGuest] = useState(true)
-  const [showPaywall, setShowPaywall] = useState(true)
+  const [showPaywall, setShowPaywall] = useState(false)
   const [configParams, setConfigParams] = useState({ isTestMode: false })
 
   const [versions, setVersions] = useState<any[]>([])
   const [viewingVersion, setViewingVersion] = useState<any>(null)
   const [loadingVersions, setLoadingVersions] = useState(false)
   const [showHistoryDropdown, setShowHistoryDropdown] = useState(false)
+  const [isConflictLocked, setIsConflictLocked] = useState(false)
+
+  // Garantir que content seja um objeto válido para evitar TypeError
+  // Definindo no topo para respeitar as Regras de Hooks (sempre antes de condicionais e useEffects)
+  const content = useMemo(() => {
+    const rawContent = strategy?.content
+    
+    // Se não temos o objeto content ainda, tentamos usar o que veio do cache da lista (flat structure)
+    if (!rawContent) {
+      return { 
+        title: strategy?.title || 'Carregando...', 
+        description: strategy?.description || '', 
+        actionPlan: [] 
+      }
+    }
+
+    if (typeof rawContent === 'string') {
+      try { return JSON.parse(rawContent) } catch (e) { return { title: strategy?.title || 'Erro no conteúdo', description: strategy?.description || '', actionPlan: [] } }
+    }
+    return rawContent
+  }, [strategy?.content, strategy?.title, strategy?.description])
+
+  // Monitora conflitos pendentes para esta entidade específicos (Fase 5)
+  useEffect(() => {
+    if (!id) return
+    const unsubscribe = conflictStore.subscribe(() => {
+      setIsConflictLocked(conflictStore.has(id as string))
+    })
+    return () => { unsubscribe() }
+  }, [id])
 
   useEffect(() => {
     async function loadAndCheck() {
       if (!id) return
       try {
-        const guestId = localStorage.getItem('ianow_guest_id')
         const { getStrategyAction } = await import('@/app/actions/strategy-actions')
-        const { data, config, error } = await getStrategyAction(id as string, guestId)
+        const { data, config, error } = await getStrategyAction(id as string)
 
         if (error || !data) throw new Error(error || 'Estratégia não encontrada')
 
         setStrategy(data)
-        const { data: { session } } = await supabase.auth.getSession()
+        if (config) setConfigParams(config)
 
-        // Robust Access Check: Prioritize is_paid column, fallback to metadata
+        // 1. All Access check (Server-side verified)
+        if (config?.isAllAccess) {
+          setShowPaywall(false)
+          return
+        }
+
+        // 2. Individual Unlock Check
         let metadata = data.metadata || {}
         if (typeof metadata === 'string') {
           try { metadata = JSON.parse(metadata) } catch (e) { metadata = {} }
         }
-
-        const isGuestDoc = metadata?.guest_id === guestId
         const isUnlocked = data.is_paid === true || metadata.unlocked === true
 
-        // 0. Se for isAllAccess (Admin), bypass do paywall
-        if (config?.isAllAccess) {
+        if (isUnlocked) {
           setShowPaywall(false)
-          setIsGuest(!session)
-        }
-        // 1. Se estiver desbloqueado explicitamente (is_paid ou unlocked), libera
-        else if (isUnlocked) {
-          setShowPaywall(false)
-          setIsGuest(false)
-        } 
-        // 2. Se for Guest e não estiver desbloqueado, bloqueia
-        else if (isGuestDoc && !session) {
-          setShowPaywall(true)
-          setIsGuest(true)
-        }
-        // 3. Se estiver logado, verifica plano Pro do usuário
-        else if (session) {
-          setIsGuest(false)
+        } else {
+          // 3. Fallback check for Pro Plan (Client side verification if server didn't set isAllAccess)
+          const { data: { session } } = await supabase.auth.getSession()
+          if (!session) {
+            setShowPaywall(true)
+            return
+          }
+
           const { data: membership } = await supabase
             .from('memberships')
             .select('organization_id')
@@ -121,17 +157,11 @@ export default function EstrategiaDetalhePage() {
                 .eq('id', org.plan_id)
                 .maybeSingle()
 
-              if (plan?.slug === 'pro') {
-                setShowPaywall(false)
-              } else {
-                setShowPaywall(true)
-              }
+              setShowPaywall(plan?.slug !== 'pro')
             } else {
               setShowPaywall(true)
             }
           }
-        } else {
-          setShowPaywall(true)
         }
       } catch (err: any) {
         console.error('Error loading strategy:', err)
@@ -147,9 +177,9 @@ export default function EstrategiaDetalhePage() {
   const loadVersions = async () => {
     try {
       setLoadingVersions(true)
-      const guestId = localStorage.getItem('ianow_guest_id')
+      setLoadingVersions(true)
       const { getDocumentVersionsAction } = await import('@/app/actions/version-actions')
-      const res = await getDocumentVersionsAction(id as string, 'strategy', guestId)
+      const res = await getDocumentVersionsAction(id as string, 'strategy')
       if (res.success) setVersions(res.data)
     } catch (err) {
       console.error('Erro ao carregar versões:', err)
@@ -185,14 +215,12 @@ export default function EstrategiaDetalhePage() {
     if (!refinePrompt.trim() || refining) return
     setRefining(true)
     try {
-      const guestId = localStorage.getItem('ianow_guest_id')
       const response = await fetch('/api/ai/strategy/refine', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           strategyId: id as string, 
-          prompt: refinePrompt,
-          guestId
+          prompt: refinePrompt
         })
       })
       const data = await response.json()
@@ -229,9 +257,8 @@ export default function EstrategiaDetalhePage() {
     setStrategy({ ...strategy, content: newContent })
 
     try {
-      const guestId = localStorage.getItem('ianow_guest_id')
       const { updateStrategyAction } = await import('@/app/actions/strategy-actions')
-      const res = await updateStrategyAction(id as string, newContent, guestId)
+      const res = await updateStrategyAction(id as string, newContent)
       
       if (res.error) throw new Error(res.error)
 
@@ -240,12 +267,30 @@ export default function EstrategiaDetalhePage() {
 
       toast.success('Alteração salva!', { id: toastId })
     } catch (err: any) {
-      console.error('Erro ao salvar:', err)
-      toast.error('Erro ao salvar: ' + err.message, { id: toastId })
+      console.error('Erro de rede ao salvar, tentando salvar localmente:', err)
       
-      // Rollback UI
-      const originalContent = { ...strategy.content }
-      setStrategy({ ...strategy, content: originalContent })
+      let enqueueSuccess = false
+
+      // 1. OUTBOX: Tenta enfileirar primeiro para manter a consistência otimista
+      try {
+        await db.enqueue({
+          clientMutationId: crypto.randomUUID(),
+          entityId: id as string,
+          action: 'updateStrategy',
+          payload: { id: id as string, content: newContent },
+        })
+        enqueueSuccess = true
+        toast.info('Alteração salva localmente. Será sincronizada automaticamente.', { id: toastId })
+      } catch (outboxErr) {
+        console.error('Falha crítica ao gravar no disco local:', outboxErr)
+        toast.error('Ocorreu um erro ao salvar: ' + err.message, { id: toastId })
+      }
+
+      // 2. ROLLBACK CONDICIONAL: Só reverte a UI se a ação foi perdida inteiramente
+      if (!enqueueSuccess) {
+        const originalContent = { ...strategy.content }
+        setStrategy({ ...strategy, content: originalContent })
+      }
     }
   }
 
@@ -253,12 +298,17 @@ export default function EstrategiaDetalhePage() {
     if (!id || !window.confirm('Tem certeza que deseja deletar este documento permanentemente?')) return
     
     try {
-      const guestId = localStorage.getItem('ianow_guest_id')
-      const { deleteStrategyAction } = await import('@/app/actions/strategy-actions')
-      const res = await deleteStrategyAction(id as string, guestId)
+      const res = await deleteStrategyAction(id as string)
       
       if (res.error) throw new Error(res.error)
 
+      // Marca como deletado localmente para evitar ghosting na lista principal
+      markDeleted(id as string)
+
+      // Invalida o cache da lista e do dashboard
+      queryClient.invalidateQueries({ queryKey: ['strategies'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      
       toast.success('Estratégia excluída!')
       router.push('/estrategia')
     } catch (err: any) {
@@ -267,22 +317,7 @@ export default function EstrategiaDetalhePage() {
     }
   }
 
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <PageContainer>
-          <div className="space-y-8">
-            <Skeleton className="h-6 w-32" />
-            <Skeleton className="h-[200px] w-full" />
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <Skeleton className="lg:col-span-2 h-[400px]" />
-              <Skeleton className="h-[400px]" />
-            </div>
-          </div>
-        </PageContainer>
-      </DashboardLayout>
-    )
-  }
+
 
   if (!strategy) {
     return (
@@ -311,7 +346,6 @@ export default function EstrategiaDetalhePage() {
             onUnlockSuccess={async () => {
               // 1. Atualiza estados locais imediatamente para remover o Paywall da tela
               setShowPaywall(false)
-              setIsGuest(false)
               setStrategy((prev: any) => prev ? { ...prev, metadata: { ...prev.metadata, unlocked: true } } : prev)
               
               // 2. Notifica o usuário
@@ -319,8 +353,7 @@ export default function EstrategiaDetalhePage() {
               
               // 3. Recarrega os dados em background para garantir sincronia com o servidor sem F5
               const { getStrategyAction } = await import('@/app/actions/strategy-actions')
-              const guestId = localStorage.getItem('ianow_guest_id')
-              const res = await getStrategyAction(id as string, guestId)
+              const res = await getStrategyAction(id as string)
               if (res.data) {
                 setStrategy(res.data)
               }
@@ -331,7 +364,7 @@ export default function EstrategiaDetalhePage() {
     )
   }
 
-  const { content } = strategy
+
 
   return (
     <DocumentAuditLayout
@@ -345,7 +378,7 @@ export default function EstrategiaDetalhePage() {
       hero={
         <DocumentHero
           category="Estratégia"
-          date={new Date(strategy.created_at).toLocaleDateString('pt-BR')}
+          date={strategy.raw_created_at ? new Date(strategy.raw_created_at).toLocaleDateString('pt-BR') : (strategy.created_at || '...') }
           title={content.title}
           description={content.description}
         />
@@ -374,8 +407,17 @@ export default function EstrategiaDetalhePage() {
             value={refinePrompt}
             onChange={setRefinePrompt}
             onSubmit={handleRefine}
-            isLoading={refining}
+            isLoading={refining || isConflictLocked}
           />
+
+          {isConflictLocked && (
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+              <p className="text-[11px] font-bold text-amber-800 uppercase leading-tight">
+                Ações desativadas: Você tem um conflito de dados pendente para esta estratégia. Resolva-o para continuar.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-4">
             <div className="flex items-center gap-2 px-2 text-[10px] font-black uppercase text-primary tracking-widest">
@@ -458,24 +500,20 @@ export default function EstrategiaDetalhePage() {
                 key={index} 
                 onClick={() => toggleTask(index)}
                 className={cn(
-                  "group flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6 p-5 md:p-6 border rounded-[24px] md:rounded-2xl transition-all select-none",
-                  isGuest ? "cursor-default" : "cursor-pointer",
+                  "group flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6 p-5 md:p-6 border rounded-[24px] md:rounded-2xl transition-all select-none cursor-pointer",
                   item.completed 
                     ? "bg-emerald-50/20 border-emerald-100/50" 
-                    : cn(
-                        "bg-white border-slate-100",
-                        !isGuest && "hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-50/50"
-                      )
+                    : "bg-white border-slate-100 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-50/50"
                 )}
               >
                 <div className="flex items-center justify-between w-full md:w-auto md:flex-initial">
                   <div className={cn(
                     "w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center font-bold text-sm md:text-lg transition-all",
-                    item.completed && !isGuest
+                    item.completed
                       ? "bg-emerald-500 text-white" 
                       : "bg-slate-50 text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600"
                   )}>
-                    {item.completed && !isGuest ? <CheckCircle size={20} /> : (index + 1)}
+                    {item.completed ? <CheckCircle size={20} /> : (index + 1)}
                   </div>
                 </div>
 

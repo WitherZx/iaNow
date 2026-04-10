@@ -30,6 +30,8 @@ import { StepBadge } from '@/components/shared/StepBadge'
 import { PartnerSelector } from '@/components/shared/PartnerSelector'
 import { Label } from '@/components/shared/Label'
 import { toast } from 'sonner'
+import { useOptimisticMutation } from '@/hooks/useOptimisticMutation'
+import { useQueryClient } from '@tanstack/react-query'
 
 const COMPLEXITY_LEVELS = [
   { id: 'básico', title: 'Básico', desc: 'Estrutura enxuta para acordos diretos e de baixo risco.', icon: Zap },
@@ -67,38 +69,21 @@ export default function NewDocumentPage() {
 
   // 3. Parâmetros (Contexto Adicional)
   const [parametros, setParametros] = useState('')
+  const queryClient = useQueryClient()
+  const queryKey = ['juridico-documents']
 
-  const [isSubmitting, setIsSubmitting] = useState(false)
-
-  const handleGenerate = async () => {
-    setIsSubmitting(true)
-
-    try {
-      const guestId = !localStorage.getItem('sb-auth-token')
-        ? (localStorage.getItem('ianow_guest_id') || crypto.randomUUID())
-        : null
-
-      if (guestId && !localStorage.getItem('ianow_guest_id')) {
-        localStorage.setItem('ianow_guest_id', guestId)
-      }
-
+  const generateMutation = useOptimisticMutation({
+    actionName: 'createJuridicoDocument',
+    queryKey,
+    isCreate: true,
+    getEntityId: () => 'new',
+    mutationFn: async (variables: any) => {
       const res = await fetch('/api/juridico/gerar', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          ...(guestId ? { 'X-Guest-Id': guestId } : {})
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          tipoContrato,
-          nivel,
-          perfilPartes,
-          objetivo,
-          foro,
-          partyA,
-          partyB,
-          protectedSide,
-          parametros
-        })
+        body: JSON.stringify(variables)
       })
 
       if (!res.ok) {
@@ -106,14 +91,35 @@ export default function NewDocumentPage() {
         throw new Error(errorData.error || 'Falha ao processar a geração do contrato')
       }
 
-      const data = await res.json()
+      return await res.json()
+    },
+    updater: (old: any, variables) => old,
+    onSuccess: (data) => {
       window.location.href = `/juridico/${data.documentId}`
-    } catch (e: any) {
-      console.error(e)
-      toast.error(e.message || 'Erro inesperado!')
-      setIsSubmitting(false)
     }
+  })
+
+  const handleGenerate = async () => {
+    const payload = {
+      tipoContrato,
+      nivel,
+      perfilPartes,
+      objetivo,
+      foro,
+      partyA,
+      partyB,
+      protectedSide,
+      parametros,
+      // Metadata para reconciliação determinística
+      metadata: {
+        title: tipoContrato,
+        // client_temp_id injetado pelo hook
+      }
+    }
+
+    generateMutation.mutate(payload)
   }
+
 
   // Verificação de campos para habilitar os botões "Avançar"
   const isStep1Valid = tipoContrato.trim().length > 2 && objetivo.trim().length > 5 && perfilPartes.trim().length > 2 && foro.trim().length > 2
@@ -381,7 +387,7 @@ export default function NewDocumentPage() {
             {/* STEP 3: PARÂMETROS ADICIONAIS E GERAÇÃO */}
             {step === 3 && (
               <div className="flex flex-col gap-y-10 animate-in fade-in slide-in-from-right-4 duration-500">
-                {!isSubmitting ? (
+                {!generateMutation.isPending ? (
                   <>
                     <div className="mb-2 border-b border-slate-100 pb-6 flex flex-col gap-y-4">
                       <div className="md:hidden">

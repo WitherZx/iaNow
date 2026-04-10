@@ -27,6 +27,9 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/utils/cn'
 import { useAuth } from '@/hooks/useAuth'
+import { useAppData } from '@/providers/AppDataProvider'
+import { useOptimisticMutation } from '@/hooks/useOptimisticMutation'
+import { useQueryClient } from '@tanstack/react-query'
 
 const TYPE_OPTIONS = [
   { label: 'Pessoa Física', value: 'pf' },
@@ -71,6 +74,9 @@ export default function NovoJusticaPage() {
   const [user, setUser] = useState<any>(null)
 
   const { isAuthenticated, user: authUser } = useAuth()
+  const { org } = useAppData()
+  const queryClient = useQueryClient()
+  const queryKey = ['justice-cases', org?.id]
 
   const [formData, setFormData] = useState({
     problemType: 'Consumidor',
@@ -113,30 +119,18 @@ export default function NovoJusticaPage() {
     }
   }, [authUser])
 
-  const handleComplete = async () => {
-    try {
-      setLoading(true)
-      const guestId = !localStorage.getItem('sb-auth-token')
-        ? (localStorage.getItem('ianow_guest_id') || crypto.randomUUID())
-        : null
-
-      if (guestId && !localStorage.getItem('ianow_guest_id')) {
-        localStorage.setItem('ianow_guest_id', guestId)
-      }
-
-      const fullData = {
-        ...formData,
-        description: formData.whatHappened,
-        estimatedValue: (Number(formData.materialDamage || 0) + Number(formData.moralDamage || 0)).toString()
-      }
-
+  const generateMutation = useOptimisticMutation({
+    actionName: 'createJusticeDemand',
+    queryKey,
+    isCreate: true,
+    getEntityId: () => 'new',
+    mutationFn: async (variables: any) => {
       const response = await fetch('/api/justica/gerar', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          ...(guestId ? { 'X-Guest-Id': guestId } : {})
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ diagnosticData: fullData })
+        body: JSON.stringify(variables)
       })
 
       if (!response.ok) {
@@ -144,19 +138,35 @@ export default function NovoJusticaPage() {
         throw new Error(errData.error || 'Falha ao processar demanda')
       }
 
-      const result = await response.json()
+      return await response.json()
+    },
+    updater: (old: any, variables) => {
+      // For create mode, hook handles prepending. This updater is a fallback.
+      return old
+    },
+    onSuccess: (result) => {
       toast.success('Petição redigida. Redirecionando...')
-
       setTimeout(() => {
         router.push(`/justica/${result.demandId}`)
       }, 1500)
-
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao processar.')
-    } finally {
-      setLoading(false)
     }
+  })
+
+  const handleComplete = async () => {
+    const fullData = {
+      ...formData,
+      description: formData.whatHappened,
+      estimatedValue: (Number(formData.materialDamage || 0) + Number(formData.moralDamage || 0)).toString(),
+      // Reconciliação Determinística
+      metadata: {
+        ...(formData as any).metadata,
+        // O tempId será injetado pelo hook no payload.metadata.client_temp_id
+      }
+    }
+
+    generateMutation.mutate(fullData)
   }
+
 
   const nextStep = () => setActiveStep(prev => Math.min(prev + 1, STEPS.length - 1))
   const prevStep = () => setActiveStep(prev => Math.max(prev - 1, 0))
@@ -500,7 +510,7 @@ export default function NovoJusticaPage() {
             </div>
           </div>
 
-          {loading ? (
+          {generateMutation.isPending ? (
             <Card className="flex flex-col items-center justify-center p-12 sm:p-20 gap-6 rounded-[32px] sm:rounded-[40px]">
               <Loader2 size={48} className="text-primary animate-spin sm:w-[64px] sm:h-[64px]" />
               <div className="text-center">

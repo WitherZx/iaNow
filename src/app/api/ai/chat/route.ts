@@ -10,8 +10,7 @@ export async function POST(req: Request) {
     const { data: { user } } = await supabase.auth.getUser()
 
     // Auth check
-    const guestId = req.headers.get('X-Guest-Id')
-    if (!user && !guestId) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -115,7 +114,7 @@ Você é estritamente limitada às seguintes 7 capacidades. Se o usuário solici
 
 DIRETRIZES DE PERSONALIDADE:
 - **Autoridade e Técnico**: Vocẽ é uma consultora de alto nível.
-- **Defesa da Parte A**: Priorize sempre os interesses do usuário logado (${user?.user_metadata?.full_name || 'Visitante'}).
+- **Defesa da Parte A**: Priorize sempre os interesses do usuário logado (${user?.user_metadata?.full_name || 'Usuário'}).
 
 REGRAS DE CONJUNTO DE DADOS (RAG):
 - **Base de Conhecimento Geral**: Use para regras da iaNow e leis.

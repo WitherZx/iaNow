@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -39,18 +40,20 @@ import ReactMarkdown from 'react-markdown'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn } from '@/utils/cn'
+import { markDeleted } from '@/lib/optimistic/optimisticRegistry'
 import { TechnicalReportCard } from '@/components/shared/TechnicalReportCard'
 import { SidebarRefineSection } from '@/components/shared/SidebarRefineSection'
 import { Paywall } from '@/components/shared/Paywall'
 import { unlockDocumentMockAction } from '@/app/actions/asaas-actions'
 import { createDocumentVersionAction } from '@/app/actions/version-actions'
+import { getJuridicoDocumentAction, deleteJuridicoDocumentAction as deleteAction } from '@/app/actions/juridico-actions'
 
 export default function ViewDocumentPage() {
   const { id } = useParams()
   const router = useRouter()
   const supabase = createClient() as any
 
-  const [loading, setLoading] = useState(true)
+
   const [doc, setDoc] = useState<any>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
@@ -68,14 +71,6 @@ export default function ViewDocumentPage() {
   const [loadingVersions, setLoadingVersions] = useState(false)
   const [showHistoryDropdown, setShowHistoryDropdown] = useState(false)
 
-  const getOrCreateGuestId = () => {
-    if (typeof window === 'undefined') return ''
-    const current = localStorage.getItem('ianow_guest_id')
-    if (current) return current
-    const generated = `guest-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-    localStorage.setItem('ianow_guest_id', generated)
-    return generated
-  }
 
   const scrollToToken = (token: string) => {
     setActiveToken(token)
@@ -125,9 +120,8 @@ export default function ViewDocumentPage() {
   const loadVersions = async () => {
     try {
       setLoadingVersions(true)
-      const guestId = getOrCreateGuestId()
       const { getDocumentVersionsAction } = await import('@/app/actions/version-actions')
-      const res = await getDocumentVersionsAction(id as string, 'juridico', guestId)
+      const res = await getDocumentVersionsAction(id as string, 'juridico')
       if (res.success) setVersions(res.data)
     } catch (err) {
       console.error('Erro ao carregar versões:', err)
@@ -143,7 +137,7 @@ export default function ViewDocumentPage() {
       return
     }
     try {
-      setLoading(true)
+      setLoadingVersions(true)
       const { getVersionContentAction } = await import('@/app/actions/version-actions')
       const res = await getVersionContentAction(v.id)
       if (res.success) {
@@ -154,71 +148,59 @@ export default function ViewDocumentPage() {
     } catch (err) {
       console.error('Erro ao carregar conteúdo da versão:', err)
     } finally {
-      setLoading(false)
+      setLoadingVersions(false)
       setShowHistoryDropdown(false)
     }
   }
 
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null
+  const queryClient = useQueryClient()
+  
+  const { data: queryData, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['juridico-doc', id],
+    queryFn: async () => {
+      if (!id) return null
+      
+      const { getJuridicoDocumentAction } = await import('@/app/actions/juridico-actions')
+      const { data, config, error } = await getJuridicoDocumentAction(id as string)
 
-    async function loadDocument() {
-      if (!id) return
-      try {
-        const guestId = getOrCreateGuestId()
+      console.log('[ViewDocumentPage] getJuridicoDocumentAction Result:', { hasData: !!data, hasConfig: !!config, error })
+
+      let finalDoc = data
+      let showPaywall = false
+
+      if (error) {
+        console.error('[ViewDocumentPage] Error from server action:', error)
         
-        // 1. Usar a nova Server Action para buscar o documento (com suporte a Guest)
-        const { getJuridicoDocumentAction } = await import('@/app/actions/juridico-actions')
-        const { data, config, error } = await getJuridicoDocumentAction(id as string, guestId)
+        // Fallback for missing permission / direct API
+        const response = await fetch(`/api/juridico/document/${id as string}`, {
+          method: 'GET'
+        })
+        
+        let payload: any = null
+        try { payload = await response.json() } catch {}
 
-        console.log('[ViewDocumentPage] getJuridicoDocumentAction Result:', { hasData: !!data, hasConfig: !!config, error })
-
-        if (error) {
-          console.error('[ViewDocumentPage] Error from server action:', error)
-          
-          // Fallback para API tradicional se houver erro na Action (segurança extra)
-          const response = await fetch(`/api/juridico/document/${id as string}`, {
-            method: 'GET',
-            headers: { 'X-Guest-Id': guestId }
-          })
-          
-          let payload: any = null
-          try {
-            payload = await response.json()
-          } catch (jsonErr) {
-            console.warn('[ViewDocumentPage] Fallback JSON parse error:', jsonErr)
-          }
-
-          if (response.status === 402 && payload?.paywall) {
-            setShowPaywall(true)
-            setDoc(payload.document || null)
-            setLoading(false)
-            if (interval) clearInterval(interval)
-            return
-          }
-
-          // Se não foi erro de paywall e a Action deu erro, mostramos o erro real
+        if (response.status === 402 && payload?.paywall) {
+          showPaywall = true
+          finalDoc = payload.document || null
+        } else {
           toast.error(error || 'Documento não encontrado ou sem permissão')
-          setLoading(false)
-          if (interval) clearInterval(interval)
-          return
+          throw new Error('Documento inacessível')
         }
+      }
 
-        // --- Lógica de Paywall Estrita ---
+      // Se n de erro direto e finalDoc for valido, vamos resolver as constraints rigorosas no Client
+      // access control
+      if (finalDoc && !showPaywall) {
         const { data: { session } } = await supabase.auth.getSession()
-        const isGuestDoc = data.metadata?.guest_id === guestId
-        const isUnlocked = data.is_paid === true || data.metadata?.unlocked === true
+        const isUnlocked = finalDoc.is_paid === true || finalDoc.metadata?.unlocked === true
         
         if (config?.isAllAccess) {
-          setShowPaywall(false)
+          showPaywall = false
         } else if (isUnlocked) {
-          setShowPaywall(false)
+          showPaywall = false
         } else if (!session) {
-          // Guest mode
-          if (isGuestDoc) setShowPaywall(true)
-          else setShowPaywall(true) // Se não é dono nem tá logado, bloqueia
+          showPaywall = true
         } else {
-          // Registered user mode - check plan
           const { data: membership } = await supabase
             .from('memberships')
             .select('organization_id')
@@ -227,7 +209,7 @@ export default function ViewDocumentPage() {
             .maybeSingle()
           
           if (!membership) {
-            setShowPaywall(true)
+            showPaywall = true
           } else {
             const { data: org } = await supabase
               .from('organizations')
@@ -242,49 +224,53 @@ export default function ViewDocumentPage() {
                 .eq('id', org.plan_id)
                 .maybeSingle()
               
-              if (plan?.slug === 'pro') {
-                setShowPaywall(false)
-              } else {
-                setShowPaywall(true)
-              }
+              if (plan?.slug === 'pro') showPaywall = false
+              else showPaywall = true
             } else {
-              setShowPaywall(true)
+              showPaywall = true
             }
           }
         }
+      }
 
-        setDoc(data)
-        setEditContent(data?.content || '')
-        
-        // Sincroniza o isTestMode vindo da Action (App Configs)
-        if (config && typeof config.isTestMode !== 'undefined') {
-          setConfigParams({ isTestMode: config.isTestMode })
-        }
+      return {
+        document: finalDoc,
+        config: config || { isTestMode: false },
+        showPaywall
+      }
+    },
+    initialData: () => {
+      const allDocs = queryClient.getQueryData<any[]>(['juridico-documents'])
+      const match = allDocs?.find(d => d.id === id)
+      if (match) {
+        return { document: match, config: { isTestMode: false }, showPaywall: false }
+      }
+      return undefined
+    },
+    refetchInterval: (query) => {
+      const stateData = query.state.data as any
+      return stateData?.document?.status === 'generating' ? 4000 : false
+    }
+  })
 
-        // Stop polling if no longer generating
-        if (data.status !== 'generating' && interval) {
-          clearInterval(interval)
-          interval = null
-        }
-      } catch (err) {
-        // Usa console.warn ao invés de error para não triggar o Overlay do Next.js
-        console.warn('Aviso esperado: acesso bloqueado ou documento não encontrado.', err)
-        if (interval) clearInterval(interval)
-      } finally {
-        setLoading(false)
+  // Sincronização do Immutable Server Cache para Mutability Context
+  useEffect(() => {
+    if (queryData) {
+      setDoc(queryData.document)
+      setShowPaywall(queryData.showPaywall)
+      
+      // Sincroniza o isTestMode
+      if (typeof queryData.config?.isTestMode !== 'undefined') {
+        setConfigParams({ isTestMode: queryData.config.isTestMode })
+      }
+
+      // Updates editor content ONLY if not currently tracking edits 
+      // or if initial load prevents overwriting local user mutations
+      if (queryData.document?.content && !editContent) {
+        setEditContent(queryData.document.content)
       }
     }
-
-    // Initial load
-    loadDocument()
-
-    // Poll every 4s — will stop once status changes
-    interval = setInterval(loadDocument, 4000)
-
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [id])
+  }, [queryData, id])
 
   const handleSave = async () => {
     try {
@@ -296,8 +282,7 @@ export default function ViewDocumentPage() {
 
       if (error) throw error
 
-      const guestId = getOrCreateGuestId()
-      await createDocumentVersionAction(id as string, 'juridico', { content: editContent }, guestId)
+      await createDocumentVersionAction(id as string, 'juridico', { content: editContent })
 
       setDoc({ ...doc, content: editContent })
       setIsEditing(false)
@@ -315,12 +300,17 @@ export default function ViewDocumentPage() {
   const handleDelete = async () => {
     if (!id || !window.confirm('Excluir este documento?')) return
     try {
-      const guestId = getOrCreateGuestId()
-      const { deleteJuridicoDocumentAction } = await import('@/app/actions/juridico-actions')
-      const res = await deleteJuridicoDocumentAction(id as string, guestId)
+      const res = await deleteAction(id as string)
       
       if (res.error) throw new Error(res.error)
       
+      // Marca como deletado localmente para evitar ghosting na lista principal
+      markDeleted(id as string)
+
+      // Invalida o cache da lista e do dashboard
+      queryClient.invalidateQueries({ queryKey: ['juridico-documents'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+
       toast.success('Documento excluído!')
       router.push('/juridico')
     } catch (err: any) {
@@ -338,12 +328,10 @@ export default function ViewDocumentPage() {
     const toastId = toast.loading('Processando ajustes com IA...')
 
     try {
-      const guestHeader = getOrCreateGuestId()
       const response = await fetch('/api/juridico/gerar', {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
-          'X-Guest-Id': guestHeader 
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           refineContent: doc.content,
@@ -359,8 +347,7 @@ export default function ViewDocumentPage() {
       setDoc({ ...doc, content: data.content })
       setEditContent(data.content)
       
-      const guestId = getOrCreateGuestId()
-      await createDocumentVersionAction(id as string, 'juridico', { content: data.content }, guestId)
+      await createDocumentVersionAction(id as string, 'juridico', { content: data.content })
 
       setViewingVersion(null) // Fork/Update: volta para versão atual
       loadVersions()
@@ -380,12 +367,10 @@ export default function ViewDocumentPage() {
     setRefining(true)
     const toastId = toast.loading('Reavaliando blindagem jurídica...')
     try {
-      const guestHeader = getOrCreateGuestId()
       const response = await fetch('/api/juridico/gerar', {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
-          'X-Guest-Id': guestHeader 
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           refineContent: doc.content,

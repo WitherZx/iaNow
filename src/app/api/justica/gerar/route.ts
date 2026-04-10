@@ -7,9 +7,7 @@ export async function POST(req: Request) {
   try {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    const guestId = req.headers.get('X-Guest-Id')
-
-    if (!user && !guestId) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -28,36 +26,7 @@ export async function POST(req: Request) {
     }
 
     let orgId = membership?.organization_id
-    let fallbackUserId = user?.id
-    
-    if (!orgId) {
-      if (!user) {
-        const { data: sandbox } = await adminClient
-          .from('organizations')
-          .select('id')
-          .limit(1)
-          .single() as any
-        orgId = sandbox?.id
-      }
-
-      if (!orgId) {
-        return NextResponse.json({ error: 'Sua conta não possui uma organização vinculada. Complete o onboarding.' }, { status: 400 })
-      }
-    }
-
-    // Se for guest, precisamos de um user_id válido para não violar a constraint "not null" da tabela justice_demands
-    if (!user && orgId) {
-      const { data: adminMember } = await adminClient
-        .from('memberships')
-        .select('user_id')
-        .eq('organization_id', orgId)
-        .limit(1)
-        .maybeSingle() as any
-      
-      if (adminMember?.user_id) {
-        fallbackUserId = adminMember.user_id
-      }
-    }
+    let fallbackUserId = user.id
 
     const body = await req.json()
     const { diagnosticData, demandId } = body
@@ -217,8 +186,7 @@ Gere o JSON completo.`
              ...diagnosticData,
              petition_content: parsedData.petition,
              auditoria: parsedData.auditoria,
-             generated_at: new Date().toISOString(),
-             guest_id: guestId
+             generated_at: new Date().toISOString()
           }
         } as any)
         .select().single() as any

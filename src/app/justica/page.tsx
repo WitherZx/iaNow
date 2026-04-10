@@ -1,8 +1,11 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/hooks/useAuth'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { PageContainer } from '@/components/layout/PageContainer'
+import { useOptimisticMutation } from '@/hooks/useOptimisticMutation'
 import { 
   Gavel, 
   PlusCircle, 
@@ -17,14 +20,20 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/utils/cn'
+import { isDeleted } from '@/lib/optimistic/optimisticRegistry'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { TrackProcessModal } from '@/components/justica/TrackProcessModal'
-import { createJusticeDemandAction, getGuestJusticeDemandsAction } from '@/app/actions/justice-actions'
+import { 
+  createJusticeDemandAction, 
+  deleteJusticeDemandAction 
+} from '@/app/actions/justice-actions'
 import { Button } from '@/components/shared/Button'
 import { CTAButton } from '@/components/shared/CTAButton'
 import { Card } from '@/components/shared/Card'
 import { useOnboardingGuard } from '@/features/onboarding/hooks/useOnboardingGuard'
+import { PrefetchWrapper } from '@/components/shared/PrefetchWrapper'
 import { DocumentCard } from '@/components/shared/DocumentCard'
+import { useAppData } from '@/providers/AppDataProvider'
 import { ModuleStatsSidebar } from '@/components/shared/ModuleStatsSidebar'
 
 interface Demand {
@@ -37,66 +46,29 @@ interface Demand {
 }
 
 export default function JusticaPage() {
+  const queryClient = useQueryClient()
   const router = useRouter()
   const supabase = createClient()
-  const [demands, setDemands] = useState<Demand[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState<'all' | 'ready' | 'generating'>('all')
-  const [loading, setLoading] = useState(true)
   const [isTrackModalOpen, setIsTrackModalOpen] = useState(false)
   const { needsOnboarding } = useOnboardingGuard()
+  const { user } = useAuth()
+  const { org } = useAppData()
 
-  const loadDemands = async () => {
-    try {
-      setLoading(true)
-      const guestId = localStorage.getItem('ianow_guest_id')
-      const { data: { session } } = await supabase.auth.getSession()
+  const { data: demands = [], isLoading: loading } = useQuery({
+    queryKey: ['justice-cases', org?.id],
+    queryFn: async () => {
+      if (!user || !org?.id) return []
       
-      let allDemands: any[] = []
-
-      if (session) {
-        const { data: membership } = await supabase
-          .from('memberships')
-          .select('organization_id')
-          .eq('user_id', session.user.id)
-          .single() as any
-
-        if (membership) {
-          const { data: orgDemands } = await supabase
-            .from('justice_demands')
-            .select('*')
-            .eq('organization_id', membership.organization_id)
-            .is('deleted_at', null)
-            .order('created_at', { ascending: false })
-          
-          if (orgDemands) allDemands = [...orgDemands]
-        }
-      }
-
-      if (guestId) {
-        const { data: guestDemands } = await getGuestJusticeDemandsAction(guestId)
-        if (guestDemands) {
-          const guestIds = new Set(allDemands.map(d => d.id))
-          guestDemands.forEach((d: any) => {
-            if (!guestIds.has(d.id)) {
-              allDemands.push(d)
-            }
-          })
-        }
-      }
-
-      allDemands.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      setDemands(allDemands)
-    } catch (err) {
-      console.error('Erro ao carregar demandas:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadDemands()
-  }, [])
+      const { getJusticeDemandsAction } = await import('@/app/actions/justice-actions')
+      const { data: allDemands, error } = await getJusticeDemandsAction()
+      
+      if (error) throw new Error(error)
+      return (allDemands || []) as Demand[]
+    },
+    enabled: !!user?.id
+  })
 
   const handleNewProtocol = () => {
     if (needsOnboarding) {
@@ -107,22 +79,14 @@ export default function JusticaPage() {
   }
 
   const handleTrackProcess = async (processNumber: string) => {
-    const guestId = !localStorage.getItem('sb-auth-token') 
-      ? (localStorage.getItem('ianow_guest_id') || crypto.randomUUID()) 
-      : null
-    
-    if (guestId && !localStorage.getItem('ianow_guest_id')) {
-      localStorage.setItem('ianow_guest_id', guestId)
-    }
-
+    const { createJusticeDemandAction } = await import('@/app/actions/justice-actions')
     const { data: newDemand, error } = await createJusticeDemandAction({
       status: 'ready',
       tipo_acao: 'Acompanhamento Externo',
       metadata: {
         process_number: processNumber,
         description: 'Processo adicionado para acompanhamento de movimentações.',
-        is_external: true,
-        guest_id: guestId
+        is_external: true
       }
     })
 
@@ -130,32 +94,52 @@ export default function JusticaPage() {
     router.push(`/justica/${newDemand.id}`)
   }
 
-  const [metrics, setMetrics] = useState({
-    total: 0,
-    totalValue: 0,
-    efficiency: '100%',
-  })
-
-  useEffect(() => {
+  const metrics = React.useMemo(() => {
     if (demands.length > 0) {
-      const totalValue = demands.reduce((acc, d) => acc + (d.valor_causa || 0), 0)
-      setMetrics({
+      const totalValue = demands.reduce((acc: number, d: Demand) => acc + (d.valor_causa || 0), 0)
+      return {
         total: demands.length,
         totalValue,
-        efficiency: '100%'
-      })
+        efficiency: '100%',
+      }
     }
+    return { total: 0, totalValue: 0, efficiency: '100%' }
   }, [demands])
 
-  const filteredDemands = demands.filter(d => {
-    const matchesSearch = (d.tipo_acao || '').toLowerCase().includes(searchTerm.toLowerCase())
-    
-    let matchesFilter = filter === 'all'
-    if (filter === 'generating') matchesFilter = d.status === 'draft'
-    if (filter === 'ready') matchesFilter = d.status === 'ready' || d.status === 'filed'
-    
-    return matchesSearch && matchesFilter
+  const deleteMutation = useOptimisticMutation({
+    actionName: 'excluir demanda',
+    mutationFn: (id: string) => deleteJusticeDemandAction(id),
+    queryKey: ['justice-cases', org?.id],
+    operation: 'delete',
+    getEntityId: (id: string) => id,
+    updater: (old: any, id: string) => {
+      if (!Array.isArray(old)) return old
+      return old.filter((d: any) => d.id !== id)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+    }
   })
+
+  const filteredDemands = React.useMemo(() => {
+    const filtered = demands.filter(d => {
+      const matchesSearch = (d.tipo_acao || '').toLowerCase().includes(searchTerm.toLowerCase())
+      
+      let matchesFilter = filter === 'all'
+      if (filter === 'generating') matchesFilter = d.status === 'draft'
+      if (filter === 'ready') matchesFilter = d.status === 'ready' || d.status === 'filed'
+      
+      return matchesSearch && matchesFilter
+    })
+
+    // Deduplicação por ID e Filtro de Exclusão Otimista
+    const seen = new Set()
+    return filtered.filter(d => {
+      if (!d.id || seen.has(d.id) || isDeleted(d.id)) return false
+      seen.add(d.id)
+      return true
+    })
+  }, [demands, searchTerm, filter])
 
   return (
     <DashboardLayout>
@@ -242,14 +226,24 @@ export default function JusticaPage() {
                 </div>
               ) : filteredDemands.length > 0 ? (
                 filteredDemands.map((demand) => (
-                  <DocumentCard
+                  <PrefetchWrapper
                     key={demand.id}
+                    queryKey={['justice-case', demand.id]}
+                    queryFn={async () => {
+                      const { getJusticeDemandAction } = await import('@/app/actions/justice-actions')
+                      const res = await getJusticeDemandAction(demand.id)
+                      if (res.error) throw new Error(res.error)
+                      return { demand: res.data, config: res.config || { isAllAccess: false, isTestMode: false } }
+                    }}
+                  >
+                  <DocumentCard
                     id={demand.id}
                     href={`/justica/${demand.id}`}
                     title={demand.tipo_acao || 'Acompanhamento Estratégico'}
                     subtitle={demand.valor_causa ? `Valor da Causa: R$ ${demand.valor_causa.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : (demand.metadata?.process_number ? `Processo nº ${demand.metadata.process_number}` : 'Valor não informado')}
                     date={new Date(demand.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
                     isGenerating={demand.status === 'draft'}
+                    onDelete={() => deleteMutation.mutate(demand.id)}
                     badge={{
                       label: demand.status === 'draft' ? 'Analisando' : 'Pronto',
                       className: demand.status === 'draft' ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200'
@@ -262,6 +256,7 @@ export default function JusticaPage() {
                       { icon: <FileSignature size={11} className="text-slate-400" />, label: 'Pronto para Protocolar' }
                     ]}
                   />
+                  </PrefetchWrapper>
                 ))
               ) : (
                 <EmptyState 

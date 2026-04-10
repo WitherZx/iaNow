@@ -31,6 +31,8 @@ import { cn } from '@/utils/cn'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useOptimisticMutation } from '@/hooks/useOptimisticMutation'
+import { useQueryClient } from '@tanstack/react-query'
 
 const STEPS = [
   { id: 'profile', title: 'Contexto', icon: Building2 },
@@ -59,54 +61,50 @@ export default function NovoDiagnosticoPage() {
     goals: [] as string[],
     growthObstacle: '',
   })
-  const [isSubmitting, setIsSubmitting] = useState(false)
-
+  const queryClient = useQueryClient()
+  const queryKey = ['strategies']
 
   const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, STEPS.length - 1))
   const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 0))
 
-  const handleSubmit = async () => {
-    try {
-      setIsSubmitting(true)
-
-      const guestId = !localStorage.getItem('sb-auth-token')
-        ? (localStorage.getItem('ianow_guest_id') || crypto.randomUUID())
-        : null
-
-      if (guestId && !localStorage.getItem('ianow_guest_id')) {
-        localStorage.setItem('ianow_guest_id', guestId)
-      }
-
+  const generateMutation = useOptimisticMutation({
+    actionName: 'createStrategy',
+    queryKey,
+    operation: 'create',
+    getEntityId: () => 'new',
+    mutationFn: async (variables: any) => {
       const response = await fetch('/api/ai/strategy', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          ...(guestId ? { 'X-Guest-Id': guestId } : {})
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ diagnosticData: formData })
+        body: JSON.stringify({ diagnosticData: variables })
       })
 
       if (!response.ok) throw new Error('Falha ao processar estratégia')
-
-      const result = await response.json()
-
-      if (result.success) {
-        // Agora que a geração ocorre em background, mandamos de volta para a tela de estratégias (para cair em "Em Fila")
-        setTimeout(() => {
-          window.location.href = '/estrategia'
-        }, 1500)
-      } else {
-        setTimeout(() => {
-          window.location.href = '/estrategia'
-        }, 1500)
-      }
-
-    } catch (err) {
-      console.error(err)
-      setIsSubmitting(false)
-      alert('Erro ao gerar estratégia. Verifique sua conexão ou tente novamente.')
+      return await response.json()
+    },
+    updater: (old: any) => old,
+    onSuccess: (result: any) => {
+      // Agora que a geração ocorre em background, mandamos de volta para a tela de estratégias
+      setTimeout(() => {
+        window.location.href = '/estrategia'
+      }, 1500)
     }
+  })
+
+  const handleSubmit = async () => {
+    const payload = {
+      ...formData,
+      // Metadata para reconciliação determinística
+      metadata: {
+        ...(formData as any).metadata,
+        companyName: formData.companyName
+      }
+    }
+    generateMutation.mutate(payload)
   }
+
 
   return (
     <DashboardLayout>
@@ -423,21 +421,14 @@ export default function NovoDiagnosticoPage() {
 
             {currentStep === 4 && (
               <div className="flex flex-col items-center justify-center text-center py-10 gap-y-8 animate-in zoom-in duration-500">
-                <div className="relative">
-                  <div className="w-32 h-32 rounded-full border-4 border-slate-100 flex items-center justify-center">
-                    {isSubmitting ? <Clock size={48} className="text-primary animate-spin" /> : <Sparkles size={48} className="text-primary animate-pulse" />}
-                  </div>
-                  <div className={cn("absolute inset-0 rounded-full border-4 border-primary border-t-transparent", isSubmitting ? "animate-spin" : "hidden")} />
-                </div>
-
                 <div className="space-y-3">
-                  <h2 className="text-2xl md:text-4xl font-black text-slate-900 uppercase">{isSubmitting ? "Minerva Está Analisando..." : "Pronto para Iniciar?"}</h2>
+                  <h2 className="text-2xl md:text-4xl font-black text-slate-900 uppercase">{generateMutation.isPending ? "Minerva Está Analisando..." : "Pronto para Iniciar?"}</h2>
                   <p className="text-slate-500 max-w-md mx-auto leading-relaxed">
-                    {isSubmitting ? "Mapeando os dados fornecidos e estruturando o plano estratégico. Isso leva em torno de 60 segundos." : "Com base nos dados fornecidos, a Minerva estrutura um diagnóstico estratégico com recomendações priorizadas."}
+                    {generateMutation.isPending ? "Mapeando os dados fornecidos e estruturando o plano estratégico. Isso leva em torno de 60 segundos." : "Com base nos dados fornecidos, a Minerva estrutura um diagnóstico estratégico com recomendações priorizadas."}
                   </p>
                 </div>
 
-                {!isSubmitting && (
+                {!generateMutation.isPending && (
                   <Button
                     size="lg"
                     onClick={handleSubmit}

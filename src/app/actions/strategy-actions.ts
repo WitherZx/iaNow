@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createDocumentVersionAction } from './version-actions'
 
-export async function getStrategyAction(id: string, guestId?: string | null) {
+export async function getStrategyAction(id: string) {
   const supabase = createAdminClient()
 
   // 1. Tentar buscar a estratégia
@@ -13,7 +13,6 @@ export async function getStrategyAction(id: string, guestId?: string | null) {
     .select('*, diagnostics(*)')
     .eq('id', id)
     .single()
-
 
   if (error || !strategy) {
     return { error: 'Estratégia não encontrada' }
@@ -31,130 +30,60 @@ export async function getStrategyAction(id: string, guestId?: string | null) {
     isTestMode: configs?.find((c: any) => c.key === 'test_mode')?.value_bool === true
   }
 
-  // 2. Validar acesso (Dono ou Guest)
+  // 2. Validar acesso (Dono Real)
   const serverSupabase = await createServerSupabaseClient()
   const { data: { user } } = await serverSupabase.auth.getUser()
   
-  const stratGuestId = strategy.metadata?.guest_id || strategy.diagnostics?.metadata?.guest_id
-  const isGuestStrat = !!stratGuestId
-
-  // Se o usuário é o dono real (logado), libera
-  if (user && strategy.created_by === user.id) {
-    return { data: strategy, config: configData }
-  }
-
-  // Se é guest, valida o ID
-  if (isGuestStrat) {
-    if (!guestId || String(stratGuestId) !== String(guestId)) {
-      console.warn(`[getStrategyAction] ACCESS DENIED for strategy ${id}. Required: ${stratGuestId}, Provided: ${guestId}`)
-      return { error: 'Acesso negado a esta estratégia de visitante' }
-    }
+  if (!user || strategy.created_by !== user.id) {
+     const { data: membership } = await admin
+       .from('memberships')
+       .select('organization_id')
+       .eq('user_id', user?.id)
+       .eq('organization_id', strategy.organization_id)
+       .eq('status', 'active')
+       .maybeSingle()
+     
+     if (!membership && !configData.isAllAccess) {
+       return { error: 'Acesso negado a esta estratégia' }
+     }
   }
 
   return { data: strategy, config: configData }
 }
 /**
- * Busca todas as estratégias de um visitante (guest).
+ * Busca todos os registros vinculados à organização do usuário.
  */
-export async function getGuestStrategiesAction(guestId: string) {
+export async function getStrategiesAction() {
   try {
-    if (!guestId) return { data: [] }
+    const supabase = await createServerSupabaseClient()
+    const { data: { user : serverUser } } = await supabase.auth.getUser()
+    
+    if (!serverUser) return { error: 'Unauthorized' }
+
     const admin = createAdminClient() as any
-    const { data, error } = await admin
+    
+    // 1. Buscar a organização ativa do usuário
+    const { data: membership } = await admin
+      .from('memberships')
+      .select('organization_id')
+      .eq('user_id', serverUser.id)
+      .eq('status', 'active')
+      .maybeSingle()
+    
+    if (!membership) return { data: [] }
+    const organizationId = membership.organization_id
+
+    // 2. Buscar todas as estratégias da organização
+    const { data: strategies, error } = await admin
       .from('strategies')
       .select('*')
-      .eq('metadata->>guest_id', guestId)
+      .eq('organization_id', organizationId)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
     if (error) throw error
-    return { success: true, data: data || [] }
-  } catch (err: any) {
-    console.error('getGuestStrategiesAction Error:', err)
-    return { error: err.message || 'Falha ao buscar estratégias do visitante' }
-  }
-}
-
-/**
- * Busca todos os registros vinculados a um usuário, sua organização ou a um visitante.
- */
-export async function getStrategiesAction(guestId?: string | null, userIdHint?: string | null) {
-  try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user: serverUser } } = await supabase.auth.getUser()
-    const finalUserId = serverUser?.id || userIdHint
     
-    const admin = createAdminClient() as any
-    
-    let organizationId = null
-    if (finalUserId) {
-      const { data: membership } = await admin
-        .from('memberships')
-        .select('organization_id')
-        .eq('user_id', finalUserId)
-        .eq('status', 'active')
-        .maybeSingle()
-      
-      organizationId = membership?.organization_id
-    }
-
-    let possibleOrgIds: string[] = []
-    if (organizationId) {
-      possibleOrgIds = [organizationId]
-    } else {
-      const { data: allOrgs } = await admin.from('organizations').select('id').limit(5)
-      possibleOrgIds = allOrgs?.map((o: any) => o.id) || []
-    }
-    
-    let allStrats: any[] = []
-
-    // 1. Por Criador
-    if (finalUserId) {
-      const { data: userStrats } = await admin
-        .from('strategies')
-        .select('*')
-        .eq('created_by', finalUserId)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-      
-      if (userStrats) allStrats = [...userStrats]
-    }
-
-    // 2. Por Organização
-    if (possibleOrgIds.length > 0) {
-      const { data: orgStrats } = await admin
-        .from('strategies')
-        .select('*')
-        .in('organization_id', possibleOrgIds)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-      
-      if (orgStrats) {
-        const existingIds = new Set(allStrats.map(s => s.id))
-        orgStrats.forEach((s: any) => {
-          if (!existingIds.has(s.id)) allStrats.push(s)
-        })
-      }
-    }
-
-    // 3. Por Guest ID
-    if (guestId) {
-      const { data: guestStrats } = await admin
-        .from('strategies')
-        .select('*')
-        .or(`metadata->>guest_id.eq.${guestId}`)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-
-      if (guestStrats) {
-        const existingIds = new Set(allStrats.map(s => s.id))
-        guestStrats.forEach((s: any) => {
-          if (!existingIds.has(s.id)) allStrats.push(s)
-        })
-      }
-    }
-
-    allStrats.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    return { success: true, data: allStrats }
+    return { success: true, data: strategies || [] }
   } catch (err: any) {
     console.error('getStrategiesAction Error:', err)
     return { error: err.message || 'Falha ao buscar estratégias' }
@@ -163,9 +92,9 @@ export async function getStrategiesAction(guestId?: string | null, userIdHint?: 
 
 /**
  * Exclui fisicamente ou logicamente uma estratégia.
- * Permite exclusão se o usuário for o dono (created_by) ou se o guest_id bater.
+ * Permite exclusão se o usuário for o dono (created_by).
  */
-export async function deleteStrategyAction(id: string, guestId?: string | null) {
+export async function deleteStrategyAction(id: string) {
   try {
     const admin = createAdminClient() as any
     const supabase = await createServerSupabaseClient()
@@ -182,22 +111,16 @@ export async function deleteStrategyAction(id: string, guestId?: string | null) 
 
     // 2. Valida segurança
     const isOwner = user && strategy.created_by === user.id
-
-    let meta = strategy.metadata || {}
-    if (typeof meta === 'string') {
-      try { meta = JSON.parse(meta) } catch(e) {}
-    }
-    let diagMeta = strategy.diagnostics?.metadata || {}
-    if (typeof diagMeta === 'string') {
-      try { diagMeta = JSON.parse(diagMeta) } catch(e) {}
-    }
-
-    /* GLOBAL CLEANUP BYPASS: Permitindo que qualquer visitante apague estratégias para limpar dados legados */
-    const matchesGuest = true // Bypass permissão para limpeza
-    const isOrphan = true
-
-    if (false) { // Desativa trava temporariamente
-      return { error: 'Você não tem permissão para excluir esta estratégia.' }
+    if (!isOwner) {
+       // Checa se está na mesma organização e tem permissão
+       const { data: membership } = await admin
+         .from('memberships')
+         .select('id')
+         .eq('user_id', user?.id)
+         .eq('organization_id', strategy.organization_id)
+         .maybeSingle()
+       
+       if (!membership) return { error: 'Você não tem permissão para excluir esta estratégia.' }
     }
 
     // 3. Deleta a estratégia logicamente (Soft Delete) para consistência
@@ -217,7 +140,11 @@ export async function deleteStrategyAction(id: string, guestId?: string | null) 
 /**
  * Atualiza o conteúdo de uma estratégia.
  */
-export async function updateStrategyAction(id: string, content: any, guestId?: string | null) {
+export async function updateStrategyAction(
+  id: string, 
+  content: any, 
+  options?: { lastUpdatedAt?: string; force?: boolean }
+) {
   try {
     const admin = createAdminClient() as any
     const supabase = await createServerSupabaseClient()
@@ -226,36 +153,54 @@ export async function updateStrategyAction(id: string, content: any, guestId?: s
     // 1. Busca a estratégia para validar permissão
     const { data: strategy, error: fetchError } = await admin
       .from('strategies')
-      .select('created_by, metadata, diagnostics(metadata)')
+      .select('created_by, metadata, updated_at, diagnostics(metadata)')
       .eq('id', id)
       .single()
 
     if (fetchError || !strategy) return { error: 'Estratégia não encontrada' }
 
-    // 2. Valida segurança (Owner ou Guest)
+    // 2. Valida segurança (Owner)
     const isOwner = user && strategy.created_by === user.id
-    
-    let meta = strategy.metadata || {}
-    if (typeof meta === 'string') {
-      try { meta = JSON.parse(meta) } catch(e) {}
-    }
-    let diagMeta = strategy.diagnostics?.metadata || {}
-    if (typeof diagMeta === 'string') {
-      try { diagMeta = JSON.parse(diagMeta) } catch(e) {}
-    }
-
-    const stratGuestId = meta?.guest_id || diagMeta?.guest_id || strategy.metadata?.guest_id
-    const matchesGuest = stratGuestId && guestId && String(stratGuestId) === String(guestId)
-
-    if (!isOwner && !matchesGuest) {
-      return { error: 'Você não tem permissão para atualizar esta estratégia.' }
+    if (!isOwner) {
+       const { data: membership } = await admin
+         .from('memberships')
+         .select('id')
+         .eq('user_id', user?.id)
+         .eq('organization_id', strategy.organization_id)
+         .maybeSingle()
+       
+       if (!membership) return { error: 'Você não tem permissão para atualizar esta estratégia.' }
     }
 
-    // 3. Executa o update
+    // 2.1 Detecção de Conflito (Servidor como Autoridade)
+    if (!options?.force && options?.lastUpdatedAt && strategy.updated_at) {
+      const serverTime = new Date(strategy.updated_at).getTime()
+      const clientTime = new Date(options.lastUpdatedAt).getTime()
+
+      if (serverTime > clientTime) {
+        console.warn(`[SyncConflict] Entity ${id} diverged. Server: ${strategy.updated_at}, Client: ${options.lastUpdatedAt}`)
+        return { 
+          conflict: true, 
+          remoteData: strategy,
+          message: 'Os dados no servidor são mais recentes.'
+        }
+      }
+    }
+
+    // 3. Executa o update com trilha de auditoria se houver force
+    const updatedMeta = {
+      ...meta,
+      ...(options?.force ? { 
+        updated_by_force: true, 
+        conflict_resolved_at: new Date().toISOString() 
+      } : {})
+    }
+
     const { error: updateError } = await admin
       .from('strategies')
       .update({ 
         content: content,
+        metadata: updatedMeta,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
@@ -263,7 +208,7 @@ export async function updateStrategyAction(id: string, content: any, guestId?: s
     if (updateError) throw updateError
 
     // 4. Cria Versão Histórica (Time Travel)
-    await createDocumentVersionAction(id, 'strategy', content, guestId)
+    await createDocumentVersionAction(id, 'strategy', content)
 
     return { success: true }
   } catch (err: any) {

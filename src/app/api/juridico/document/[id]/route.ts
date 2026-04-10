@@ -10,9 +10,7 @@ export async function GET(req: Request, { params }: Params) {
     const supabase = await createServerSupabaseClient()
     const admin = createAdminClient() as any
     const { data: { user } } = await supabase.auth.getUser()
-    const guestId = req.headers.get('X-Guest-Id')
-
-    if (!user && !guestId) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -27,7 +25,6 @@ export async function GET(req: Request, { params }: Params) {
     }
 
     const metadata = (document.metadata || {}) as Record<string, any>
-    const ownerGuestId = metadata?.guest_id
     const ownerOrganizationId = document.organization_id as string | null
 
     let belongsToRequester = false
@@ -62,9 +59,6 @@ export async function GET(req: Request, { params }: Params) {
       }
     }
 
-    if (!belongsToRequester && guestId) {
-      belongsToRequester = ownerGuestId === guestId
-    }
 
     // Bypass para documentos corrompidos antigos de teste
     const isCorruptedLegacy = [
@@ -86,8 +80,7 @@ export async function GET(req: Request, { params }: Params) {
       metadata?.single_purchase_paid === true ||
       metadata?.unlocked === true ||
       metadata?.access?.single_purchase_paid === true ||
-      (user && Array.isArray(metadata?.access?.unlocked_user_ids) && metadata.access.unlocked_user_ids.includes(user.id)) ||
-      (guestId && Array.isArray(metadata?.access?.unlocked_guest_ids) && metadata.access.unlocked_guest_ids.includes(guestId))
+      (user && Array.isArray(metadata?.access?.unlocked_user_ids) && metadata.access.unlocked_user_ids.includes(user.id))
 
     if (!hasActivePlan && !hasSinglePurchase) {
       return NextResponse.json(

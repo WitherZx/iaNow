@@ -3,7 +3,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
-export async function createChatSession(guestId?: string | null) {
+export async function createChatSession() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -11,7 +11,6 @@ export async function createChatSession(guestId?: string | null) {
     .from('chat_sessions')
     .insert({
       user_id: user?.id || null,
-      guest_id: guestId || null,
       metadata: { last_active: new Date().toISOString() }
     })
     .select()
@@ -99,7 +98,7 @@ export async function updateSessionMetadata(sessionId: string, metadata: any) {
   return { success: true }
 }
 
-export async function getLatestSession(guestId?: string | null) {
+export async function getLatestSession() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -107,8 +106,6 @@ export async function getLatestSession(guestId?: string | null) {
 
   if (user) {
     query = query.eq('user_id', user.id)
-  } else if (guestId) {
-    query = query.eq('guest_id', guestId)
   } else {
     return { session: null }
   }

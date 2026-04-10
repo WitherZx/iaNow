@@ -5,19 +5,18 @@ import { createAdminClient } from '@/lib/supabase/admin'
 /**
  * Registra uma nova versão de um documento.
  */
-export async function createDocumentVersionAction(parentId: string, parentType: string, content: any, guestId?: string | null) {
+export async function createDocumentVersionAction(parentId: string, parentType: string, content: any) {
   try {
     const admin = createAdminClient() as any
     
     // Para simplificar, não validamos permissão aqui pois assume-se que 
     // a verificação já foi feita na Server Action de origem (update).
     const { error } = await admin
-      .from('document_versions')
       .insert({
         parent_id: parentId,
         parent_type: parentType,
         content,
-        metadata: guestId ? { guest_id: guestId } : {}
+        metadata: {}
       })
 
     if (error) throw error
@@ -31,23 +30,16 @@ export async function createDocumentVersionAction(parentId: string, parentType: 
 /**
  * Busca a lista de versões de um documento.
  */
-export async function getDocumentVersionsAction(parentId: string, parentType: string, guestId?: string | null) {
+export async function getDocumentVersionsAction(parentId: string, parentType: string) {
   try {
     const admin = createAdminClient() as any
     
-    let query = admin
+    const { data, error } = await admin
       .from('document_versions')
       .select('id, created_at')
       .eq('parent_id', parentId)
       .eq('parent_type', parentType)
       .order('created_at', { ascending: false })
-
-    // Se for guest, garantimos que só veja as versões dele
-    if (guestId) {
-      query = query.eq('metadata->>guest_id', guestId)
-    }
-
-    const { data, error } = await query
 
     if (error) throw error
     return { success: true, data: data || [] }

@@ -1,12 +1,19 @@
 'use client'
 
 import { Sidebar } from './Sidebar'
+import { ConflictToast } from '../conflict/ConflictToast'
+import { ConflictResolver } from '../conflict/ConflictResolver'
 import { Topbar } from './Topbar'
+import { PWALoader } from '../pwa/PWALoader'
+import { InstallPrompt } from '../pwa/InstallPrompt'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/utils/cn'
 import { useState, useEffect } from 'react'
-import { linkGuestDataToUserAction } from '@/app/actions/auth-actions'
+import { useSyncEngine } from '@/lib/sync/syncEngine'
+import '@/lib/sync/actions' // Registra Server Actions no Sync Engine
+import { useRealtimeEngine } from '@/lib/realtime/realtimeEngine'
+import { useCacheWarming } from '@/hooks/useCacheWarming'
 
 export function DashboardLayout({
   children,
@@ -19,20 +26,15 @@ export function DashboardLayout({
   const [isSidebarOpen, setSidebarOpen] = useState(false)
   const router = useRouter()
 
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      const gid = localStorage.getItem('ianow_guest_id')
-      if (user && gid) {
-        linkGuestDataToUserAction(user.id, gid).then((res) => {
-          if (!res?.error) {
-            localStorage.removeItem('ianow_guest_id')
-          }
-        }).catch(err => {
-          console.error('Migration failed:', err)
-        })
-      }
-    }
-  }, [isAuthenticated, user])
+  // Sync Engine: processa mutações pendentes do Outbox em background
+  useSyncEngine()
+  
+  // Realtime Engine: ouve tabela(s) no Supabase passivamente
+  useRealtimeEngine()
+
+  // Cache Warming: garante que a navegação para outras telas seja "0ms"
+  useCacheWarming()
+
 
   if (loading) {
     return (
@@ -71,6 +73,16 @@ export function DashboardLayout({
         )}>
           {children}
         </main>
+
+        {/* Camada de Resolução de Conflitos (Fase 5) */}
+        <ConflictToast onOpenResolver={(id) => {
+          window.dispatchEvent(new CustomEvent('open-conflict-resolver', { detail: id }))
+        }} />
+        <ConflictResolver />
+
+        {/* Infraestrutura PWA (Fase 6) */}
+        <PWALoader />
+        <InstallPrompt />
 
         {/* Overlay for mobile drawer */}
         {isSidebarOpen && (

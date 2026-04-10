@@ -8,9 +8,7 @@ export async function POST(req: Request) {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    const guestId = req.headers.get('X-Guest-Id')
-
-    if (!user && !guestId) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -30,30 +28,7 @@ export async function POST(req: Request) {
     }
 
     let orgId = membership?.organization_id
-    let userId = user?.id
-
-    if (!orgId) {
-      if (!user) {
-        // Guest Mode: Assign to the first available organization as sandbox
-        const { data: sandbox } = await adminClient.from('organizations').select('id').limit(1).single() as any
-        orgId = sandbox?.id
-
-        if (orgId) {
-          // Fallback user_id: Pegar um admin da organização para persistir o documento sem violar o NOT NULL
-          const { data: adminMember } = await adminClient
-            .from('memberships')
-            .select('user_id')
-            .eq('organization_id', orgId)
-            .limit(1)
-            .single() as any
-          userId = adminMember?.user_id
-        }
-      }
-      
-      if (!orgId) {
-         return NextResponse.json({ error: 'Sua conta não possui uma organização vinculada. Complete o onboarding.' }, { status: 400 })
-      }
-    }
+    const userId = user.id
 
     const body = await req.json()
     const { 
@@ -116,15 +91,12 @@ export async function POST(req: Request) {
         // SÓ ATUALIZA O AUDIT SE NÃO FOR 'skipAudit'
         if (!skipAudit) {
            updateData.metadata = {
-              ...(currentDoc?.metadata || {}), // preserva os metadados MANTENDO O GUEST_ID, parties, etc
+              ...(currentDoc?.metadata || {}), // preserva os metadados, parties, etc
               ...body, // adiciona os do body
               audit: parsedData.audit,
               refinedAt: new Date().toISOString(),
            }
            
-           if (!currentDoc?.metadata?.guest_id && guestId) {
-             updateData.metadata.guest_id = guestId;
-           }
         }
 
         await adminApi.from('generated_documents').update(updateData).eq('id', documentId)
@@ -233,7 +205,7 @@ ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
 
     const aiModel = 'Minerva'
 
-    console.log('[JuridicoGerar] Process starting...', { userId, guestId, orgId })
+    console.log('[JuridicoGerar] Process starting...', { userId, orgId })
 
     // 1. INSERTS PLACEHOLDER FIRST for immediate visibility
     const { data: document, error: docError } = await adminClient
@@ -247,8 +219,6 @@ ${parametros || 'Nenhum contexto de cláusula específica extra informada.'}`
         status: 'generating',
         metadata: { 
           ...body,
-          guest_id: guestId,
-          is_guest: !user
         }
       } as any)
       .select().single() as any

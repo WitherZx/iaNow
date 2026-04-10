@@ -7,13 +7,15 @@ import { createDocumentVersionAction } from './version-actions'
 
 /**
  * Busca os detalhes de uma demanda jurídica de forma segura.
- * Permite acesso se o usuário for o dono (user_id) ou se o guest_id bater.
+ * Permite acesso se o usuário for o dono (user_id) ou membro da organização vinculada.
  */
-export async function getJusticeDemandAction(id: string, guestId?: string | null) {
+export async function getJusticeDemandAction(id: string) {
   try {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
     
+    if (!user) return { error: 'Unauthorized' }
+
     const admin = createAdminClient() as any
     
     // Busca com admin para contornar RLS inicialmente e validar manualmente
@@ -35,22 +37,18 @@ export async function getJusticeDemandAction(id: string, guestId?: string | null
     const isTestModeGlobal = configs?.find((c: any) => c.key === 'test_mode')?.value_bool === true
 
     // Validação de Segurança:
-    const isOwner = user && data.user_id === user.id
-    const matchesGuest = guestId && data.metadata?.guest_id === guestId
+    const isOwner = data.user_id === user.id
     
-    console.log(`[getJusticeDemandAction] Accessing demand ${id}:`, {
-      userId: user?.id,
-      guestId,
-      docOwnerId: data.user_id,
-      docGuestId: data.metadata?.guest_id,
-      isOwner,
-      matchesGuest,
-      isAllAccessGlobal
-    })
-
-    if (!isOwner && !matchesGuest && !isAllAccessGlobal) {
-      console.warn(`[getJusticeDemandAction] ACCESS DENIED for demand ${id}`)
-      return { error: 'Você não tem permissão para acessar esta demanda.' }
+    if (!isOwner && !isAllAccessGlobal) {
+       // Checa se está na mesma organização e tem permissão
+       const { data: membership } = await admin
+         .from('memberships')
+         .select('id')
+         .eq('user_id', user.id)
+         .eq('organization_id', data.organization_id)
+         .maybeSingle()
+       
+       if (!membership) return { error: 'Você não tem permissão para acessar esta demanda.' }
     }
 
     return { 
@@ -68,24 +66,42 @@ export async function getJusticeDemandAction(id: string, guestId?: string | null
 }
 
 /**
- * Busca todas as demandas de um visitante (guest).
+ * Busca todas as demandas vinculadas à organização do usuário.
  */
-export async function getGuestJusticeDemandsAction(guestId: string) {
+export async function getJusticeDemandsAction() {
   try {
-    if (!guestId) return { data: [] }
+    const supabase = await createServerSupabaseClient()
+    const { data: { user: serverUser } } = await supabase.auth.getUser()
+    
+    if (!serverUser) return { error: 'Unauthorized' }
+
     const admin = createAdminClient() as any
-    const { data, error } = await admin
+    
+    // 1. Buscar a organização ativa do usuário
+    const { data: membership } = await admin
+      .from('memberships')
+      .select('organization_id')
+      .eq('user_id', serverUser.id)
+      .eq('status', 'active')
+      .maybeSingle()
+    
+    if (!membership) return { data: [] }
+    const organizationId = membership.organization_id
+
+    // 2. Buscar todas as demandas da organização
+    const { data: demands, error } = await admin
       .from('justice_demands')
       .select('*')
-      .eq('metadata->>guest_id', guestId)
+      .eq('organization_id', organizationId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
     if (error) throw error
-    return { success: true, data: data || [] }
+    
+    return { success: true, data: demands || [] }
   } catch (err: any) {
-    console.error('getGuestJusticeDemandsAction Error:', err)
-    return { error: err.message || 'Falha ao buscar demandas do visitante' }
+    console.error('getJusticeDemandsAction Error:', err)
+    return { error: err.message || 'Falha ao buscar demandas' }
   }
 }
 
@@ -104,7 +120,7 @@ export async function getRemoteProcessInfoAction(processNumber: string) {
 }
 
 /**
- * Cria uma nova demanda jurídica de forma segura (admin client para guests).
+ * Cria uma nova demanda jurídica vinculada à organização do usuário.
  */
 export async function createJusticeDemandAction(demandData: any) {
   try {
@@ -112,31 +128,25 @@ export async function createJusticeDemandAction(demandData: any) {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
     
-    // Se não tiver organização, busca a primeira (Sandbox)
-    let orgId = demandData.organization_id
-    if (!orgId) {
-      const { data: orgs } = await admin.from('organizations').select('id').limit(1)
-      orgId = orgs?.[0]?.id
-    }
-
-    // Se não tiver usuário (Guest), buscamos o primeiro usuário da organização para servir de âncora
-    let finalUserId = user?.id || null
-    if (!finalUserId) {
-      const { data: firstMember } = await admin
-        .from('memberships')
-        .select('user_id')
-        .eq('organization_id', orgId)
-        .limit(1)
-        .single() as any
-      finalUserId = firstMember?.user_id || null
-    }
+    if (!user) return { error: 'Unauthorized' }
+    
+    // 1. Buscar a organização ativa do usuário
+    const { data: membership } = await admin
+      .from('memberships')
+      .select('organization_id')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .maybeSingle()
+    
+    if (!membership) return { error: 'Você não faz parte de nenhuma organização ativa.' }
+    const orgId = membership.organization_id
 
     const { data, error } = await admin
       .from('justice_demands')
       .insert({
         ...demandData,
         organization_id: orgId,
-        user_id: finalUserId,
+        user_id: user.id,
         created_at: new Date().toISOString()
       })
       .select()
@@ -224,9 +234,9 @@ export async function simulatePurchaseAction(id: string, type: 'contrato' | 'est
 
 /**
  * Exclui logicamente (soft delete) uma demanda jurídica.
- * Permite exclusão se o usuário for o dono (user_id) ou se o guest_id bater.
+ * Permite exclusão se o usuário for o dono (user_id) ou membro da organização vinculada.
  */
-export async function deleteJusticeDemandAction(id: string, guestId?: string | null) {
+export async function deleteJusticeDemandAction(id: string) {
   try {
     const admin = createAdminClient() as any
     const supabase = await createServerSupabaseClient()
@@ -243,16 +253,15 @@ export async function deleteJusticeDemandAction(id: string, guestId?: string | n
 
     // 2. Valida segurança
     const isOwner = user && demand.user_id === user.id
-    let meta = demand.metadata || {}
-    if (typeof meta === 'string') {
-      try { meta = JSON.parse(meta) } catch(e) {}
-    }
-
-    const demandGuestId = meta?.guest_id || demand.metadata?.guest_id
-    const matchesGuest = demandGuestId && guestId && String(demandGuestId) === String(guestId)
-
-    if (!isOwner && !matchesGuest) {
-      return { error: 'Você não tem permissão para excluir esta demanda.' }
+    if (!isOwner) {
+       const { data: membership } = await admin
+         .from('memberships')
+         .select('id')
+         .eq('user_id', user?.id)
+         .eq('organization_id', demand.organization_id)
+         .maybeSingle()
+       
+       if (!membership) return { error: 'Você não tem permissão para excluir esta demanda.' }
     }
 
     // 3. Executa o soft delete
@@ -272,9 +281,9 @@ export async function deleteJusticeDemandAction(id: string, guestId?: string | n
 
 /**
  * Atualiza o metadata de uma demanda (para sincronização de tracking, análise, e edição de petição).
- * Permite atualização se o usuário for o dono (user_id) ou se o guest_id bater.
+ * Permite atualização se o usuário for o dono (user_id) ou membro da organização vinculada.
  */
-export async function updateJusticeDemandMetadataAction(id: string, metadata: any, guestId?: string | null) {
+export async function updateJusticeDemandMetadataAction(id: string, metadata: any) {
   try {
     const admin = createAdminClient() as any
     const supabase = await createServerSupabaseClient()
@@ -291,10 +300,16 @@ export async function updateJusticeDemandMetadataAction(id: string, metadata: an
 
     // 2. Valida segurança
     const isOwner = user && demand.user_id === user.id
-    const matchesGuest = guestId && demand.metadata?.guest_id === guestId
-
-    if (!isOwner && !matchesGuest) {
-      return { error: 'Você não tem permissão para atualizar esta demanda.' }
+    if (!isOwner) {
+       // Checa se está na mesma organização e tem permissão
+       const { data: membership } = await admin
+         .from('memberships')
+         .select('id')
+         .eq('user_id', user?.id)
+         .eq('organization_id', demand.organization_id)
+         .maybeSingle()
+       
+       if (!membership) return { error: 'Você não tem permissão para atualizar esta demanda.' }
     }
     // 3. Atualiza o banco
     const { error: updateError } = await admin
@@ -305,7 +320,7 @@ export async function updateJusticeDemandMetadataAction(id: string, metadata: an
     if (updateError) throw updateError
 
     // 4. Cria Versão Histórica (Time Travel)
-    await createDocumentVersionAction(id, 'justice', metadata, guestId)
+    await createDocumentVersionAction(id, 'justice', metadata)
 
     return { success: true }
   } catch (err: any) {
@@ -317,7 +332,7 @@ export async function updateJusticeDemandMetadataAction(id: string, metadata: an
 /**
  * Atualiza campos avulsos da demanda (ex: valor_causa, status).
  */
-export async function updateJusticeDemandAction(id: string, updates: any, guestId?: string | null) {
+export async function updateJusticeDemandAction(id: string, updates: any) {
   try {
     const admin = createAdminClient() as any
     const supabase = await createServerSupabaseClient()
@@ -332,10 +347,15 @@ export async function updateJusticeDemandAction(id: string, updates: any, guestI
     if (fetchError || !demand) return { error: 'Demanda não encontrada' }
 
     const isOwner = user && demand.user_id === user.id
-    const matchesGuest = guestId && demand.metadata?.guest_id === guestId
-
-    if (!isOwner && !matchesGuest) {
-      return { error: 'Você não tem permissão para atualizar esta demanda.' }
+    if (!isOwner) {
+       const { data: membership } = await admin
+         .from('memberships')
+         .select('id')
+         .eq('user_id', user?.id)
+         .eq('organization_id', demand.organization_id)
+         .maybeSingle()
+       
+       if (!membership) return { error: 'Você não tem permissão para atualizar esta demanda.' }
     }
 
     const { error: updateError } = await admin

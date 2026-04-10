@@ -7,18 +7,18 @@ import { revalidateTag } from 'next/cache'
 
 /**
  * Busca dados unificados para a Dashboard (Estratégias, Contratos, Justiça).
- * Garante visibilidade para Usuários e Visitantes (Guest).
+ * Garante visibilidade baseada na organização ativa do usuário.
  */
-export async function getDashboardDataAction(guestId?: string | null, userIdHint?: string | null) {
+export async function getDashboardDataAction(userIdHint?: string | null) {
   const supabase = await createServerSupabaseClient()
   const { data: { user: serverUser } } = await supabase.auth.getUser()
   const finalUserId = serverUser?.id || userIdHint
-  const cacheKey = finalUserId || guestId || 'public'
+  const cacheKey = finalUserId || 'public'
 
   // Usamos unstable_cache para armazenar o resultado por 60 segundos
   // ou até que a tag 'dashboard' seja invalidada
   const fetchCachedDashboard = unstable_cache(
-    async (uid: string | null | undefined, gid: string | null | undefined) => {
+    async (uid: string | null | undefined) => {
       try {
         const admin = createAdminClient() as any
         
@@ -39,9 +39,9 @@ export async function getDashboardDataAction(guestId?: string | null, userIdHint
         }
 
         const [stratsResult, docsResult, justiceResult] = await Promise.all([
-          fetchModuleData(admin, 'strategies', 'organization_id', 'created_by', possibleOrgIds, uid, gid, 'id, title, description, status, created_at'),
-          fetchModuleData(admin, 'generated_documents', 'organization_id', 'created_by', possibleOrgIds, uid, gid, 'id, title, status, created_at, metadata'),
-          fetchModuleData(admin, 'justice_demands', 'organization_id', 'user_id', possibleOrgIds, uid, gid, 'id, tipo_acao, valor_causa, status, created_at')
+          fetchModuleData(admin, 'strategies', 'organization_id', 'created_by', possibleOrgIds, uid, 'id, title, description, status, created_at'),
+          fetchModuleData(admin, 'generated_documents', 'organization_id', 'created_by', possibleOrgIds, uid, 'id, title, status, created_at, metadata'),
+          fetchModuleData(admin, 'justice_demands', 'organization_id', 'user_id', possibleOrgIds, uid, 'id, tipo_acao, valor_causa, status, created_at')
         ])
 
         return {
@@ -58,7 +58,7 @@ export async function getDashboardDataAction(guestId?: string | null, userIdHint
   )
 
   try {
-    const data = await fetchCachedDashboard(finalUserId, guestId)
+    const data = await fetchCachedDashboard(finalUserId)
     return { success: true, data }
   } catch (err: any) {
     console.error('getDashboardDataAction Error:', err)
@@ -76,7 +76,6 @@ async function fetchModuleData(
   userCol: string, 
   orgIds: string[], 
   userId: string | null | undefined, 
-  guestId: string | null | undefined,
   selectFields: string = '*'
 ) {
   // Construímos uma query única com OR para evitar múltiplos round-trips
@@ -90,7 +89,6 @@ async function fetchModuleData(
   const filters: string[] = []
   if (userId) filters.push(`${userCol}.eq.${userId}`)
   if (orgIds.length > 0) filters.push(`${orgCol}.in.(${orgIds.join(',')})`)
-  if (guestId) filters.push(`metadata->>guest_id.eq.${guestId}`)
 
   if (filters.length > 0) {
     const { data } = await query.or(filters.join(','))

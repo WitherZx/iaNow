@@ -7,9 +7,7 @@ export async function POST(req: Request) {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    const guestId = req.headers.get('X-Guest-Id')
-
-    if (!user && !guestId) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

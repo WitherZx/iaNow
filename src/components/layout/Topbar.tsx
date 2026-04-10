@@ -58,8 +58,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
           {NAV_ITEMS.map((item) => {
             const { href, label, icon: Icon } = item;
             const isLockedByDef = 'locked' in item ? item.locked : false;
-            const isLockedByGuest = href === '/parceiros' && !isAuthenticated;
-            const locked = isLockedByDef || isLockedByGuest;
+            const locked = isLockedByDef;
             const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href));
 
             if (locked) {
