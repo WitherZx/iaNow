@@ -189,7 +189,7 @@ export async function updateStrategyAction(
 
     // 3. Executa o update com trilha de auditoria se houver force
     const updatedMeta = {
-      ...meta,
+      ...(strategy.metadata || {}),
       ...(options?.force ? { 
         updated_by_force: true, 
         conflict_resolved_at: new Date().toISOString() 
