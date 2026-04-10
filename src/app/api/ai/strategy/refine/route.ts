@@ -10,8 +10,10 @@ export async function POST(req: Request) {
     const adminClient = createAdminClient() as any
 
     const body = await req.json()
+    const { strategyId, prompt } = body
+
     if (!strategyId || !prompt || !user) {
-      return NextResponse.json({ error: 'Missing logic or unauthorized' }, { status: 400 })
+      return NextResponse.json({ error: 'Missing strategyId, prompt or unauthorized' }, { status: 400 })
     }
 
     // 1. Fetch existing strategy
