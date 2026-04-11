@@ -56,7 +56,7 @@ export const WIZARD_CONFIG: WizardConfig = {
     3: {
       title: 'REVISÃO - Parâmetros Finais',
       fields: [
-        { id: 'parametros', label: 'Observações ou Cláusulas Específicas', type: 'text' }
+        { id: 'parametros', label: 'Cláusulas Específicas / Observações', type: 'text' }
       ]
     }
   },

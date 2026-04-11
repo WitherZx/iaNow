@@ -115,6 +115,13 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     return () => { isMounted.current = false }
   }, []) // userName excluded from deps to prevent re-init if prop changes during session
 
+  // --- AUTO SCROLL ---
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [messages, isTyping])
+
   // --- MODULE & STEP LOGIC ---
   const activeModule = useMemo(() => {
     if (defaultModule) return defaultModule
@@ -145,9 +152,9 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
   const stepperLabels = useMemo(() => {
     switch (activeModule) {
-      case 'justica': return ['PROBLEMA', 'PARTES', 'VALORES', 'PROTOCOLO']
-      case 'estrategia': return ['NEGÓCIO', 'DADOS', 'METAS', 'ANÁLISE', 'PLANO']
-      case 'juridico': return ['CONTRATO', 'DADOS', 'REVISÃO', 'RESULTADO']
+      case 'justica': return ['PROBLEMA', 'PARTES', 'VALORES', 'ANÁLISE']
+      case 'estrategia': return ['NEGÓCIO', 'DADOS', 'METAS', 'VISÃO', 'ANÁLISE']
+      case 'juridico': return ['CONTRATO', 'DADOS', 'REVISÃO', 'ANÁLISE']
       default: return ['SESSÃO', 'DADOS', 'REVISÃO', 'ANÁLISE', 'RESULTADO']
     }
   }, [activeModule])
@@ -234,13 +241,15 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
         const decoder = new TextDecoder()
         let lastReason: string | null = null
+        let buffer = ''
 
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
 
-          const chunk = decoder.decode(value, { stream: true })
-          const lines = chunk.split('\n')
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
 
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue
@@ -343,14 +352,45 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
         endpoint = '/api/juridico/gerar'
         payload = {
            tipoContrato: wizardData.tipoContrato || 'Contrato',
+           nivel: wizardData.nivel || 'Básico',
            sideToFavor: wizardData.sideToFavor || 'Equilibrado',
-           partyA: { name: wizardData.parteA_name, document: wizardData.parteA_doc, address: wizardData.parteA_address, role: wizardData.parteA_role || 'Contratante' },
-           partyB: { name: wizardData.parteB_name, document: wizardData.parteB_doc, address: wizardData.parteB_address, role: wizardData.parteB_role || 'Contratado' },
+           perfilPartes: wizardData.perfilPartes || '',
+           objetivo: wizardData.objetivo || '',
+           foro: wizardData.foro || '',
+           partyA: { 
+             name: wizardData.parteA_name, 
+             document: wizardData.parteA_doc, 
+             address: wizardData.parteA_address, 
+             type: wizardData.parteA_type,
+             contact: wizardData.parteA_contact,
+             role: wizardData.parteA_role || 'Contratante' 
+           },
+           partyB: { 
+             name: wizardData.parteB_name, 
+             document: wizardData.parteB_doc, 
+             address: wizardData.parteB_address, 
+             type: wizardData.parteB_type,
+             contact: wizardData.parteB_contact,
+             role: wizardData.parteB_role || 'Contratado' 
+           },
            parametros: wizardData.parametros || ''
         }
       } else {
         endpoint = '/api/justica/gerar'
-        payload = { ...wizardData }
+        payload = { 
+          diagnosticData: { 
+            ...wizardData,
+            authorName: wizardData.autor_name,
+            authorDocument: wizardData.autor_doc,
+            authorType: wizardData.autor_type?.toLowerCase(),
+            authorAddress: wizardData.autor_address,
+            defendantName: wizardData.reu_name,
+            defendantDocument: wizardData.reu_doc,
+            defendantType: wizardData.reu_type?.toLowerCase(),
+            defendantAddress: wizardData.reu_address,
+            estimatedValue: (Number(wizardData.materialDamage || 0) + Number(wizardData.moralDamage || 0)).toString()
+          } 
+        }
       }
 
       const res = await fetch(endpoint, { method: 'POST', body: JSON.stringify(payload) })
@@ -358,12 +398,28 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
       
       if (!res.ok) throw new Error(result.error || 'Erro na geração')
 
-      const successPath = result.path || path.replace('/novo', `/${result.id || 'view'}`)
+      // Resolve specific IDs from different APIs
+      const resolvedId = result.strategyId || result.documentId || result.demandId || result.id
+      let successPath = result.path
+
+      if (!successPath && resolvedId) {
+        if (path.includes('estrategia')) successPath = `/estrategia/${resolvedId}`
+        else if (path.includes('juridico')) successPath = `/juridico/${resolvedId}`
+        else if (path.includes('justica')) successPath = `/justica/${resolvedId}`
+        else successPath = path.replace('/novo', `/${resolvedId}`)
+      }
+
+      if (!successPath) successPath = path.replace('/novo', '/view')
+      
       setLatestResultPath(successPath)
       
       const successMsg: Message = {
         role: 'bot',
-        content: `✅ **Execução finalizada com sucesso!**\n\n[ACTION: ${successPath}]`
+        content: `✅ **Execução finalizada com sucesso!**
+        
+A sua solicitação foi processada. Clique no botão abaixo para acessar o resultado final.
+
+[ACTION: ${successPath}]`
       }
 
       setMessages(prev => {
