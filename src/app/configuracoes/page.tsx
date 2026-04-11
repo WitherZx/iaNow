@@ -211,6 +211,40 @@ function ConfiguraçõesPageContent() {
     }
   }
 
+  const handleSaveOrg = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!org?.id) return
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('organizations')
+        .update({
+          name: org.name,
+          document: org.document,
+          email: org.email,
+          phone: org.phone,
+          metadata: {
+            ...org.metadata,
+            endereco: org.address,
+            website: (org as any).website,
+            documento: org.document,
+            telefone: org.phone
+          }
+        })
+        .eq('id', org.id)
+
+      if (error) throw error
+      
+      // Invalida cache para atualizar em todo o sistema
+      queryClient.invalidateQueries({ queryKey: ['user-config'] })
+      toast.success('Dados da organização atualizados!')
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao salvar organização')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const isPF = org?.type === 'pf'
 
   const tabs = [
@@ -515,88 +549,90 @@ function ConfiguraçõesPageContent() {
                   <SectionTitle title="Dados da Organização" subtitle="Configurações corporativas da sua empresa" />
 
                   {org ? (
-                    <Card className="bg-white border-slate-100 shadow-sm p-5 md:p-8 space-y-8">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+                    <form onSubmit={handleSaveOrg} className="space-y-8">
+                      <Card className="bg-white border-slate-100 shadow-sm p-5 md:p-8 space-y-8">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
 
-                        {/* Nome */}
-                        <div className="space-y-3 col-span-full">
-                          <Label>Nome / Razão Social</Label>
-                          <input
-                            type="text"
-                            value={org.name || ''}
-                            onChange={e => setOrg(prev => prev ? { ...prev, name: e.target.value } : null)}
-                            placeholder="Nome da empresa"
-                            className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm"
-                          />
+                          {/* Nome */}
+                          <div className="space-y-3 col-span-full">
+                            <Label>Nome / Razão Social</Label>
+                            <input
+                              type="text"
+                              value={org.name || ''}
+                              onChange={e => setOrg(prev => prev ? { ...prev, name: e.target.value } : null)}
+                              placeholder="Nome da empresa"
+                              className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm placeholder:text-slate-400"
+                            />
+                          </div>
+
+                          {/* CNPJ */}
+                          <div className="space-y-3">
+                            <Label>CNPJ / Identificação</Label>
+                            <input
+                              type="text"
+                              value={org.document || ''}
+                              onChange={e => setOrg(prev => prev ? { ...prev, document: e.target.value } : null)}
+                              placeholder="00.000.000/0001-00"
+                              className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm placeholder:text-slate-400"
+                            />
+                          </div>
+
+                          {/* Telefone */}
+                          <div className="space-y-3">
+                            <Label>Telefone Comercial</Label>
+                            <input
+                              type="text"
+                              value={org.phone || ''}
+                              onChange={e => setOrg(prev => prev ? { ...prev, phone: e.target.value } : null)}
+                              placeholder="(41) 99999-0000"
+                              className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm placeholder:text-slate-400"
+                            />
+                          </div>
+
+                          {/* E-mail */}
+                          <div className="space-y-3">
+                            <Label>E-mail da Organização</Label>
+                            <input
+                              type="email"
+                              value={org.email || ''}
+                              onChange={e => setOrg(prev => prev ? { ...prev, email: e.target.value } : null)}
+                              placeholder="contato@empresa.com.br"
+                              className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm placeholder:text-slate-400"
+                            />
+                          </div>
+
+                          {/* Site */}
+                          <div className="space-y-3">
+                            <Label>Site / URL</Label>
+                            <input
+                              type="url"
+                              value={(org as any).website || ''}
+                              onChange={e => setOrg(prev => prev ? { ...prev, website: e.target.value } as any : null)}
+                              placeholder="https://empresa.com.br"
+                              className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm placeholder:text-slate-400"
+                            />
+                          </div>
+
+                          {/* Endereço */}
+                          <div className="space-y-3 col-span-full">
+                            <Label>Endereço Administrativo</Label>
+                            <input
+                              type="text"
+                              value={org.address || ''}
+                              onChange={e => setOrg(prev => prev ? { ...prev, address: e.target.value } : null)}
+                              placeholder="Rua, Número, Bairro, Cidade - UF"
+                              className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm placeholder:text-slate-400"
+                            />
+                          </div>
+
                         </div>
-
-                        {/* CNPJ */}
-                        <div className="space-y-3">
-                          <Label>CNPJ / Identificação</Label>
-                          <input
-                            type="text"
-                            value={org.document || ''}
-                            onChange={e => setOrg(prev => prev ? { ...prev, document: e.target.value } : null)}
-                            placeholder="00.000.000/0001-00"
-                            className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm"
-                          />
+                        <div className="pt-4 border-t border-slate-50 flex justify-center md:justify-end">
+                          <Button type="submit" isLoading={saving} className="w-full md:w-auto h-12 md:h-14 px-12 rounded-2xl bg-primary text-white font-bold shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all">
+                            Salvar Dados da Org
+                          </Button>
                         </div>
-
-                        {/* Telefone */}
-                        <div className="space-y-3">
-                          <Label>Telefone Comercial</Label>
-                          <input
-                            type="text"
-                            value={org.phone || ''}
-                            onChange={e => setOrg(prev => prev ? { ...prev, phone: e.target.value } : null)}
-                            placeholder="(41) 99999-0000"
-                            className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm"
-                          />
-                        </div>
-
-                        {/* E-mail */}
-                        <div className="space-y-3">
-                          <Label>E-mail da Organização</Label>
-                          <input
-                            type="email"
-                            value={org.email || ''}
-                            onChange={e => setOrg(prev => prev ? { ...prev, email: e.target.value } : null)}
-                            placeholder="contato@empresa.com.br"
-                            className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm"
-                          />
-                        </div>
-
-                        {/* Site */}
-                        <div className="space-y-3">
-                          <Label>Site / URL</Label>
-                          <input
-                            type="url"
-                            value={(org as any).website || ''}
-                            onChange={e => setOrg(prev => prev ? { ...prev, website: e.target.value } as any : null)}
-                            placeholder="https://empresa.com.br"
-                            className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm"
-                          />
-                        </div>
-
-                        {/* Endereço */}
-                        <div className="space-y-3 col-span-full">
-                          <Label>Endereço Administrativo</Label>
-                          <input
-                            type="text"
-                            value={org.address || ''}
-                            onChange={e => setOrg(prev => prev ? { ...prev, address: e.target.value } : null)}
-                            placeholder="Rua, Número, Bairro, Cidade - UF"
-                            className="w-full h-12 md:h-14 px-6 rounded-2xl bg-slate-50 border border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all font-bold text-slate-900 outline-none shadow-sm"
-                          />
-                        </div>
-
-                      </div>
-                      <div className="pt-4 border-t border-slate-50 flex justify-center md:justify-end">
-                        <Button className="w-full md:w-auto h-12 md:h-14 px-12 rounded-2xl bg-primary text-white font-bold shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all">
-                          Salvar Dados da Org
-                        </Button>
-                      </div>
-                    </Card>
+                      </Card>
+                    </form>
                   ) : (
                     <Card className="p-8 border-dashed border-2 border-slate-200 text-center flex flex-col items-center justify-center py-20">
                       <Building2 size={48} className="text-slate-300 mb-4" />

@@ -87,6 +87,13 @@ export async function getMyOrgAction() {
       if (dynamicPrice) org.plans = { ...org.plans, price_monthly: dynamicPrice }
     }
 
+    // 5. Mapeia dados de metadados para campos de topo (prioridade para metadados se existirem)
+    if (org.metadata) {
+      const meta = org.metadata as any
+      if (meta.endereco) org.address = meta.endereco
+      if (meta.website) org.website = meta.website
+    }
+
     return { success: true, data: org }
   } catch (err: any) {
     console.error('getMyOrgAction Error:', err)

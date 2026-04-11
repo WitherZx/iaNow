@@ -91,6 +91,7 @@ ${diagnosticData.refinePrompt}
 Ajuste a petição e atualize a auditoria se necessário.`
       : `DADOS PARA GERAR PETIÇÃO:
 - Tipo: ${diagnosticData.problemType}
+- Lado em Defesa: ${diagnosticData.sideToDefend || 'Autor'}
 - Comarca: ${diagnosticData.comarca || 'Deixar para o usuário preencher'}
 
 QUALIFICAÇÃO DO AUTOR:

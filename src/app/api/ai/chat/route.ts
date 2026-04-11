@@ -21,6 +21,32 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing messages or invalid format' }, { status: 400 })
     }
 
+    // --- PHASE 1.5: FETCH HUB CONTACTS ---
+    // Fetch user's organization and partners to allow the AI to match contacts directly
+    const { data: membership } = await supabase
+      .from('memberships')
+      .select('organization_id')
+      .eq('user_id', user.id)
+      .single()
+
+    const orgId = membership?.organization_id
+    let contactListStr = "Nenhum contato encontrado no Hub."
+
+    if (orgId) {
+      const [{ data: org }, { data: partners }] = await Promise.all([
+        supabase.from('organizations').select('id, name').eq('id', orgId).single(),
+        supabase.from('partners').select('id, name').eq('organization_id', orgId)
+      ])
+
+      const contacts = []
+      if (org) contacts.push({ id: org.id, name: `${org.name} (Sua Matriz)` })
+      if (partners) partners.forEach(p => contacts.push({ id: p.id, name: p.name }))
+
+      if (contacts.length > 0) {
+        contactListStr = contacts.map(c => `- ID: ${c.id} | Nome: ${c.name}`).join('\n')
+      }
+    }
+
     // Build "already collected" summary for the AI to pre-fill forms
     const collectedDataStr = wizardData && Object.keys(wizardData).length > 0
       ? `\n\nDADOS JÁ EXTRAÍDOS DA CONVERSA (USE APENAS PARA PRÉ-PREENCHER OS FORMULÁRIOS - NÃO PULE ETAPAS):\n${
@@ -30,6 +56,8 @@ export async function POST(req: Request) {
             .join('\n')
         }\nUse esses dados no campo 'defaultValue' de cada etapa correspondente. Exiba o formulário para confirmação mesmo se já tiver todos os dados.`
       : ''
+    
+    const hubContextStr = `\n\nLISTA DE CONTATOS DISPONÍVEIS NO HUB (USE OS IDs PARA O CAMPO 'defaultValue' DE CAMPOS 'contact'):\n${contactListStr}`
 
     // --- PHASE 2: ROUTER & RAG ---
     const lastMessage = messages[messages.length - 1]?.content?.toLowerCase() || ''
@@ -161,7 +189,7 @@ Etapa 4 - Visão. Chame show_form com:
 
 Fluxo JUSTIÇA (Processos):
 Etapa 1 - Problema. Chame show_form com:
-[{id: 'problemType', label: 'Tipo de Problema', type: 'select', options: ['Consumidor', 'Trabalhista', 'Cível Geral', 'Imobiliário', 'Outro']}, {id: 'whatHappened', label: 'O que aconteceu?', type: 'text'}, {id: 'whenHappened', label: 'Quando aconteceu?', type: 'text'}]
+[{id: 'sideToDefend', label: 'Polo de Defesa', type: 'select', options: ['A defesa do Autor', 'A defesa do Réu']}, {id: 'problemType', label: 'Tipo de Problema', type: 'select', options: ['Consumidor', 'Trabalhista', 'Cível Geral', 'Imobiliário', 'Outro']}, {id: 'whatHappened', label: 'O que aconteceu?', type: 'text'}, {id: 'whenHappened', label: 'Quando aconteceu?', type: 'text'}]
 Etapa 2 - Qualificação. Chame show_form com:
 [{id: 'autor', label: 'Autor da Ação', type: 'contact'}, {id: 'reu', label: 'Réu / Contra a quem?', type: 'contact'}]
 Etapa 3 - Valores. Chame show_form com:
@@ -237,9 +265,10 @@ RECOLETA E INTELIGÊNCIA DE DADOS (CRÍTICO - REGRAS DE OURO):
 5. **Preenchimento Pró-ativo (REGRA DE OURO)**:
    - Você DEVE carregar 'defaultValue' em TODOS os campos onde a informação já foi citada (ex: valores, prazos, locais, nomes). 
    - Deixar um campo em branco quando o usuário já forneceu a informação na conversa é considerado uma falha grave de inteligência e utilidade.
+   - **CONTATOS**: Se o usuário mencionar uma pessoa ou empresa, cruze com a 'LISTA DE CONTATOS DISPONÍVEIS' abaixo. Se houver correspondência, preencha o ID no 'defaultValue'. Se NÃO houver, use 'manual' no defaultValue e tente preencher os outros campos técnicos (doc, address, etc).
 
 FORA DE ESCOPO:
-Não tente realizar tarefas como: agendar compromissos, gerenciar e-mails, compras externas, ou buscar documentos privados que não estejam na sessão atual ou no RAG da iaNow.${collectedDataStr}${isContinuation ? `\n\n[AVISO DE CONTINUIDADE]: Sua resposta anterior foi cortada devido ao limite de tokens. CONTINUE EXATAMENTE DE ONDE PAROU abaixo. Não peça desculpas, não repita o que já escreveu e não use saudações. O que você já escreveu até agora foi: "${partialResponse?.slice(-100)}..."` : ''}`
+Não tente realizar tarefas como: agendar compromissos, gerenciar e-mails, compras externas, ou buscar documentos privados que não estejam na sessão atual ou no RAG da iaNow.${collectedDataStr}${hubContextStr}${isContinuation ? `\n\n[AVISO DE CONTINUIDADE]: Sua resposta anterior foi cortada devido ao limite de tokens. CONTINUE EXATAMENTE DE ONDE PAROU abaixo. Não peça desculpas, não repita o que já escreveu e não use saudações. O que você já escreveu até agora foi: "${partialResponse?.slice(-100)}..."` : ''}`
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     const response = await fetch(`${OPENROUTER_URL}/chat/completions`, {
