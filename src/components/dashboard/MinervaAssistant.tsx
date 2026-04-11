@@ -427,11 +427,23 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
       
       setLatestResultPath(successPath)
       
-      // Invalida o cache para atualizar as listas e o dashboard automaticamente
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
-      queryClient.invalidateQueries({ queryKey: ['juridico-documents'] })
-      queryClient.invalidateQueries({ queryKey: ['justice-cases'] })
-      queryClient.invalidateQueries({ queryKey: ['strategies'] })
+      // Invalida o cache de forma robusta para atualizar as listas e o dashboard
+      const invalidate = async () => {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }),
+          queryClient.invalidateQueries({ queryKey: ['juridico-documents'] }),
+          queryClient.invalidateQueries({ queryKey: ['justice-cases'] }),
+          queryClient.invalidateQueries({ queryKey: ['strategies'] })
+        ])
+        router.refresh() // Força o Next.js a revalidar Server Components se necessário
+      }
+
+      await invalidate()
+      
+      // Segunda tentativa após 1.5s para garantir consistência eventual do DB
+      setTimeout(invalidate, 1500)
+
+      toast.success('Listas de documentos atualizadas!')
 
       const successMsg: Message = {
         role: 'bot',
