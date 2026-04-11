@@ -427,6 +427,12 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
       
       setLatestResultPath(successPath)
       
+      // Invalida o cache para atualizar as listas e o dashboard automaticamente
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      queryClient.invalidateQueries({ queryKey: ['juridico-documents'] })
+      queryClient.invalidateQueries({ queryKey: ['justice-cases'] })
+      queryClient.invalidateQueries({ queryKey: ['strategies'] })
+
       const successMsg: Message = {
         role: 'bot',
         skipWizard: true,
