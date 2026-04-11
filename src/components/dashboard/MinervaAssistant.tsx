@@ -49,7 +49,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
   // but persist on soft navigation or tab switching.
   useEffect(() => {
     isMounted.current = true
-    
+
     // Load History
     const savedHistory = localStorage.getItem('minerva_chat_history')
     if (savedHistory) setHistory(JSON.parse(savedHistory))
@@ -60,7 +60,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
         // Isolation: Check if this tab already has an active session
         const tabActiveSession = sessionStorage.getItem('minerva_tab_session_id')
         const globalActiveSession = localStorage.getItem('minerva_active_session_id')
-        
+
         const targetSessionId = tabActiveSession || globalActiveSession
 
         if (targetSessionId) {
@@ -69,14 +69,14 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
             setMessages(msgs)
             setSessionId(targetSessionId)
             sessionStorage.setItem('minerva_tab_session_id', targetSessionId)
-            
+
             // Restore Wizard State
             const savedWizard = localStorage.getItem(`minerva_wizard_${targetSessionId}`)
             if (savedWizard) setWizardData(JSON.parse(savedWizard))
-            
+
             const savedStep = localStorage.getItem(`minerva_last_step_${targetSessionId}`)
             if (savedStep) setLastSubmittedStep(parseInt(savedStep))
-            
+
             const savedResult = localStorage.getItem(`minerva_result_${targetSessionId}`)
             if (savedResult) setLatestResultPath(savedResult)
 
@@ -95,7 +95,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
           const greeting = `Olá, ${userName === 'Usuário' ? 'em que posso ajudar?' : userName + '! Como posso auxiliar sua empresa hoje?'}`
           const initialMsgs: Message[] = [{ role: 'bot', content: greeting }]
           setMessages(initialMsgs)
-          
+
           await saveChatMessage({
             sessionId: newSession.id,
             role: 'assistant',
@@ -148,10 +148,10 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     const content = lastBotMsg?.content.toLowerCase() || ''
 
     // Sinais explícitos de que a IA já concluiu a análise e está pronta para gerar
-    if (content.includes('processado com sucesso') || 
-        content.includes('podemos gerar o protocolo') || 
-        content.includes('podemos gerar o contrato') ||
-        content.includes('gerar seu diagnóstico')) return (maxSteps + 1)
+    if (content.includes('processado com sucesso') ||
+      content.includes('podemos gerar o protocolo') ||
+      content.includes('podemos gerar o contrato') ||
+      content.includes('gerar seu diagnóstico')) return (maxSteps + 1)
 
     if (lastSubmittedStep >= maxSteps) return (maxSteps + 1)
     return Math.min(lastSubmittedStep + 1, maxSteps)
@@ -197,14 +197,14 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     if (!sessionId || isProcessing) return
 
     const userMsg: Message = { role: 'user', content: text }
-    
+
     // Save locally and DB
     setMessages(prev => {
       const updated = [...prev, userMsg]
       saveGameState(updated)
       return updated
     })
-    
+
     await saveChatMessage({ sessionId, role: 'user', content: text })
 
     if (messages.filter(m => m.role === 'user').length === 0) {
@@ -224,7 +224,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     try {
       let accumulatedContent = ''
       let toolCalls: any[] = []
-      
+
       // Request loop
       const performRequest = async (isContinuation = false): Promise<string | null> => {
         const response = await fetch('/api/ai/chat', {
@@ -242,7 +242,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
         })
 
         if (!response.ok) throw new Error('API Error')
-        
+
         const reader = response.body?.getReader()
         if (!reader) throw new Error('Reader Error')
 
@@ -284,13 +284,13 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
                 const draft = [...prev]
                 const last = draft[draft.length - 1]
                 if (last && last.role === 'bot') {
-                   draft[draft.length - 1] = { ...last, content: accumulatedContent, toolCalls: toolCalls.length > 0 ? toolCalls : undefined }
+                  draft[draft.length - 1] = { ...last, content: accumulatedContent, toolCalls: toolCalls.length > 0 ? toolCalls : undefined }
                 } else {
-                   draft.push({ role: 'bot', content: accumulatedContent, toolCalls: toolCalls.length > 0 ? toolCalls : undefined })
+                  draft.push({ role: 'bot', content: accumulatedContent, toolCalls: toolCalls.length > 0 ? toolCalls : undefined })
                 }
                 return draft
               })
-            } catch (e) {}
+            } catch (e) { }
           }
         }
         return lastReason
@@ -308,13 +308,13 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
         return prev
       })
 
-      await saveChatMessage({ 
-        sessionId, role: 'assistant', content: accumulatedContent, toolCalls: toolCalls.length > 0 ? toolCalls : null 
+      await saveChatMessage({
+        sessionId, role: 'assistant', content: accumulatedContent, toolCalls: toolCalls.length > 0 ? toolCalls : null
       })
 
     } catch (error) {
-       console.error('Chat Error:', error)
-       toast.error('Ocorreu um problema na comunicação.')
+      console.error('Chat Error:', error)
+      toast.error('Ocorreu um problema na comunicação.')
     } finally {
       setIsTyping(false)
     }
@@ -346,10 +346,10 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     }
 
     setIsProcessing(true)
-    
+
     // UI Feedback
-    const procMsg: Message = { 
-      role: 'bot', 
+    const procMsg: Message = {
+      role: 'bot',
       content: `Iniciando geração do seu **${path.includes('estrategia') ? 'Diagnóstico' : path.includes('juridico') ? 'Contrato' : 'Caso'}**. Por favor, aguarde...`,
       skipWizard: true
     }
@@ -365,34 +365,34 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
       } else if (path.includes('juridico')) {
         endpoint = '/api/juridico/gerar'
         payload = {
-           tipoContrato: wizardData.tipoContrato || 'Contrato',
-           nivel: wizardData.nivel || 'Básico',
-           sideToFavor: wizardData.sideToFavor || 'Equilibrado',
-           perfilPartes: wizardData.perfilPartes || '',
-           objetivo: wizardData.objetivo || '',
-           foro: wizardData.foro || '',
-           partyA: { 
-             name: wizardData.parteA_name, 
-             document: wizardData.parteA_doc, 
-             address: wizardData.parteA_address, 
-             type: wizardData.parteA_type,
-             contact: wizardData.parteA_contact,
-             role: wizardData.parteA_role || 'Contratante' 
-           },
-           partyB: { 
-             name: wizardData.parteB_name, 
-             document: wizardData.parteB_doc, 
-             address: wizardData.parteB_address, 
-             type: wizardData.parteB_type,
-             contact: wizardData.parteB_contact,
-             role: wizardData.parteB_role || 'Contratado' 
-           },
-           parametros: wizardData.parametros || ''
+          tipoContrato: wizardData.tipoContrato || 'Contrato',
+          nivel: wizardData.nivel || 'Básico',
+          sideToFavor: wizardData.sideToFavor || 'Equilibrado',
+          perfilPartes: wizardData.perfilPartes || '',
+          objetivo: wizardData.objetivo || '',
+          foro: wizardData.foro || '',
+          partyA: {
+            name: wizardData.parteA_name,
+            document: wizardData.parteA_doc,
+            address: wizardData.parteA_address,
+            type: wizardData.parteA_type,
+            contact: wizardData.parteA_contact,
+            role: wizardData.parteA_role || 'Contratante'
+          },
+          partyB: {
+            name: wizardData.parteB_name,
+            document: wizardData.parteB_doc,
+            address: wizardData.parteB_address,
+            type: wizardData.parteB_type,
+            contact: wizardData.parteB_contact,
+            role: wizardData.parteB_role || 'Contratado'
+          },
+          parametros: wizardData.parametros || ''
         }
       } else {
         endpoint = '/api/justica/gerar'
-        payload = { 
-          diagnosticData: { 
+        payload = {
+          diagnosticData: {
             ...wizardData,
             authorName: wizardData.autor_name,
             authorDocument: wizardData.autor_doc,
@@ -403,13 +403,13 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
             defendantType: wizardData.reu_type?.toLowerCase(),
             defendantAddress: wizardData.reu_address,
             estimatedValue: (Number(wizardData.materialDamage || 0) + Number(wizardData.moralDamage || 0)).toString()
-          } 
+          }
         }
       }
 
       const res = await fetch(endpoint, { method: 'POST', body: JSON.stringify(payload) })
       const result = await res.json()
-      
+
       if (!res.ok) throw new Error(result.error || 'Erro na geração')
 
       // Resolve specific IDs from different APIs
@@ -424,9 +424,9 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
       }
 
       if (!successPath) successPath = path.replace('/novo', '/view')
-      
+
       setLatestResultPath(successPath)
-      
+
       // Invalida o cache de forma robusta para atualizar as listas e o dashboard
       const invalidate = async () => {
         await Promise.all([
@@ -439,7 +439,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
       }
 
       await invalidate()
-      
+
       // Segunda tentativa após 1.5s para garantir consistência eventual do DB
       setTimeout(invalidate, 1500)
 
@@ -513,8 +513,8 @@ A sua solicitação foi processada. Clique no botão abaixo para acessar o resul
               <span className="hidden sm:inline">Visualização Tradicional</span>
               <span className="sm:hidden">Dashboard</span>
             </button>
-            <button 
-              onClick={() => setIsHistoryOpen(!isHistoryOpen)} 
+            <button
+              onClick={() => setIsHistoryOpen(!isHistoryOpen)}
               className={cn("p-2 rounded-xl border transition-all", isHistoryOpen ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-400 border-slate-200")}
             >
               <History size={18} />
@@ -523,7 +523,7 @@ A sua solicitação foi processada. Clique no botão abaixo para acessar o resul
         </header>
 
         {/* Status & Stepper */}
-        <div className="px-4 sm:px-8 py-4 border-b border-slate-50">
+        <div className="px-4 sm:px-8 py-4 border-b border-t border-slate-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Sessão</span>
@@ -561,12 +561,12 @@ A sua solicitação foi processada. Clique no botão abaixo para acessar o resul
         </div>
 
         {/* Chat Messages */}
-        <main 
-          ref={scrollRef} 
+        <main
+          ref={scrollRef}
           className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 custom-scrollbar"
         >
           {messages.length === 0 && Array.from({ length: 3 }).map((_, i) => (
-             <div key={i} className="w-full h-20 bg-slate-50 animate-pulse rounded-2xl" />
+            <div key={i} className="w-full h-20 bg-slate-50 animate-pulse rounded-2xl" />
           ))}
 
           {messages.map((msg, i) => (
@@ -591,24 +591,24 @@ A sua solicitação foi processada. Clique no botão abaixo para acessar o resul
           {/* Prompt Chips */}
           {!isTyping && messages.length === 1 && (
             <div className="flex flex-wrap gap-2 justify-center pt-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
-               {[
-                 { label: "Criar Contrato", prompt: "Quero criar um novo contrato jurídico" },
-                 { label: "Novo Processo", prompt: "Quero iniciar um novo processo judicial" },
-                 { label: "Nova Estratégia", prompt: "Quero montar uma estratégia de negócio" }
-               ].map((chip, i) => (
-                 <button key={i} onClick={() => handleSendMessage(chip.prompt)} className="px-4 py-2 bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-500 hover:border-blue-600 hover:text-blue-600 rounded-xl transition-all shadow-sm uppercase tracking-wider">
-                   {chip.label}
-                 </button>
-               ))}
+              {[
+                { label: "Criar Contrato", prompt: "Quero criar um novo contrato jurídico" },
+                { label: "Novo Processo", prompt: "Quero iniciar um novo processo judicial" },
+                { label: "Nova Estratégia", prompt: "Quero montar uma estratégia de negócio" }
+              ].map((chip, i) => (
+                <button key={i} onClick={() => handleSendMessage(chip.prompt)} className="px-4 py-2 bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-500 hover:border-blue-600 hover:text-blue-600 rounded-xl transition-all shadow-sm uppercase tracking-wider">
+                  {chip.label}
+                </button>
+              ))}
             </div>
           )}
         </main>
 
         {/* Input */}
         <footer className="p-4 sm:p-6 bg-white border-t border-slate-100 shrink-0">
-          <MinervaChatInput 
-            onSendMessage={handleSendMessage} 
-            isProcessing={isTyping || isProcessing} 
+          <MinervaChatInput
+            onSendMessage={handleSendMessage}
+            isProcessing={isTyping || isProcessing}
             placeholder="Descreva sua necessidade para a Minerva..."
           />
           <p className="mt-3 text-[9px] text-center text-slate-400 font-bold uppercase tracking-widest">
@@ -625,11 +625,11 @@ A sua solicitação foi processada. Clique no botão abaixo para acessar o resul
         <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-white shrink-0">
           <div>
             <h4 className="font-black text-slate-900 uppercase tracking-tight text-sm flex items-center gap-2">
-               <Clock size={16} className="text-blue-600" /> Histórico
+              <Clock size={16} className="text-blue-600" /> Histórico
             </h4>
             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sessões Recentes</p>
           </div>
-          <button 
+          <button
             onClick={() => {
               const newId = `session-${Date.now()}`
               setSessionId(newId)
@@ -644,33 +644,33 @@ A sua solicitação foi processada. Clique no botão abaixo para acessar o resul
 
         <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar bg-white/50">
           {history.map((item) => (
-             <div 
-               key={item.id} 
-               onClick={() => {
-                 setSessionId(item.id)
-                 sessionStorage.setItem('minerva_tab_session_id', item.id)
-                 localStorage.setItem('minerva_active_session_id', item.id)
-                 const saved = localStorage.getItem(`minerva_messages_${item.id}`)
-                 if (saved) setMessages(JSON.parse(saved))
-                 if (window.innerWidth < 1024) setIsHistoryOpen(false)
-               }}
-               className={cn(
-                 "p-4 rounded-2xl border transition-all cursor-pointer group/item relative",
-                 sessionId === item.id ? "bg-white border-blue-600 shadow-md ring-1 ring-blue-600/10" : "bg-white/50 border-slate-100 hover:bg-white hover:border-slate-200"
-               )}
-             >
-               <h5 className={cn("text-xs font-bold truncate pr-6", sessionId === item.id ? "text-blue-600" : "text-slate-700")}>{item.title}</h5>
-               <p className="text-[9px] font-black text-slate-300 uppercase mt-1">{item.date}</p>
-               <button onClick={(e) => deleteSession(item.id, e)} className="absolute top-3 right-3 text-slate-300 hover:text-rose-500 opacity-0 group-hover/item:opacity-100 transition-all">
-                 <Trash2 size={12} />
-               </button>
-             </div>
+            <div
+              key={item.id}
+              onClick={() => {
+                setSessionId(item.id)
+                sessionStorage.setItem('minerva_tab_session_id', item.id)
+                localStorage.setItem('minerva_active_session_id', item.id)
+                const saved = localStorage.getItem(`minerva_messages_${item.id}`)
+                if (saved) setMessages(JSON.parse(saved))
+                if (window.innerWidth < 1024) setIsHistoryOpen(false)
+              }}
+              className={cn(
+                "p-4 rounded-2xl border transition-all cursor-pointer group/item relative",
+                sessionId === item.id ? "bg-white border-blue-600 shadow-md ring-1 ring-blue-600/10" : "bg-white/50 border-slate-100 hover:bg-white hover:border-slate-200"
+              )}
+            >
+              <h5 className={cn("text-xs font-bold truncate pr-6", sessionId === item.id ? "text-blue-600" : "text-slate-700")}>{item.title}</h5>
+              <p className="text-[9px] font-black text-slate-300 uppercase mt-1">{item.date}</p>
+              <button onClick={(e) => deleteSession(item.id, e)} className="absolute top-3 right-3 text-slate-300 hover:text-rose-500 opacity-0 group-hover/item:opacity-100 transition-all">
+                <Trash2 size={12} />
+              </button>
+            </div>
           ))}
           {history.length === 0 && (
-             <div className="h-40 flex flex-col items-center justify-center text-slate-300 text-center p-4">
-                <MessageSquare size={32} className="mb-2 opacity-20" />
-                <p className="text-[10px] uppercase font-black tracking-widest">Sem histórico</p>
-             </div>
+            <div className="h-40 flex flex-col items-center justify-center text-slate-300 text-center p-4">
+              <MessageSquare size={32} className="mb-2 opacity-20" />
+              <p className="text-[10px] uppercase font-black tracking-widest">Sem histórico</p>
+            </div>
           )}
         </div>
       </aside>
