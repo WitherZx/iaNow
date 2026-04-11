@@ -68,6 +68,8 @@ export default function DemandDetailPage() {
   const [isTrackModalOpen, setIsTrackModalOpen] = useState(false)
   const { needsOnboarding } = useOnboardingGuard()
   const isMounted = useRef(true)
+  const hasAutoSynced = useRef(false)
+  const hasAutoAnalyzed = useRef(false)
 
   useEffect(() => {
     isMounted.current = true
@@ -102,16 +104,7 @@ export default function DemandDetailPage() {
       const res = await getJusticeDemandAction(id as string)
       if (res.error) throw new Error(res.error)
       
-      // Auto-sync process remote status if missing
-      const processNumber = res.data?.metadata?.process_number
-      const cachedStatus = res.data?.metadata?.last_remote_status
-      if (processNumber && !cachedStatus) {
-        // Roda em background sem bloquear
-        setTimeout(async () => {
-             // Let internal component function fetchProcessStatus handle it via button or event if we cannot mutate easily, 
-             // but we will expose a flag to trigger it.
-        }, 500)
-      }
+      // Auto-sync será handled pelo useEffect para evitar loops no queryFn
 
       return {
         demand: res.data,
@@ -153,7 +146,7 @@ export default function DemandDetailPage() {
         setShowPaywall(true)
       }
     }
-  }, [demandData, activeTab, id])
+  }, [demandData, id]) // Removido activeTab para evitar resets indesejados ao trocar de aba
 
   const activeTokenRef = useRef<string | null>(null)
 
@@ -198,19 +191,25 @@ export default function DemandDetailPage() {
     return `${digits.substring(0, 2)}/${digits.substring(2, 4)}/${digits.substring(4)}`
   }
 
+  // Gatilho Automático: Sincronização de Status (CNJ)
+  useEffect(() => {
+    const processNumber = demand?.metadata?.process_number
+    if (processNumber && !hasAutoSynced.current && !isTrackingLoading && !loading) {
+      hasAutoSynced.current = true
+      fetchProcessStatus(demand)
+    }
+  }, [demand?.metadata?.process_number, isTrackingLoading, loading])
+
   // Gatilho Automático: Análise Minerva
   useEffect(() => {
-    if (activeTab === 'analise' && !processAnalysis && !isAnalysisLoading && processStatus) {
+    if (activeTab === 'analise' && !processAnalysis && !isAnalysisLoading && processStatus && !hasAutoAnalyzed.current) {
+      hasAutoAnalyzed.current = true
       generateMinervaAnalysis()
     }
-  }, [activeTab, processAnalysis, processStatus])
+  }, [activeTab, processAnalysis, processStatus, isAnalysisLoading])
 
-  // Gatilho Automático: Documentos do Escavador
-  useEffect(() => {
-    if (processStatus && processDocuments.length === 0 && !isDocsLoading) {
-      fetchProcessDocuments()
-    }
-  }, [processStatus])
+  // O Gatilho de Documentos do Escavador foi consolidado dentro do fetchProcessStatus para evitar loops
+
 
   const loadVersions = async () => {
     try {
@@ -256,6 +255,7 @@ export default function DemandDetailPage() {
       setIsEditing(false)
       setViewingVersion(null) // Fork concluído: volta para a corrente principal
       toast.success('Petição salva com sucesso!')
+      queryClient.invalidateQueries({ queryKey: ['justice-case', id] })
       loadVersions() // Atualiza lista de versões
     } catch (err) {
       console.error('Erro ao salvar:', err)
@@ -351,6 +351,8 @@ export default function DemandDetailPage() {
       const res = await updateJusticeDemandAction(demandData.id || id, updates)
       if (res.error) throw new Error(res.error)
 
+      queryClient.invalidateQueries({ queryKey: ['justice-case', id] })
+
       setDemand((prev: any) => ({ ...prev, metadata: updatedMetadata, ...(numericValorCausa !== undefined && { valor_causa: numericValorCausa }) }))
       
       // DISPARA SINCRONIZAÇÃO DO ESCAVADOR TAMBÉM
@@ -397,6 +399,8 @@ export default function DemandDetailPage() {
 
       if (saveRes.error) {
         console.error('[Analysis Save] Error:', saveRes.error)
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['justice-case', id] })
       }
 
       setProcessAnalysis(analysis)
@@ -445,6 +449,7 @@ export default function DemandDetailPage() {
         }
 
         setDemand((prev: any) => ({ ...prev, metadata: updatedMetadata }))
+        queryClient.invalidateQueries({ queryKey: ['justice-case', id] })
       }
     } catch (err: any) {
       console.error('[Escavador] Error:', err)
@@ -467,6 +472,7 @@ export default function DemandDetailPage() {
           petition_content: result.text,
           is_external_petition: true 
         })
+        queryClient.invalidateQueries({ queryKey: ['justice-case', id] })
       }
     } catch (err) {
       console.error('Extraction error:', err)
@@ -617,6 +623,7 @@ export default function DemandDetailPage() {
                             await createDocumentVersionAction(id as string, 'justice', newMetadata)
 
                             toast.success('Variáveis aplicadas e salvas!')
+                            queryClient.invalidateQueries({ queryKey: ['justice-case', id] })
                             loadVersions()
                           } catch (err) {
                             console.error('Erro ao salvar após aplicar variáveis:', err)

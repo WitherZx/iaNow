@@ -116,16 +116,30 @@ const WIZARD_CONFIG = {
       ]
     }
   },
-  justica: {
-    1: {
-      title: 'Fatos & Ocorrência',
-      fields: [
-        { id: 'tipoProblema', label: 'Tipo de Problema', type: 'select', options: ['Consumidor', 'Trabalhista', 'Cível Geral', 'Imobiliário', 'Danificados', 'Outro'] },
-        { id: 'relato', label: 'O que aconteceu?', type: 'text' },
-        { id: 'quando', label: 'Quando aconteceu?', type: 'text' }
-      ]
+    justica: {
+      1: {
+        title: 'Fatos & Ocorrência',
+        fields: [
+          { id: 'problemType', label: 'Tipo de Problema', type: 'select', options: ['Consumidor', 'Trabalhista', 'Cível Geral', 'Imobiliário', 'Outro'] },
+          { id: 'whatHappened', label: 'O que aconteceu?', type: 'text' },
+          { id: 'whenHappened', label: 'Quando aconteceu?', type: 'text' }
+        ]
+      },
+      2: {
+        title: 'Qualificação das Partes',
+        fields: [
+          { id: 'autor', label: 'Autor da Ação', type: 'contact', isContact: true },
+          { id: 'reu', label: 'Réu / Contra a quem?', type: 'contact', isContact: true }
+        ]
+      },
+      3: {
+        title: 'Valores da Causa',
+        fields: [
+          { id: 'materialDamage', label: 'Prejuízo Material (R$)', type: 'text' },
+          { id: 'moralDamage', label: 'Danos Morais (R$)', type: 'text' }
+        ]
+      }
     }
-  }
 } as const;
 
 // --- HELPERS (Hoisted/Outside) ---
@@ -151,11 +165,17 @@ const scrapeConversationContext = (msgs: { role: string, content: string }[]) =>
     { id: 'financialControl', regex: /(?:^|\n)[*#\s-]*Controle Financeiro[*#\s\?]*[:\-]\s*(.*)/i },
     { id: 'goals', regex: /(?:^|\n)[*#\s-]*Objetivos Principais[*#\s\?]*[:\-]\s*(.*)/i },
     { id: 'growthObstacle', regex: /(?:^|\n)[*#\s-]*O que (?:te )?impede de dobrar hoje[*#\s\?]*[:\-]\s*(.*)/i },
-    // Jurídico Fallbacks (Fuzzy)
+    // Jurídico & Justiça
     { id: 'tipoContrato', regex: /(?:^|\n)[*#\s-]*Tipo de Documento[*#\s]*[:\-]\s*(.*)/i },
     { id: 'perfilPartes', regex: /(?:^|\n)[*#\s-]*Perfil das Partes[*#\s]*[:\-]\s*(.*)/i },
     { id: 'objetivo', regex: /(?:^|\n)[*#\s-]*Objetivo(?: (?:do )?Documento| (?:do )?Contrato)?[*#\s]*[:\-]\s*(.*)/i },
-    { id: 'foro', regex: /(?:^|\n)[*#\s-]*Foro[*#\s]*(?:\/ Comarca)?[*#\s]*[:\-]\s*(.*)/i }
+    { id: 'foro', regex: /(?:^|\n)[*#\s-]*Foro[*#\s]*(?:\/ Comarca)?[*#\s]*[:\-]\s*(.*)/i },
+    // Justiça specific
+    { id: 'problemType', regex: /(?:^|\n)[*#\s-]*Tipo de Problema[*#\s]*[:\-]\s*(.*)/i },
+    { id: 'whatHappened', regex: /(?:^|\n)[*#\s-]*O que aconteceu\??[*#\s]*[:\-]\s*(.*)/i },
+    { id: 'whenHappened', regex: /(?:^|\n)[*#\s-]*Quando aconteceu\??[*#\s]*[:\-]\s*(.*)/i },
+    { id: 'materialDamage', regex: /(?:^|\n)[*#\s-]*Prejuízo Material[*#\s]*[:\-]\s*(.*)/i },
+    { id: 'moralDamage', regex: /(?:^|\n)[*#\s-]*Danos Morais[*#\s]*[:\-]\s*(.*)/i }
   ]
 
   patterns.forEach(p => {
@@ -410,7 +430,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
   const stepperLabels = (() => {
     switch (activeModule) {
       case 'justica':
-        return ['DEMANDA', 'FATOS', 'DADOS', 'ANÁLISE', 'PROTOCOLO']
+        return ['PROBLEMA', 'PARTES', 'VALORES', 'PROTOCOLO']
       case 'estrategia':
         return ['NEGÓCIO', 'DADOS', 'METAS', 'ANÁLISE', 'PLANO']
       case 'juridico':
@@ -871,18 +891,30 @@ Isso pode levar alguns segundos. Por favor, não feche esta janela.`
             diagnosticData: {
               problemType: wizardData.problemType || wizardData.tipo_problema || 'Indenizatória',
               comarca: wizardData.comarca || wizardData.jurisdiction || wizardData.cidade || 'Foro correspondente',
-              authorName: wizardData.author_name || wizardData.autor_name || wizardData.authorName || userName,
-              authorDocument: wizardData.author_doc || wizardData.autor_doc || wizardData.authorDocument || 'CPF Inválido',
-              authorAddress: wizardData.author_address || wizardData.autor_address || wizardData.authorAddress || 'Sem endereço',
-              defendantName: wizardData.defendant_name || wizardData.reu_name || wizardData.defendant || 'Parte Ré',
-              defendantDocument: wizardData.defendant_doc || wizardData.reu_doc || 'CNPJ/CPF Inválido',
-              defendantAddress: wizardData.defendant_address || wizardData.reu_address || 'Endereço não informado',
+              // Author
+              authorId: wizardData.autor || wizardData.authorId,
+              authorName: wizardData.autor_name || wizardData.author_name || wizardData.authorName || userName,
+              authorDocument: wizardData.autor_doc || wizardData.author_doc || wizardData.authorDocument || '',
+              authorType: wizardData.autor_type || wizardData.author_type || 'pf',
+              authorEmail: wizardData.autor_email || wizardData.author_email || '',
+              authorPhone: wizardData.autor_phone || wizardData.author_phone || '',
+              authorAddress: wizardData.autor_address || wizardData.author_address || wizardData.authorAddress || '',
+              authorRepName: wizardData.autor_representative || wizardData.autor_rep_name || wizardData.authorRepName || '',
+              // Defendant
+              defendantId: wizardData.reu || wizardData.defendantId,
+              defendantName: wizardData.reu_name || wizardData.defendant_name || wizardData.defendant || 'Parte Ré',
+              defendantDocument: wizardData.reu_doc || wizardData.defendant_doc || '',
+              defendantType: wizardData.reu_type || wizardData.defendant_type || 'pj',
+              defendantEmail: wizardData.reu_email || wizardData.defendant_email || '',
+              defendantPhone: wizardData.reu_phone || wizardData.defendant_phone || '',
+              defendantAddress: wizardData.reu_address || wizardData.defendant_address || '',
+              defendantRepName: wizardData.reu_representative || wizardData.reu_rep_name || wizardData.defendantRepName || '',
+              // Details
               whatHappened: wizardData.whatHappened || wizardData.fatos || wizardData.what_happened || 'Resumo dos fatos não informado.',
-              whenHappened: wizardData.when || wizardData.data_ocorrido || wizardData.when_happened || 'Não informado',
-              materialDamage: wizardData.materialDamage || wizardData.dano_material || '0',
-              moralDamage: wizardData.moralDamage || wizardData.dano_moral || '0',
-              estimatedValue: wizardData.valor_causa || wizardData.valor || wizardData.valor_total || wizardData.total ||
-                (Number(wizardData.materialDamage || wizardData.dano_material || 0) + Number(wizardData.moralDamage || wizardData.dano_moral || 0))
+              whenHappened: wizardData.whenHappened || wizardData.when || wizardData.data_fato || wizardData.when_happened || 'Data não informada',
+              materialDamage: wizardData.materialDamage || wizardData.danoMaterial || wizardData.dano_material || '0',
+              moralDamage: wizardData.moralDamage || wizardData.danoMoral || wizardData.dano_moral || '0',
+              estimatedValue: (Number(wizardData.materialDamage || wizardData.danoMaterial || 0) + Number(wizardData.moralDamage || wizardData.danoMoral || 0)).toString()
             }
           }
         }
@@ -1241,7 +1273,7 @@ A execução foi finalizada com base nos dados fornecidos e revisados através d
                       )}
 
                       {/* Action Buttons (Tool or Legacy) */}
-                      {actions.length > 0 && (
+                      {actions.length > 0 && isLast && (
                         <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-left-2 duration-500 delay-300">
                           {actions.map((path, idx) => (
                             <button
@@ -1650,12 +1682,15 @@ function ChatForm({
                       [field.id]: partner.id,
                       [`${field.id}_name`]: partner.name,
                       [`${field.id}_doc`]: partner.document,
+                      [`${field.id}_type`]: (partner.type || partner.metadata?.tipo || 'PJ').toUpperCase(),
                       [`${field.id}_address`]: partner.address || '',
                       [`${field.id}_contact`]: partner.email || partner.phone || '',
                       [`${field.id}_rg`]: partner.metadata?.rg || '',
                       [`${field.id}_nationality`]: partner.metadata?.nacionalidade || partner.metadata?.nationality || '',
                       [`${field.id}_maritalStatus`]: partner.metadata?.estado_civil || partner.metadata?.maritalStatus || '',
                       [`${field.id}_profession`]: partner.metadata?.profissao || partner.metadata?.profession || '',
+                      [`${field.id}_representative`]: partner.metadata?.representante?.nome || partner.metadata?.representative || '',
+                      [`${field.id}_representativeDoc`]: partner.metadata?.representante?.cpf || partner.metadata?.repDoc || '',
                     }))
                   }}
                   className={cn((!isLastMessage || isSubmitted) && "opacity-60 pointer-events-none")}
@@ -1665,16 +1700,17 @@ function ChatForm({
                   <>
 
                     {/* Tipo de Pessoa Toggle */}
-                    <div className="flex bg-white rounded-xl p-1 border border-amber-200/50 shadow-sm self-start">
+                    <div className="flex bg-white rounded-xl p-1 border border-amber-200/50 shadow-sm w-full">
                       <button
                         type="button"
+                        disabled={!isLastMessage || isSubmitted}
                         onClick={() => setFormData(prev => ({
                           ...prev,
                           [`${field.id}_type`]: 'PF',
                           [`${field.id}_doc`]: formatDoc(prev[`${field.id}_doc`] || '', 'PF')
                         }))}
                         className={cn(
-                          "px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all",
+                          "flex-1 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
                           (!formData[`${field.id}_type`] || formData[`${field.id}_type`] === 'PF')
                             ? "bg-amber-100 text-amber-800 shadow-sm"
                             : "text-slate-400 hover:text-slate-600"
@@ -1684,13 +1720,14 @@ function ChatForm({
                       </button>
                       <button
                         type="button"
+                        disabled={!isLastMessage || isSubmitted}
                         onClick={() => setFormData(prev => ({
                           ...prev,
                           [`${field.id}_type`]: 'PJ',
                           [`${field.id}_doc`]: formatDoc(prev[`${field.id}_doc`] || '', 'PJ')
                         }))}
                         className={cn(
-                          "px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all",
+                          "flex-1 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
                           formData[`${field.id}_type`] === 'PJ'
                             ? "bg-amber-100 text-amber-800 shadow-sm"
                             : "text-slate-400 hover:text-slate-600"

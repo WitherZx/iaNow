@@ -51,7 +51,8 @@ ESTRUTURA DA PETIÇÃO:
 1. Endereçamento (Selecione o JEC competente com base na cidade do autor ou réu).
 2. Qualificação Completa (Autor e Réu).
    - VALIDAÇÃO DE DOCUMENTO: Se o Autor for Pessoa Física, o documento deve ser um CPF (000.000.000-00). Se o Réu for Empresa, o documento deve ser um CNPJ (00.000.000/0000-00).
-   - NUNCA troque essas informações. Se os dados fornecidos parecerem inconsistentes (ex: CNPJ no Autor PF), corrija para o formato correto ou deixe em branco se não tiver certeza absoluta.
+   - REGRA PARA MEI/ME EM CONSUMER (CRÍTICO): Se o Autor for uma empresa individual (MEI/ME) ou se o documento fornecido for um CPF mas o nome for de uma empresa, você DEVE qualificar a petição em nome da PESSOA FÍSICA (Representante), ex: "NOME DO REPRESENTANTE, representante da empresa NOME DA EMPRESA".
+   - NUNCA use o nome de uma empresa (Ex: MV Web Dev) associado diretamente a um CPF como se fosse uma pessoa física. Se tiver o nome do representante legal, coloque-o como Autor principal.
 3. Dos Fatos (Narrativa cronológica detalhada baseada nos dados fornecidos).
 4. Do Direito (Fundamentação jurídica com CDC, CC, etc.).
 5. Dos Pedidos e Valor da Causa.
@@ -94,6 +95,7 @@ Ajuste a petição e atualize a auditoria se necessário.`
 
 QUALIFICAÇÃO DO AUTOR:
 - Nome: ${diagnosticData.authorName}
+- Representante Legal: ${diagnosticData.authorRepName || 'Não informado'}
 - Tipo: ${diagnosticData.authorType === 'pj' ? 'Pessoa Jurídica' : 'Pessoa Física'}
 - Documento: ${diagnosticData.authorDocument}
 - E-mail: ${diagnosticData.authorEmail || 'Não informado'}
@@ -102,6 +104,7 @@ QUALIFICAÇÃO DO AUTOR:
 
 QUALIFICAÇÃO DO RÉU:
 - Nome: ${diagnosticData.defendantName}
+- Representante Legal: ${diagnosticData.defendantRepName || 'Não informado'}
 - Tipo: ${diagnosticData.defendantType === 'pj' ? 'Pessoa Jurídica' : 'Pessoa Física'}
 - Documento: ${diagnosticData.defendantDocument || 'Não informado'}
 - E-mail: ${diagnosticData.defendantEmail || 'Não informado'}

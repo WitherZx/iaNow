@@ -127,37 +127,55 @@ export default function PartnerHubPage() {
     queryClient.invalidateQueries({ queryKey: ['partners'] })
   }
 
-  const allPartners = [
-    ...(orgInfo ? [{
-      id: orgInfo.id,
-      type: (orgInfo.metadata as any)?.type || (orgInfo.metadata as any)?.tipo || 'pj',
-      name: orgInfo.name,
-      document: (orgInfo.metadata as any)?.documento || (orgInfo as any).category || '',
-      email: (orgInfo.metadata as any)?.email || session?.user?.email || '',
-      phone: (orgInfo.metadata as any)?.telefone || '',
-      address: (orgInfo.metadata as any)?.endereco || '',
-      website: (orgInfo.metadata as any)?.website || (orgInfo.metadata as any)?.site || '',
-      representative: (orgInfo.metadata as any)?.representante_legal?.nome || '',
-      representative_cpf: (orgInfo.metadata as any)?.representante_legal?.cpf || '',
-      isDefault: true,
-      metadata: orgInfo.metadata
-    }] : []),
-    ...(partners || []).map((p: any) => ({
-      ...p,
-      type: (p.metadata as any)?.tipo || 'pj',
-      document: (p.metadata as any)?.documento || p.category || '',
-      email: p.contact_email || (p.metadata as any)?.email || '',
-      phone: (p.metadata as any)?.telefone || (p.metadata as any)?.contato?.telefone || '',
-      address: typeof (p.metadata as any)?.endereco === 'string'
-        ? (p.metadata as any)?.endereco
-        : (p.metadata as any)?.endereco?.logradouro || '',
-      website: (p.metadata as any)?.website || (p.metadata as any)?.site || '',
-      representative: (p.metadata as any)?.representante_legal?.nome || '',
-      representative_cpf: (p.metadata as any)?.representante_legal?.cpf || '',
-      isDefault: false
-    }))
+  // Build unique partners list
+  const allPartners = React.useMemo(() => {
+    const seen = new Set()
+    const list: any[] = []
 
-  ]
+    // 1. Matriz (Organization)
+    if (orgInfo) {
+      list.push({
+        id: orgInfo.id,
+        type: (orgInfo.metadata as any)?.type || (orgInfo.metadata as any)?.tipo || 'pj',
+        name: orgInfo.name,
+        document: (orgInfo.metadata as any)?.documento || (orgInfo as any).category || '',
+        email: (orgInfo.metadata as any)?.email || session?.user?.email || '',
+        phone: (orgInfo.metadata as any)?.telefone || '',
+        address: (orgInfo.metadata as any)?.endereco || '',
+        website: (orgInfo.metadata as any)?.website || (orgInfo.metadata as any)?.site || '',
+        representative: (orgInfo.metadata as any)?.representante_legal?.nome || '',
+        representative_cpf: (orgInfo.metadata as any)?.representante_legal?.cpf || '',
+        isDefault: true,
+        metadata: orgInfo.metadata
+      })
+      seen.add(orgInfo.id)
+    }
+
+    // 2. Others
+    if (partners) {
+      partners.forEach((p: any) => {
+        if (!p.id || seen.has(p.id)) return
+        seen.add(p.id)
+        
+        list.push({
+          ...p,
+          type: (p.metadata as any)?.tipo || 'pj',
+          document: (p.metadata as any)?.documento || p.category || '',
+          email: p.contact_email || (p.metadata as any)?.email || '',
+          phone: (p.metadata as any)?.telefone || (p.metadata as any)?.contato?.telefone || '',
+          address: typeof (p.metadata as any)?.endereco === 'string'
+            ? (p.metadata as any)?.endereco
+            : (p.metadata as any)?.endereco?.logradouro || '',
+          website: (p.metadata as any)?.website || (p.metadata as any)?.site || '',
+          representative: (p.metadata as any)?.representante_legal?.nome || '',
+          representative_cpf: (p.metadata as any)?.representante_legal?.cpf || '',
+          isDefault: false
+        })
+      })
+    }
+
+    return list
+  }, [orgInfo, partners, session?.user?.email])
 
   const [editingId, setEditingId] = useState<string | null>(null)
 

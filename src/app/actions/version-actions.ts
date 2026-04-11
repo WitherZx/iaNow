@@ -12,6 +12,7 @@ export async function createDocumentVersionAction(parentId: string, parentType: 
     // Para simplificar, não validamos permissão aqui pois assume-se que 
     // a verificação já foi feita na Server Action de origem (update).
     const { error } = await admin
+      .from('document_versions')
       .insert({
         parent_id: parentId,
         parent_type: parentType,
