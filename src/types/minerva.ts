@@ -4,6 +4,7 @@ export interface Message {
   role: MessageRole
   content: string
   toolCalls?: any[]
+  skipWizard?: boolean
 }
 
 export interface MinervaAssistantProps {

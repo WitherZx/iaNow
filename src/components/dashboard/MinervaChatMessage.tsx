@@ -118,7 +118,7 @@ export const MinervaChatMessage: React.FC<MinervaChatMessageProps> = React.memo(
   // REGRA DETERMINISTA: Injeção do Formulário da Etapa Atual ou Passada
   const messageStep = isBot ? detectStepFromContent(msg.content) : null
   
-  if (isBot && activeModule && activeModule !== 'general') {
+  if (isBot && activeModule && activeModule !== 'general' && !msg.skipWizard) {
     const targetStep = messageStep || (isLast && !isTyping ? wizardStep : null)
     const config = (WIZARD_CONFIG as any)[activeModule]?.[targetStep || 0]
     

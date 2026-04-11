@@ -131,10 +131,10 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     const scraped = scrapeConversationContext(messages)
     if (scraped.companyName || scraped.sector || wizardData.companyName || wizardData.sector) return 'estrategia'
     if (wizardData.tipoContrato || wizardData.perfilPartes || scraped.tipoContrato) return 'juridico'
-    if (wizardData.tipoProblema || wizardData.quando) return 'justica'
+    if (wizardData.problemType || wizardData.whenHappened || scraped.problemType) return 'justica'
 
     if (content.includes('estrategia') || content.includes('diagnostico') || content.includes('crescimento')) return 'estrategia'
-    if (content.includes('justica') || content.includes('processo') || content.includes('demanda')) return 'justica'
+    if (content.includes('justica') || content.includes('processo') || content.includes('demanda') || content.includes('protocolo')) return 'justica'
     if (content.includes('juridico') || content.includes('contrato')) return 'juridico'
 
     return 'general'
@@ -145,7 +145,14 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
   const wizardStep = useMemo(() => {
     const lastBotMsg = [...messages].reverse().find(m => m.role === 'bot')
-    if (lastBotMsg?.content.includes('processado com sucesso')) return (maxSteps + 1)
+    const content = lastBotMsg?.content.toLowerCase() || ''
+
+    // Sinais explícitos de que a IA já concluiu a análise e está pronta para gerar
+    if (content.includes('processado com sucesso') || 
+        content.includes('podemos gerar o protocolo') || 
+        content.includes('podemos gerar o contrato') ||
+        content.includes('gerar seu diagnóstico')) return (maxSteps + 1)
+
     if (lastSubmittedStep >= maxSteps) return (maxSteps + 1)
     return Math.min(lastSubmittedStep + 1, maxSteps)
   }, [messages, lastSubmittedStep, maxSteps])
@@ -332,12 +339,19 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
   }
 
   const handleAction = async (path: string) => {
+    // Se não for um caminho de geração (/novo), é apenas navegação simples
+    if (!path.includes('/novo')) {
+      router.push(path)
+      return
+    }
+
     setIsProcessing(true)
     
     // UI Feedback
     const procMsg: Message = { 
       role: 'bot', 
-      content: `Iniciando geração do seu **${path.includes('estrategia') ? 'Diagnóstico' : path.includes('juridico') ? 'Contrato' : 'Caso'}**. Por favor, aguarde...` 
+      content: `Iniciando geração do seu **${path.includes('estrategia') ? 'Diagnóstico' : path.includes('juridico') ? 'Contrato' : 'Caso'}**. Por favor, aguarde...`,
+      skipWizard: true
     }
     setMessages(prev => [...prev, procMsg])
 
@@ -415,6 +429,7 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
       
       const successMsg: Message = {
         role: 'bot',
+        skipWizard: true,
         content: `✅ **Execução finalizada com sucesso!**
         
 A sua solicitação foi processada. Clique no botão abaixo para acessar o resultado final.
