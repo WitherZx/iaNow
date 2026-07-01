@@ -36,7 +36,7 @@ function OnboardingContent() {
         </div>
         
         <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,#ffffff05,transparent)]" />
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none mix-blend-overlay" />
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-20 pointer-events-none mix-blend-overlay" />
       </div>
 
       {/* Lado Direito - Formulário (Wizard) */}

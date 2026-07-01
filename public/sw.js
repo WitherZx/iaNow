@@ -1,9 +1,11 @@
-const CACHE_NAME = 'ianow-cache-v2';
+// Service Worker iaNow - v1.1 (Silent Logs & Improved Nav)
+const CACHE_NAME = 'ianow-cache-v5';
 const STATIC_ASSETS = [
   '/dashboard',
   '/favicon.webp',
   '/logo.webp',
-  '/minerva-icon.png'
+  '/minerva-icon.png',
+  '/noise.svg'
 ];
 
 // 1. Instalação: Cache inicial do App Shell
@@ -29,7 +31,7 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// 3. Estratégia de Cache: Stale-While-Revalidate
+// 3. Estratégia de Cache: Hybrid (Network-First para Docs, SWR para Assets)
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
@@ -38,26 +40,68 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Estratégia 1: Navegação (Páginas HTML e RSC) - Network-First com Fallback
+  const isPageRequest = event.request.mode === 'navigate' || 
+                        event.request.headers.get('accept')?.includes('text/html') ||
+                        event.request.headers.get('x-nextjs-data');
+
+  if (isPageRequest) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          // Tenta o cache exato
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+          
+          // Fallback para o /dashboard se nada for encontrado (página principal do PWA)
+          const dashboardCache = await caches.match('/dashboard');
+          if (dashboardCache) return dashboardCache;
+
+          return new Response('Offline: O conteúdo solicitado não está disponível no cache.', {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+          });
+        })
+    );
+    return;
+  }
+
+  // Estratégia 2: Outros Assets - Stale-While-Revalidate
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
-        // Clona a resposta imediatamente SÍNCRONA antes do body ser consumido
-        const responseToCache = networkResponse.clone();
-        
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        }).catch(err => console.log('SW Cache Put Error:', err));
-        
-        return networkResponse;
-      }).catch(err => {
-        console.log('SW Fetch falhou (Offline?):', err);
-        return cachedResponse;
-      });
+      const fetchPromise = fetch(event.request)
+        .then((networkResponse) => {
+          if (!networkResponse || networkResponse.status !== 200) {
+            return networkResponse;
+          }
+
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          }).catch(() => {});
+          
+          return networkResponse;
+        })
+        .catch(() => {
+          // Silencioso em caso de erro de rede (comum em dev/servidor reiniciando)
+          return cachedResponse || new Response('', { status: 404 });
+        });
       
       return cachedResponse || fetchPromise;
     })
   );
 });
+
+
 
 // 4. Background Sync: Reconciliação via Relay API
 self.addEventListener('sync', (event) => {

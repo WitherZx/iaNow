@@ -2,7 +2,7 @@
 
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
-export async function searchKnowledgeBase(query?: string, category?: 'juridico' | 'estrategia' | 'geral', sessionId?: string | null) {
+export async function searchKnowledgeBase(query?: string, category?: 'juridico' | 'estrategia' | 'geral' | 'acompanhamento', sessionId?: string | null) {
   const supabase = await createServerSupabaseClient()
 
   let dbQuery = supabase

@@ -129,13 +129,11 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     const content = rawContent.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 
     const scraped = scrapeConversationContext(messages)
-    if (scraped.companyName || scraped.sector || wizardData.companyName || wizardData.sector) return 'estrategia'
-    if (wizardData.tipoContrato || wizardData.perfilPartes || scraped.tipoContrato) return 'juridico'
-    if (wizardData.problemType || wizardData.whenHappened || scraped.problemType) return 'justica'
+    if (wizardData.documentNumber || scraped.documentNumber) return 'acompanhamento'
+    if (wizardData.problemType || wizardData.whenHappened || scraped.problemType) return 'juridico'
 
-    if (content.includes('estrategia') || content.includes('diagnostico') || content.includes('crescimento')) return 'estrategia'
-    if (content.includes('justica') || content.includes('processo') || content.includes('demanda') || content.includes('protocolo')) return 'justica'
-    if (content.includes('juridico') || content.includes('contrato')) return 'juridico'
+    if (content.includes('acompanhar') || content.includes('numero') || content.includes('status')) return 'acompanhamento'
+    if (content.includes('justica') || content.includes('processo') || content.includes('demanda') || content.includes('protocolo')) return 'juridico'
 
     return 'general'
   }, [messages, wizardData, defaultModule])
@@ -159,9 +157,8 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
   const stepperLabels = useMemo(() => {
     switch (activeModule) {
-      case 'justica': return ['PROBLEMA', 'PARTES', 'VALORES', 'ANÁLISE']
-      case 'estrategia': return ['NEGÓCIO', 'DADOS', 'METAS', 'VISÃO', 'ANÁLISE']
-      case 'juridico': return ['CONTRATO', 'DADOS', 'REVISÃO', 'ANÁLISE']
+      case 'juridico': return ['PROBLEMA', 'PARTES', 'VALORES', 'ANÁLISE']
+      case 'acompanhamento': return ['BUSCA', 'RESULTADO']
       default: return ['SESSÃO', 'DADOS', 'REVISÃO', 'ANÁLISE', 'RESULTADO']
     }
   }, [activeModule])
@@ -241,8 +238,10 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
           })
         })
 
-        if (!response.ok) throw new Error('API Error')
-
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || 'API Error');
+        }
         const reader = response.body?.getReader()
         if (!reader) throw new Error('Reader Error')
 
@@ -339,8 +338,8 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
   }
 
   const handleAction = async (path: string) => {
-    // Se não for um caminho de geração (/novo), é apenas navegação simples
-    if (!path.includes('/novo')) {
+    // Se não for um caminho de geração (/novo ou /acompanhamento), é apenas navegação simples
+    if (!path.includes('/novo') && !path.includes('/acompanhamento')) {
       router.push(path)
       return
     }
@@ -348,46 +347,22 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
     setIsProcessing(true)
 
     // UI Feedback
+    const isAcompanhamento = path.includes('acompanhamento');
     const procMsg: Message = {
       role: 'bot',
-      content: `Iniciando geração do seu **${path.includes('estrategia') ? 'Diagnóstico' : path.includes('juridico') ? 'Contrato' : 'Caso'}**. Por favor, aguarde...`,
+      content: isAcompanhamento ? `Consultando processo na base Minerva. Por favor, aguarde...` : `Iniciando geração do seu **Protocolo Judicial**. Por favor, aguarde...`,
       skipWizard: true
     }
     setMessages(prev => [...prev, procMsg])
 
     try {
-      let endpoint = '/api/ai/strategy'
+      let endpoint = '/api/justica/gerar'
       let payload: any = {}
 
-      if (path.includes('estrategia')) {
-        endpoint = '/api/ai/strategy'
-        payload = { diagnosticData: { ...wizardData } }
-      } else if (path.includes('juridico')) {
-        endpoint = '/api/juridico/gerar'
+      if (isAcompanhamento) {
+        endpoint = '/api/acompanhamento'
         payload = {
-          tipoContrato: wizardData.tipoContrato || 'Contrato',
-          nivel: wizardData.nivel || 'Básico',
-          sideToFavor: wizardData.sideToFavor || 'Equilibrado',
-          perfilPartes: wizardData.perfilPartes || '',
-          objetivo: wizardData.objetivo || '',
-          foro: wizardData.foro || '',
-          partyA: {
-            name: wizardData.parteA_name,
-            document: wizardData.parteA_doc,
-            address: wizardData.parteA_address,
-            type: wizardData.parteA_type,
-            contact: wizardData.parteA_contact,
-            role: wizardData.parteA_role || 'Contratante'
-          },
-          partyB: {
-            name: wizardData.parteB_name,
-            document: wizardData.parteB_doc,
-            address: wizardData.parteB_address,
-            type: wizardData.parteB_type,
-            contact: wizardData.parteB_contact,
-            role: wizardData.parteB_role || 'Contratado'
-          },
-          parametros: wizardData.parametros || ''
+          documentNumber: wizardData.documentNumber
         }
       } else {
         endpoint = '/api/justica/gerar'
@@ -410,17 +385,14 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
       const res = await fetch(endpoint, { method: 'POST', body: JSON.stringify(payload) })
       const result = await res.json()
 
-      if (!res.ok) throw new Error(result.error || 'Erro na geração')
+      if (!res.ok) throw new Error(result.error || 'Erro na requisição')
 
       // Resolve specific IDs from different APIs
-      const resolvedId = result.strategyId || result.documentId || result.demandId || result.id
+      const resolvedId = result.id || result.demandId
       let successPath = result.path
 
       if (!successPath && resolvedId) {
-        if (path.includes('estrategia')) successPath = `/estrategia/${resolvedId}`
-        else if (path.includes('juridico')) successPath = `/juridico/${resolvedId}`
-        else if (path.includes('justica')) successPath = `/justica/${resolvedId}`
-        else successPath = path.replace('/novo', `/${resolvedId}`)
+        successPath = `/justica/${resolvedId}`
       }
 
       if (!successPath) successPath = path.replace('/novo', '/view')
@@ -445,14 +417,18 @@ export function MinervaAssistant({ userName, onToggleView, initialPrompt, defaul
 
       toast.success('Listas de documentos atualizadas!')
 
+      let content = `✅ **Execução finalizada com sucesso!**\n\nA sua solicitação foi processada. Clique no botão abaixo para acessar o resultado final.`
+      
+      if (isAcompanhamento && result.process) {
+         content = `✅ **Processo Localizado:** ${result.process.number}\n\n**Status:** ${result.process.status}\n**Tribunal:** ${result.process.court}\n**Última Movimentação:** ${result.process.movements?.[0]?.description || 'Nenhuma'}\n\nClique abaixo para acessar o acompanhamento detalhado.`
+      }
+
+      content += `\n\n[ACTION: ${successPath}]`
+
       const successMsg: Message = {
         role: 'bot',
         skipWizard: true,
-        content: `✅ **Execução finalizada com sucesso!**
-        
-A sua solicitação foi processada. Clique no botão abaixo para acessar o resultado final.
-
-[ACTION: ${successPath}]`
+        content
       }
 
       setMessages(prev => {
@@ -592,9 +568,8 @@ A sua solicitação foi processada. Clique no botão abaixo para acessar o resul
           {!isTyping && messages.length === 1 && (
             <div className="flex flex-wrap gap-2 justify-center pt-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
               {[
-                { label: "Criar Contrato", prompt: "Quero criar um novo contrato jurídico" },
                 { label: "Novo Processo", prompt: "Quero iniciar um novo processo judicial" },
-                { label: "Nova Estratégia", prompt: "Quero montar uma estratégia de negócio" }
+                { label: "Acompanhar Processo", prompt: "Quero acompanhar o status de um processo" }
               ].map((chip, i) => (
                 <button key={i} onClick={() => handleSendMessage(chip.prompt)} className="px-4 py-2 bg-slate-50 border border-slate-100 text-[10px] font-bold text-slate-500 hover:border-blue-600 hover:text-blue-600 rounded-xl transition-all shadow-sm uppercase tracking-wider">
                   {chip.label}

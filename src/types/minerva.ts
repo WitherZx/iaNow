@@ -28,6 +28,6 @@ export interface WizardStep {
   fields: WizardField[]
 }
 
-export type ModuleType = 'justica' | 'juridico' | 'estrategia'
+export type ModuleType = 'justica' | 'juridico' | 'estrategia' | 'acompanhamento'
 
-export type WizardConfig = Record<ModuleType, Record<number, WizardStep>>
+export type WizardConfig = Partial<Record<ModuleType, Record<number, WizardStep>>>

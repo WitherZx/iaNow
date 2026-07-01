@@ -72,7 +72,7 @@ export function TrackProcessModal({ isOpen, onClose, onSuccess }: TrackProcessMo
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-black text-slate-900 leading-tight uppercase tracking-tight">Acompanhar Processo</h3>
-              <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider sm:tracking-widest">Base de Dados Real • DataJud</p>
+              <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider sm:tracking-widest">Base de Dados Real • Minerva</p>
             </div>
           </div>
           <button

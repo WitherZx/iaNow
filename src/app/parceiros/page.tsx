@@ -513,31 +513,38 @@ export default function PartnerHubPage() {
             </div>
           </div>
 
-          {/* AI CONNECTION TIP */}
+          {/* COMPANY HERO BANNER */}
           <div className="bg-primary/5 border border-primary/20 rounded-[32px] p-6 md:p-10 flex flex-col md:flex-row items-center gap-6 md:gap-10 text-center md:text-left">
             <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-white flex items-center justify-center text-primary shadow-lg shrink-0">
-              <ShieldCheck size={32} className="animate-pulse md:size-[48px]" />
+              <Building2 size={32} className="md:size-[48px]" />
             </div>
             <div className="flex-1 space-y-3 md:space-y-4">
-              <h4 className="text-lg md:text-xl font-black text-slate-900 leading-tight">IA Inteligente & Partner Hub unidos.</h4>
+              <h4 className="text-lg md:text-xl font-black text-slate-900 leading-tight">Formalize seu negócio com a Company Hero</h4>
               <p className="text-slate-600 text-[13px] md:text-base leading-relaxed font-medium">
-                Os dados cadastrados aqui são estruturados em tempo real para alimentar nossa IA. Ao selecionar um parceiro em um novo contrato, o sistema monta automaticamente as cláusulas de qualificação, valida documentos e aplica regras específicas baseadas no tipo de perfil.
+                Simplifique a sua jornada empreendedora. A Company Hero oferece todas as soluções para você abrir, regularizar e proteger sua empresa em um só lugar.
               </p>
-              <div className="flex flex-col sm:flex-row items-center gap-y-3 gap-x-6 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-y-3 gap-x-6 pt-2 text-left mx-auto md:mx-0 w-max md:w-auto">
                 <span className="flex items-center gap-2 text-[10px] md:text-xs font-black text-emerald-600 uppercase tracking-widest whitespace-nowrap">
-                  <CheckCircle2 size={14} /> Validação de CPF/CNPJ
+                  <CheckCircle2 size={14} className="shrink-0" /> Abertura de CNPJ
                 </span>
                 <span className="flex items-center gap-2 text-[10px] md:text-xs font-black text-emerald-600 uppercase tracking-widest whitespace-nowrap">
-                  <CheckCircle2 size={14} /> Integração Jurídica
+                  <CheckCircle2 size={14} className="shrink-0" /> Endereço Fiscal e Comercial
+                </span>
+                <span className="flex items-center gap-2 text-[10px] md:text-xs font-black text-emerald-600 uppercase tracking-widest whitespace-nowrap">
+                  <CheckCircle2 size={14} className="shrink-0" /> Conta Digital PJ
+                </span>
+                <span className="flex items-center gap-2 text-[10px] md:text-xs font-black text-emerald-600 uppercase tracking-widest whitespace-nowrap">
+                  <CheckCircle2 size={14} className="shrink-0" /> Registro de Marca
                 </span>
               </div>
             </div>
-            <Button
-              onClick={() => setIsModalOpen(true)}
-              className="h-12 md:h-14 px-10 rounded-2xl bg-slate-900 border-none text-white font-bold hover:bg-slate-800 transition-all shrink-0 shadow-lg shadow-slate-200/50 w-full md:w-auto"
-            >
-              Novo Parceiro <Plus className="ml-2 w-5 h-5" />
-            </Button>
+            <Link href="https://www.companyhero.com/afiliados/MIRVANACONSULTORIA25" target="_blank" rel="noopener noreferrer" className="shrink-0 w-full md:w-auto">
+              <Button
+                className="h-12 md:h-14 px-10 rounded-2xl bg-slate-900 border-none text-white font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200/50 w-full md:w-auto"
+              >
+                Conhecer a Hero <ExternalLink className="ml-2 w-5 h-5" />
+              </Button>
+            </Link>
           </div>
 
           {/* ADD PARTNER MODAL */}

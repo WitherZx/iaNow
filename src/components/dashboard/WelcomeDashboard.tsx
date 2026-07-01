@@ -11,7 +11,8 @@ import {
   FileText,
   ArrowRight,
   ShieldCheck,
-  Cpu
+  Cpu,
+  Lock
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
@@ -64,8 +65,8 @@ export function WelcomeDashboard({ userName, onActivateMinerva }: WelcomeDashboa
           answer: 'Sim. Todos os templates seguem os padrões do Código Civil e leis específicas. O documento final está pronto para assinatura digital e protocolo em juízo.'
         },
         {
-          question: 'Como funciona o monitoramento do DataJud?',
-          answer: 'Ao inserir um número de processo, o sistema se conecta à rede nacional DataJud, alertando você sobre movimentações críticas antes mesmo da publicação oficial.'
+          question: 'Como funciona o monitoramento da Minerva?',
+          answer: 'Ao inserir um número de processo, o sistema se conecta à rede Minerva, alertando você sobre movimentações críticas antes mesmo da publicação oficial.'
         },
         {
           question: 'Causas acima de 20 salários mínimos: o que fazer?',
@@ -92,11 +93,19 @@ export function WelcomeDashboard({ userName, onActivateMinerva }: WelcomeDashboa
           {/* Module Items */}
           <nav className="flex flex-col flex-1 divide-y divide-slate-100">
             <ModuleSidebarItem
+              title="Jurídico"
+              description="Jus Postulandi sem burocracia"
+              icon={<Gavel size={19} />}
+              href="/justica/novo"
+              color="indigo"
+            />
+            <ModuleSidebarItem
               title="Estratégia"
               description="Planos de ação com IA sistêmica"
               icon={<Lightbulb size={19} />}
               href="/estrategia"
               color="blue"
+              locked
             />
             <ModuleSidebarItem
               title="Contratos"
@@ -104,13 +113,7 @@ export function WelcomeDashboard({ userName, onActivateMinerva }: WelcomeDashboa
               icon={<FileText size={19} />}
               href="/juridico/novo"
               color="emerald"
-            />
-            <ModuleSidebarItem
-              title="Processos"
-              description="Jus Postulandi sem burocracia"
-              icon={<Gavel size={19} />}
-              href="/justica/novo"
-              color="indigo"
+              locked
             />
           </nav>
 
@@ -197,12 +200,14 @@ function ModuleSidebarItem({
   icon,
   href,
   color,
+  locked = false
 }: {
   title: string
   description: string
   icon: React.ReactNode
   href: string
   color: 'blue' | 'emerald' | 'indigo'
+  locked?: boolean
 }) {
   const iconColors = {
     blue: 'bg-blue-50 text-blue-600',
@@ -213,6 +218,26 @@ function ModuleSidebarItem({
     blue: 'hover:bg-blue-50/50',
     emerald: 'hover:bg-emerald-50/50',
     indigo: 'hover:bg-indigo-50/50',
+  }
+
+  if (locked) {
+    return (
+      <div
+        className={cn(
+          'group flex items-center gap-x-4 px-5 py-4 transition-all duration-200 opacity-60 cursor-not-allowed'
+        )}
+        title="Módulo em breve"
+      >
+        <div className={cn('w-10 h-10 shrink-0 rounded-xl flex items-center justify-center transition-transform duration-200', iconColors[color])}>
+          {icon}
+        </div>
+        <div className="flex flex-col gap-y-0.5 flex-1 min-w-0">
+          <span className="text-[13px] font-black text-slate-800 uppercase tracking-tight">{title}</span>
+          <span className="text-[12px] text-slate-400 font-medium leading-snug truncate">{description}</span>
+        </div>
+        <Lock size={15} className="shrink-0 text-slate-400" />
+      </div>
+    )
   }
 
   return (

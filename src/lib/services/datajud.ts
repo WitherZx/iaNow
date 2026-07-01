@@ -197,43 +197,60 @@ export class DataJudService {
       return this.getMockData(processNumber);
     }
 
-    try {
-      // match_phrase é o modo correto para número de processo na API pública do DataJud
-      const body = JSON.stringify({
-        query: {
-          match_phrase: {
-            numeroProcesso: cleanNumber
+    let retries = 0;
+    const maxRetries = 3;
+
+    while (retries < maxRetries) {
+      try {
+        const body = JSON.stringify({
+          query: {
+            match_phrase: {
+              numeroProcesso: cleanNumber
+            }
           }
+        });
+
+        console.log(`[DataJud] Enviando para ${endpoint} (Tentativa ${retries + 1}/${maxRetries})`);
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `APIKey ${this.API_KEY}`
+          },
+          body
+        });
+
+        console.log(`[DataJud] Status da resposta: ${response.status}`);
+
+        if (!response.ok) {
+          const errText = await response.text();
+          if (response.status === 429 || errText.includes('es_rejected_execution_exception')) {
+            console.warn(`[DataJud] Rate limit excedido (429). Tentando novamente em ${1500 * (retries + 1)}ms...`);
+            retries++;
+            if (retries >= maxRetries) throw new Error(`Erro DataJud (${response.status}) após retries: ${errText.slice(0, 200)}`);
+            await new Promise(r => setTimeout(r, 1500 * retries));
+            continue;
+          }
+          console.error('[DataJud] Resposta de erro:', errText);
+          throw new Error(`Erro DataJud (${response.status}): ${errText.slice(0, 200)}`);
         }
-      });
 
-      console.log(`[DataJud] Enviando para ${endpoint}:`, body);
+        const rawData = await response.json();
+        console.log(`[DataJud] Total encontrado: ${rawData.hits?.total?.value || 0}`);
+        return this.parseResponse(rawData);
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `APIKey ${this.API_KEY}`
-        },
-        body
-      });
-
-      console.log(`[DataJud] Status da resposta: ${response.status}`);
-
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error('[DataJud] Resposta de erro:', errText);
-        throw new Error(`Erro DataJud (${response.status}): ${errText.slice(0, 200)}`);
+      } catch (err: any) {
+        if (retries < maxRetries && (err.message.includes('fetch failed') || err.message.includes('429'))) {
+           retries++;
+           await new Promise(r => setTimeout(r, 1500 * retries));
+           continue;
+        }
+        console.error('[DataJud] Fetch Error:', err.message);
+        throw err;
       }
-
-      const rawData = await response.json();
-      console.log(`[DataJud] Total encontrado: ${rawData.hits?.total?.value || 0}`);
-      return this.parseResponse(rawData);
-
-    } catch (err: any) {
-      console.error('[DataJud] Fetch Error:', err.message);
-      throw err;
     }
+    throw new Error('Serviço DataJud indisponível no momento. Tente novamente mais tarde.');
   }
 
   private static parseResponse(rawData: any): ProcessStatus {

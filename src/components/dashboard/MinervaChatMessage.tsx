@@ -34,21 +34,17 @@ interface MinervaChatMessageProps {
 
 const getActionLabel = (path: string | undefined) => {
   if (!path) return "Acessar Módulo"
-  if (path.includes('/juridico/novo')) return "Gerar Novo Contrato"
-  if (path.includes('/justica/novo')) return "Gerar Protocolo"
-  if (path.includes('/estrategia/novo')) return "Criar Diagnóstico"
-  if (path.match(/^\/juridico\/[^/]+/)) return "Ver Contrato Gerado"
+  if (path.includes('/justica/novo') || path.includes('/juridico/novo')) return "Gerar Protocolo"
+  if (path.includes('/acompanhamento')) return "Acompanhar Processo"
   if (path.match(/^\/justica\/[^/]+/)) return "Ver Caso Gerado"
-  if (path.match(/^\/estrategia\/[^/]+/)) return "Ver Estratégia Gerada"
   if (path.includes('/parceiros')) return "Ver Hub de Parceiros"
   return "Acessar Módulo"
 }
 
 const getActionIcon = (path: string | undefined) => {
   if (!path) return null
-  if (path.includes('/juridico/novo')) return <Scale size={16} />
-  if (path.includes('/justica/novo')) return <ShieldCheck size={16} />
-  if (path.includes('/estrategia/novo')) return <Zap size={16} />
+  if (path.includes('/justica/novo') || path.includes('/juridico/novo')) return <Scale size={16} />
+  if (path.includes('/acompanhamento')) return <ShieldCheck size={16} />
   return null
 }
 
@@ -75,7 +71,7 @@ export const MinervaChatMessage: React.FC<MinervaChatMessageProps> = React.memo(
   const { text: textNoLegacyForm, fields: legacyFields } = parseForm(textNoActions)
   const parsedMeta = parseJsonMetadata(textNoLegacyForm)
   
-  const text = parsedMeta?.text || textNoLegacyForm
+  let text = parsedMeta?.text || textNoLegacyForm
   let formFields = parsedMeta?.fields || legacyFields
   let formTitle = parsedMeta?.title || ''
   let actions = [...legacyActions]
@@ -136,9 +132,17 @@ export const MinervaChatMessage: React.FC<MinervaChatMessageProps> = React.memo(
   // Injeção de Ação Final Forçada (Conclusão do Wizard)
   const isFinalStep = wizardStep > maxSteps
   if (isBot && !isTyping && isLast && isFinalStep && actions.length === 0 && formFields.length === 0) {
-    if (activeModule === 'estrategia') actions = ['/estrategia/novo']
-    if (activeModule === 'juridico') actions = ['/juridico/novo']
-    if (activeModule === 'justica') actions = ['/justica/novo']
+    if (activeModule === 'juridico') actions = ['/justica/novo']
+    if (activeModule === 'acompanhamento') actions = ['/acompanhamento']
+  }
+
+  // Se a IA gerou uma mensagem vazia (apenas tool call) e um botão de ação forçado foi injetado
+  if (isBot && !text.trim() && actions.length > 0) {
+    if (actions[0].includes('acompanhamento')) {
+      text = "As informações foram validadas. Clique no botão abaixo para realizar a consulta e gerar o acompanhamento deste processo."
+    } else {
+      text = "As informações foram validadas. Clique no botão abaixo para processar e gerar o seu documento."
+    }
   }
 
   return (

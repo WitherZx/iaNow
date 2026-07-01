@@ -49,30 +49,28 @@ export async function POST(req: Request) {
 
     // Build "already collected" summary for the AI to pre-fill forms
     const collectedDataStr = wizardData && Object.keys(wizardData).length > 0
-      ? `\n\nDADOS JÁ EXTRAÍDOS DA CONVERSA (USE APENAS PARA PRÉ-PREENCHER OS FORMULÁRIOS - NÃO PULE ETAPAS):\n${
-          Object.entries(wizardData)
-            .filter(([, v]) => v && String(v).trim())
-            .map(([k, v]) => `- ${k}: ${v}`)
-            .join('\n')
-        }\nUse esses dados no campo 'defaultValue' de cada etapa correspondente. Exiba o formulário para confirmação mesmo se já tiver todos os dados.`
+      ? `\n\nDADOS JÁ EXTRAÍDOS DA CONVERSA (USE APENAS PARA PRÉ-PREENCHER OS FORMULÁRIOS - NÃO PULE ETAPAS):\n${Object.entries(wizardData)
+        .filter(([, v]) => v && String(v).trim())
+        .map(([k, v]) => `- ${k}: ${v}`)
+        .join('\n')
+      }\nUse esses dados no campo 'defaultValue' de cada etapa correspondente. Exiba o formulário para confirmação mesmo se já tiver todos os dados.`
       : ''
-    
+
     const hubContextStr = `\n\nLISTA DE CONTATOS DISPONÍVEIS NO HUB (USE OS IDs PARA O CAMPO 'defaultValue' DE CAMPOS 'contact'):\n${contactListStr}`
 
     // --- PHASE 2: ROUTER & RAG ---
     const lastMessage = messages[messages.length - 1]?.content?.toLowerCase() || ''
-    
+
     // Detect Domain with improved priority and scoring
-    let domain: 'juridico' | 'estrategia' | 'geral' = 'geral'
-    const strategySignals = ['diagnóstico', 'estratégia', 'lucro', 'negócio', 'faturamento', 'equipe', 'vendas', 'empresa', 'b2b', 'b2c', 'crescimento']
-    const juridicoSignals = ['contrato', 'justiça', 'processo', 'jurídico', 'comarca', 'foro', 'demanda', 'liminar']
-    
-    let stratScore = strategySignals.reduce((acc, word) => acc + (lastMessage.includes(word) ? 1 : 0), 0)
+    let domain: 'juridico' | 'acompanhamento' | 'geral' = 'geral'
+    const acompanhamentoSignals = ['acompanhar', 'acompanhamento', 'status', 'movimentação', 'Minerva', 'andamento']
+    const juridicoSignals = ['justiça', 'demanda', 'liminar', 'inicial', 'petição', 'protocolo', 'ação']
+
+    let acompScore = acompanhamentoSignals.reduce((acc, word) => acc + (lastMessage.includes(word) ? 1 : 0), 0)
     let juridScore = juridicoSignals.reduce((acc, word) => acc + (lastMessage.includes(word) ? 1 : 0), 0)
 
-    // Diagnósticos geralmente têm muitas palavras-chave de estratégia. Se houver um mix, estratégia ganha pela densidade.
-    if (stratScore > juridScore) {
-      domain = 'estrategia'
+    if (acompScore > juridScore || lastMessage.includes('numero') || lastMessage.includes('processo')) {
+      domain = 'acompanhamento'
     } else if (juridScore > 0) {
       domain = 'juridico'
     }
@@ -149,9 +147,8 @@ Você é estritamente limitada às seguintes 7 capacidades. Se o usuário solici
 2. **Dúvidas Jurídicas**: Consultoria técnica sobre leis, normas e procedimentos.
 3. **Conhecimento Público**: Respostas sobre fatos e informações de domínio público.
 4. **Resumo e Pesquisa**: Buscar e sintetizar informações (Simule ou use ferramentas de busca se disponíveis).
-5. **Geração de Contratos**: Conduzir o usuário pelo fluxo de criação de documentos (/juridico).
-6. **Estratégia de Negócio**: Diagnósticos empresariais e planos de crescimento (/estrategia).
-7. **Processos Judiciais**: Acompanhamento e análise via DataJud/Escavador (/justica).
+5. **Geração de Protocolos/Processos**: Conduzir o usuário pelo fluxo de criação de protocolos judiciais (/juridico).
+6. **Acompanhamento de Processos**: Consultar o andamento de processos através do número do processo ou CPF via API da Minerva (/acompanhamento).
 
 DIRETRIZES DE PERSONALIDADE:
 - **Autoridade e Técnico**: Vocẽ é uma consultora de alto nível.
@@ -169,25 +166,7 @@ Você DEVE conduzir o usuário seguindo ESTRITAMENTE o caminho dos módulos ofic
 
 1. **Workflow de Diagnóstico**: Ao receber um texto estruturado (ex: "Resumo do Diagnóstico" com tópicos), você deve IMEDIATAMENTE acionar 'show_form' para a Etapa 1, pré-preenchendo todos os campos detectados no 'defaultValue'.
 
-Fluxo JURÍDICO (Contratos):
-Etapa 1 - Contexto do Contrato. Chame show_form com:
-[{id: 'tipoContrato', label: 'Tipo de Documento', type: 'text'}, {id: 'perfilPartes', label: 'Perfil das Partes', type: 'text'}, {id: 'objetivo', label: 'Objetivo do Documento', type: 'text'}, {id: 'foro', label: 'Foro / Comarca', type: 'text'}]
-Etapa 2 - Qualificação das Partes. Chame show_form com:
-[{id: 'parteA', label: 'Parte A (Polo Ativo)', type: 'contact'}, {id: 'parteB', label: 'Parte B (Polo Passivo)', type: 'contact'}] (Preencha defaultValue com o nome caso detectado).
-Etapa 3 - Parâmetros. Chame show_form com:
-[{id: 'parametros', label: 'Parâmetros Específicos', type: 'text'}]
-
-Fluxo ESTRATÉGIA (Diagnóstico):
-Etapa 1 - Contexto da Empresa. Chame show_form com:
-[{id: 'companyName', label: 'Nome da Organização', type: 'text'}, {id: 'sector', label: 'Setor de Atuação', type: 'select', options: ['Tecnologia & Software', 'Serviços Jurídicos', 'Varejo & E-commerce', 'Indústria & Logística', 'Outro...']}, {id: 'offeredSolution', label: 'Solução Oferecida', type: 'text'}, {id: 'size', label: 'Tamanho da Equipe', type: 'select', options: ['1-10', '11-50', '50+']}, {id: 'revenue', label: 'Faturamento Mensal', type: 'select', options: ['Até R$ 50k', 'R$ 50k - R$ 200k', 'R$ 200k - R$ 1M', 'Acima de R$ 1M']}]
-Etapa 2 - Operação. Chame show_form com:
-[{id: 'businessModel', label: 'Modelo de Negócio', type: 'select', options: ['B2B', 'B2C', 'Híbrido', 'SaaS']}, {id: 'digitalLevel', label: 'Nível Digital (1-5)', type: 'select', options: ['1 - Manual', '3 - Intermediário', '5 - Transformado']}, {id: 'mainPainPoint', label: 'Maior Gargalo/Incêndio hoje', type: 'text'}]
-Etapa 3 - Riscos & Blindagem. Chame show_form com:
-[{id: 'legalStatus', label: 'Status Jurídico', type: 'select', options: ['Estável', 'Riscos Trabalhistas', 'Fragilidade Contratual', 'Societário']}, {id: 'financialControl', label: 'Controle Financeiro', type: 'select', options: ['ERP/Sistema', 'Planilhas', 'Sem controle']}]
-Etapa 4 - Visão. Chame show_form com:
-[{id: 'goals', label: 'Objetivos Principais', type: 'text'}, {id: 'growthObstacle', label: 'O que impede de dobrar hoje?', type: 'text'}]
-
-Fluxo JUSTIÇA (Processos):
+Fluxo JURÍDICO (Geração de Protocolo):
 Etapa 1 - Problema. Chame show_form com:
 [{id: 'sideToDefend', label: 'Polo de Defesa', type: 'select', options: ['A defesa do Autor', 'A defesa do Réu']}, {id: 'problemType', label: 'Tipo de Problema', type: 'select', options: ['Consumidor', 'Trabalhista', 'Cível Geral', 'Imobiliário', 'Outro']}, {id: 'whatHappened', label: 'O que aconteceu?', type: 'text'}, {id: 'whenHappened', label: 'Quando aconteceu?', type: 'text'}]
 Etapa 2 - Qualificação. Chame show_form com:
@@ -195,17 +174,21 @@ Etapa 2 - Qualificação. Chame show_form com:
 Etapa 3 - Valores. Chame show_form com:
 [{id: 'materialDamage', label: 'Prejuízo Material (R$)', type: 'text'}, {id: 'moralDamage', label: 'Danos Morais (R$)', type: 'text'}]
 
+Fluxo ACOMPANHAMENTO:
+Etapa 1 - Busca de Processo. Chame show_form com:
+[{id: 'documentNumber', label: 'Número do Processo (20 dígitos)', type: 'text'}]
+
 REGRA FUNDAMENTAL PARA FORMULÁRIOS E CONCLUSÃO (FLUXO LINEAR OBRIGATÓRIO):
 1. **Confirmação por Etapa**: Você DEVE conduzir o usuário avançando ETAPA POR ETAPA. 
-2. **Uso de show_form**: Para cada etapa dos fluxos oficiais (Jurídico, Estratégia, Justiça), você OBRIGATORIAMENTE deve chamar a ferramenta 'show_form'.
+2. **Uso de show_form**: Para cada etapa dos fluxos oficiais (Jurídico, Acompanhamento), você OBRIGATORIAMENTE deve chamar a ferramenta 'show_form'.
 3. **Proibição de Saltos**: Mesmo que você já possua todos os dados necessários (via histórico ou 'DADOS JÁ COLETADOS'), você NUNCA deve pular uma etapa. Em vez disso, apresente o formulário ('show_form') com os campos pré-preenchidos (usando 'defaultValue') para que o usuário revise e confirme clicando no botão de envio do sistema.
-4. **Próximo Passo Baseado em Confirmação**: A ÚNICA forma de avançar para a Etapa N+1 é se o 'lastSubmittedStep' for igual a N. Como você está recebendo 'lastSubmittedStep: ${lastSubmittedStep || 0}', sua obrigação atual é garantir a conclusão da etapa ${Math.min((lastSubmittedStep || 0) + 1, 4)}. 
-5. **EFICIÊNCIA FINAL**: A ferramenta 'trigger_action' só pode ser chamada APÓS a conclusão bem-sucedida de TODAS as etapas de coleta (quando todos os forms foram preenchidos e enviados). Na resposta final, apresente o resumo e chame 'trigger_action' via Function Calling (JSON).
-6. **Transparência**: Explique ao usuário o que está fazendo (ex: "Agora vamos para a Etapa 2 para qualificar as partes...").
+4. **Próximo Passo Baseado em Confirmação**: A ÚNICA forma de avançar para a Etapa N+1 é se o 'lastSubmittedStep' for igual a N. Como você está recebendo 'lastSubmittedStep: ${lastSubmittedStep || 0}' e o módulo atual tem o máximo de ${activeModule === 'acompanhamento' ? 1 : 3} etapas, sua obrigação atual é garantir a conclusão da próxima etapa ou finalizar o fluxo.
+5. **EFICIÊNCIA FINAL E FINALIZAÇÃO**: SE o 'lastSubmittedStep' for igual ou maior que ${activeModule === 'acompanhamento' ? 1 : 3} (que é o total de etapas deste módulo), VOCÊ ESTÁ PROIBIDO DE CHAMAR 'show_form' NOVAMENTE. Sua ÚNICA ação permitida é apresentar o resumo e chamar 'trigger_action' via Function Calling (JSON).
+6. **Transparência**: Explique ao usuário o que está fazendo (ex: "Agora vamos para a Etapa 2..." ou "Estou finalizando...").
 7. **TAG DE REDUNDÂNCIA (MANDATÁRIO)**: No final de cada mensagem onde você for renderizar um formulário, inclua a tag de texto invisível no seguinte formato: \`[FORM_TRIGGER: módulo_etapa]\`. Isso garante que o sistema renderize o form mesmo se a ferramenta falhar.
 8. **ESTRUTURA DE RESUMO FINAL (MANDATÓRIO)**: Antes de chamar a ferramenta 'trigger_action' ou ao finalizar a coleta, você DEVE apresentar um resumo estruturado seguindo EXATAMENTE este padrão de markdown (bullet points com negrito):
 
-Se módulo JUSTIÇA:
+Se módulo JURÍDICO (Geração de Protocolo):
 *   **Tipo de Problema:** (Valor)
 *   **O que aconteceu:** (Resumo dos fatos)
 *   **Quando aconteceu:** (Data/Período)
@@ -214,33 +197,20 @@ Se módulo JUSTIÇA:
 *   **Prejuízo Material:** (Valor em R$)
 *   **Danos Morais:** (Valor em R$)
 
-Se módulo JURÍDICO:
-*   **Tipo de Documento:** (Valor)
-*   **Perfil das Partes:** (Resumo das partes)
-*   **Objetivo do Documento:** (Fim do contrato)
-*   **Foro:** (Cidade/UF)
-*   **Parte A (Polo Ativo):** (Nome)
-*   **Parte B (Polo Passivo):** (Nome)
-*   **Parâmetros Específicos:** (Lista de itens se houver)
+Se módulo ACOMPANHAMENTO:
+*   **Número/Documento:** (Valor)
 
-Se módulo ESTRATÉGIA:
-*   **Nome da Organização:** (Valor)
-*   **Setor:** (Valor)
-*   **Solução Oferecida:** (Valor)
-*   **Gargalo Principal:** (Valor)
-*   **Objetivo Principal:** (Valor)
-
-Finalize o resumo com uma frase de confirmação: "Com este resumo, podemos gerar o [documento/diagnóstico/protocolo]."
+Finalize o resumo com uma frase de confirmação: "Com este resumo, podemos [gerar o protocolo/acompanhar o processo]."
 
 EXEMPLO DE RESPOSTA PERFEITA 1 (Início Geral):
-Usuário: "Quero criar um contrato de TI"
-Minerva: "Com certeza, Marcos. Vamos começar com o contexto do documento. [FORM_TRIGGER: juridico_1]"
-(Acompanhado da chamada técnica: tools: [{name: "show_form", arguments: {title: "Contexto", fields: [...]}}])
+Usuário: "Quero criar um processo"
+Minerva: "Com certeza, Marcos. Vamos começar com os detalhes do que aconteceu. [FORM_TRIGGER: juridico_1]"
+(Acompanhado da chamada técnica: tools: [{name: "show_form", arguments: {title: "Fatos", fields: [...]}}])
 
-EXEMPLO DE RESPOSTA PERFEITA 2 (Diagnóstico Estruturado):
-Usuário: "Resumo do Diagnóstico: Nome: Empresa X, Setor: TI, Faturamento: 50k..."
-Minerva: "Excelente resumo. Para formalizarmos sua estratégia, vamos confirmar os dados do Contexto da Empresa. [FORM_TRIGGER: estrategia_1]"
-(Acompanhado da chamada técnica: tools: [{name: "show_form", arguments: {title: "Contexto da Empresa", fields: [{id: 'companyName', label: 'Nome...', defaultValue: 'Empresa X'}, ...]}}])
+EXEMPLO DE RESPOSTA PERFEITA 2 (Acompanhamento):
+Usuário: "Quero acompanhar o processo 12345"
+Minerva: "Claro, vamos verificar o andamento. Confirme o número do processo para eu consultar na Minerva. [FORM_TRIGGER: acompanhamento_1]"
+(Acompanhado da chamada técnica: tools: [{name: "show_form", arguments: {title: "Busca de Processo", fields: [{id: 'documentNumber', label: 'Número...', defaultValue: '12345'}, ...]}}])
 
 
 
@@ -278,7 +248,7 @@ Não tente realizar tarefas como: agendar compromissos, gerenciar e-mails, compr
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        "model": "google/gemini-2.0-flash-001",
+        "model": "google/gemini-2.5-flash",
         "messages": [
           { "role": "system", "content": systemPrompt },
           ...messages
@@ -286,13 +256,18 @@ Não tente realizar tarefas como: agendar compromissos, gerenciar e-mails, compr
         "tools": tools,
         "tool_choice": "auto",
         "temperature": 0.1,
+        "max_tokens": 4000,
         "stream": true,
       })
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || "Erro de comunicação com a Minerva");
+      const errorText = await response.text();
+      let errorData: any = {};
+      try { errorData = JSON.parse(errorText); } catch (e) { }
+
+      console.error("OpenRouter Error Data:", errorData, errorText);
+      throw new Error(errorData?.error?.message || errorText || "Erro de comunicação com a Minerva");
     }
 
     return new Response(response.body, {
@@ -305,6 +280,6 @@ Não tente realizar tarefas como: agendar compromissos, gerenciar e-mails, compr
 
   } catch (error: any) {
     console.error('API Error Minerva Chat:', error)
-    return NextResponse.json({ error: 'Falha na comunicação com Minerva' }, { status: 500 })
+    return NextResponse.json({ error: error.message || 'Falha na comunicação com Minerva' }, { status: 500 })
   }
 }

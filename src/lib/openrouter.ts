@@ -27,12 +27,13 @@ export async function askAI(prompt: string, systemPrompt?: string): Promise<AIRe
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        "model": "google/gemini-2.0-flash-001", // Gemini 2.0 Flash (Premium Key)
+        "model": "google/gemini-2.5-flash", // Gemini 2.5 Flash (Premium Key)
         "messages": [
           ...(systemPrompt ? [{ "role": "system", "content": systemPrompt }] : []),
           { "role": "user", "content": prompt }
         ],
-        "temperature": 0.7,
+        "temperature": 0.3,
+        "max_tokens": 4000
       })
     });
 

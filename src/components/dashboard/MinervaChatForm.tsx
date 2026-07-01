@@ -5,7 +5,7 @@ import { Plus, Check, Send } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { FormSelect } from '@/components/shared/FormSelect'
 import { PartnerSelector } from '@/components/shared/PartnerSelector'
-import { formatCpf, formatCnpj, formatDoc } from '@/utils/formatters'
+import { formatCpf, formatCnpj, formatDoc, formatGenericDocument } from '@/utils/formatters'
 import { WizardField } from '@/types/minerva'
 
 interface AutoExpandingTextareaProps {
@@ -301,7 +301,10 @@ export const MinervaChatForm: React.FC<MinervaChatFormProps> = ({
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider ml-1">{field.label}</label>
                 <AutoExpandingTextarea
                   value={formData[field.id] || ''}
-                  onChange={(val) => setFormData(prev => ({ ...prev, [field.id]: val }))}
+                  onChange={(val) => {
+                    const finalVal = field.id === 'documentNumber' ? formatGenericDocument(val) : val;
+                    setFormData(prev => ({ ...prev, [field.id]: finalVal }))
+                  }}
                   placeholder="..."
                   disabled={!isLastMessage || isSubmitted}
                 />

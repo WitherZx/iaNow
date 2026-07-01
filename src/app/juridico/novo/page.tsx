@@ -308,7 +308,7 @@ export default function NewDocumentPage() {
                             <span className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Qualificação Vinculada</span>
                           </div>
                           <p className="text-[11px] text-slate-600 font-bold leading-relaxed">
-                            {partyA.name} • {partyA.document} • {partyA.address.substring(0, 40)}...
+                            {partyA.name} • {partyA.document} • {partyA.address?.substring(0, 40)}...
                           </p>
                         </div>
                       )}
@@ -362,7 +362,7 @@ export default function NewDocumentPage() {
                             <span className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Qualificação Vinculada</span>
                           </div>
                           <p className="text-[11px] text-slate-600 font-bold leading-relaxed">
-                            {partyB.name} • {partyB.document} • {partyB.address.substring(0, 40)}...
+                            {partyB.name} • {partyB.document} • {partyB.address?.substring(0, 40)}...
                           </p>
                         </div>
                       )}
@@ -454,7 +454,7 @@ export default function NewDocumentPage() {
                         </div>
                         <div className="flex flex-col gap-y-1 px-1">
                           <span className="text-lg font-black text-slate-900">{tipoContrato}</span>
-                          <span className="text-[11px] text-slate-400 font-bold">{objetivo.substring(0, 100)}...</span>
+                          <span className="text-[11px] text-slate-400 font-bold">{objetivo?.substring(0, 100)}...</span>
                         </div>
                       </div>
 

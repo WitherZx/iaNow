@@ -79,7 +79,7 @@ export default function DemandDetailPage() {
   const [isTrackingLoading, setIsTrackingLoading] = useState(false)
   const [processAnalysis, setProcessAnalysis] = useState<any>(null)
   const [isAnalysisLoading, setIsAnalysisLoading] = useState(false)
-  
+
   const [processDocuments, setProcessDocuments] = useState<any[]>([])
   const [isDocsLoading, setIsDocsLoading] = useState(false)
   const [isExtracting, setIsExtracting] = useState(false)
@@ -103,7 +103,7 @@ export default function DemandDetailPage() {
       const { getJusticeDemandAction } = await import('@/app/actions/justice-actions')
       const res = await getJusticeDemandAction(id as string)
       if (res.error) throw new Error(res.error)
-      
+
       // Auto-sync será handled pelo useEffect para evitar loops no queryFn
 
       return {
@@ -126,7 +126,7 @@ export default function DemandDetailPage() {
     if (demandData?.demand) {
       const data = demandData.demand
       setDemand(data)
-      
+
       const content = data.metadata?.petition_content || ''
       setEditContent(content)
       setProcessStatus(data.metadata?.last_remote_status || null)
@@ -208,7 +208,7 @@ export default function DemandDetailPage() {
     }
   }, [activeTab, processAnalysis, processStatus, isAnalysisLoading])
 
-  // O Gatilho de Documentos do Escavador foi consolidado dentro do fetchProcessStatus para evitar loops
+  // O Gatilho de Documentos da Judit foi consolidado dentro do fetchProcessStatus para evitar loops
 
 
   const loadVersions = async () => {
@@ -354,10 +354,9 @@ export default function DemandDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['justice-case', id] })
 
       setDemand((prev: any) => ({ ...prev, metadata: updatedMetadata, ...(numericValorCausa !== undefined && { valor_causa: numericValorCausa }) }))
-      
-      // DISPARA SINCRONIZAÇÃO DO ESCAVADOR TAMBÉM
-      await fetchProcessDocuments()
-      
+
+      // Documentos não suportados pelo DataJud
+
       if (isMounted.current) {
         setActiveTab('acompanhamento')
       }
@@ -378,7 +377,7 @@ export default function DemandDetailPage() {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           processData: processStatus,
           petitionContent: editContent,
           documentList: processDocuments
@@ -405,7 +404,7 @@ export default function DemandDetailPage() {
 
       setProcessAnalysis(analysis)
       setDemand((prev: any) => ({ ...prev, metadata: updatedMetadata }))
-      
+
       if (isMounted.current) {
         setActiveTab('analise')
         toast.success('Análise da Minerva concluída!')
@@ -418,47 +417,6 @@ export default function DemandDetailPage() {
     }
   }
 
-  const fetchProcessDocuments = async () => {
-    if (!demand?.metadata?.process_number) return
-    if (isDocsLoading) return
-    setIsDocsLoading(true)
-    try {
-      const { getProcessDocumentsAction, updateJusticeDemandMetadataAction } = await import('@/app/actions/justice-actions')
-      const result = await getProcessDocumentsAction(demand.metadata.process_number)
-      
-      if (result.success) {
-        const docs = result.data || []
-        setProcessDocuments(docs)
-        
-        // Auto-extração da Petição Inicial se for externo
-        if (isExternal && !editContent) {
-          const initialDoc = docs.find((d: any) => d.category === 'petition_initial')
-          if (initialDoc) {
-            handleAutoExtract(initialDoc.url)
-          }
-        }
-
-        // Salva no cache do documento
-        const updatedMetadata = { ...demand.metadata, last_documents: docs }
-        await updateJusticeDemandMetadataAction(id as string, updatedMetadata)
-        
-        if (docs.length > 0) {
-          toast.success(`${docs.length} documentos encontrados no Escavador!`)
-        } else {
-          toast.info('Nenhum documento encontrado na base do Escavador para este número.')
-        }
-
-        setDemand((prev: any) => ({ ...prev, metadata: updatedMetadata }))
-        queryClient.invalidateQueries({ queryKey: ['justice-case', id] })
-      }
-    } catch (err: any) {
-      console.error('[Escavador] Error:', err)
-      toast.error(err.message || 'Erro ao buscar documentos no Escavador.')
-    } finally {
-      setIsDocsLoading(false)
-    }
-  }
-
   const handleAutoExtract = async (url: string) => {
     setIsExtracting(true)
     try {
@@ -467,10 +425,10 @@ export default function DemandDetailPage() {
       if (result.success && result.text) {
         setEditContent(result.text)
         // Salva opcionalmente no metadado para persistir
-        await updateJusticeDemandMetadataAction(id as string, { 
-          ...demand.metadata, 
+        await updateJusticeDemandMetadataAction(id as string, {
+          ...demand.metadata,
           petition_content: result.text,
-          is_external_petition: true 
+          is_external_petition: true
         })
         queryClient.invalidateQueries({ queryKey: ['justice-case', id] })
       }
@@ -786,13 +744,12 @@ export default function DemandDetailPage() {
                   key={tab}
                   disabled={!isAvailable}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-6 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all duration-300 ${
-                    isActive 
-                      ? 'bg-white text-primary shadow-sm ring-1 ring-slate-100 scale-105' 
-                      : isAvailable 
-                        ? 'text-slate-400 hover:text-primary hover:bg-slate-50' 
+                  className={`px-6 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all duration-300 ${isActive
+                      ? 'bg-white text-primary shadow-sm ring-1 ring-slate-100 scale-105'
+                      : isAvailable
+                        ? 'text-slate-400 hover:text-primary hover:bg-slate-50'
                         : 'text-slate-200 cursor-not-allowed opacity-30'
-                  }`}
+                    }`}
                 >
                   {labels[tab]}
                   {tab === 'minuta' && isExternal && <span className="ml-1.5 opacity-50 text-[10px]">EXT</span>}
@@ -840,7 +797,7 @@ export default function DemandDetailPage() {
                       <FileText size={18} className="text-blue-500" />
                       <div>
                         <p className="text-xs font-black text-blue-900 leading-none mb-1">Petição de Acompanhamento Externo</p>
-                        <p className="text-[10px] font-bold text-blue-600/70 uppercase">Conteúdo extraído via Escavador • Modo de Leitura</p>
+                        <p className="text-[10px] font-bold text-blue-600/70 uppercase">Conteúdo extraído via Minerva • Modo de Leitura</p>
                       </div>
                     </div>
                   )}
@@ -858,8 +815,8 @@ export default function DemandDetailPage() {
                       {isExternal ? 'Petição não Localizada' : 'Nenhum Documento Gerado'}
                     </h4>
                     <p className="text-sm font-medium text-slate-500 leading-relaxed">
-                      {isExternal 
-                        ? 'O texto integral da petição inicial não foi encontrado automaticamente na base do Escavador para este processo.' 
+                      {isExternal
+                        ? 'O texto integral da petição inicial não foi encontrado automaticamente na base da Minerva para este processo.'
                         : 'Este processo foi adicionado para acompanhamento. Para gerar uma petição, utilize o assistente de estratégias.'}
                     </p>
                   </div>
@@ -930,7 +887,7 @@ export default function DemandDetailPage() {
                   <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-100 rounded-2xl">
                     <Info size={16} className="text-amber-500 shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-xs font-black text-amber-800 mb-0.5">Documentos do processo não disponíveis via DataJud</p>
+                      <p className="text-xs font-black text-amber-800 mb-0.5">Documentos do processo não disponíveis via Minerva</p>
                       <p className="text-[11px] font-medium text-amber-700 leading-relaxed">O CNJ disponibiliza apenas metadados e movimentações. Para visualizar petições e decisões, acesse o portal do tribunal diretamente.</p>
                     </div>
                   </div>
@@ -1026,7 +983,7 @@ export default function DemandDetailPage() {
                                 </div>
                               )}
 
-                              {/* Documentos Anexados (do Escavador) */}
+                              {/* Documentos Anexados (da Judit) */}
                               {(() => {
                                 const movDate = new Date(mov.date)
                                 movDate.setHours(0, 0, 0, 0)
@@ -1043,22 +1000,22 @@ export default function DemandDetailPage() {
                                   const docDate = new Date(d.date)
                                   docDate.setHours(0, 0, 0, 0)
                                   const docTime = docDate.getTime()
-                                  
+
                                   if (docTime !== movTime) return false
 
+                                  // Se bater o nome, vincula sempre
                                   const nameMatch = mov.description && d.name && (
                                     mov.description.toLowerCase().includes(d.name.toLowerCase()) ||
                                     d.name.toLowerCase().includes(mov.description.toLowerCase())
                                   )
-
-                                  // Se bater o nome, vincula sempre
                                   if (nameMatch) return true
-                                  
-                                  // Se não bater o nome, só vincula por data se for a única movimentação do dia
-                                  // ou se o documento tiver um nome genérico que bata com o movimento
-                                  return allMovsSameDay.length === 1
+
+                                  // Se não bater o nome, mas for o mesmo dia, vinculamos de qualquer forma para facilitar a visualização
+                                  // (Isso pode causar duplicação se houver muitos movimentos no dia, mas garante que nada suma)
+                                  return true
                                 })
-                                
+
+
                                 if (relatedDocs.length === 0) return null
 
                                 return (

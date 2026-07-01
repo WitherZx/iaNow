@@ -372,18 +372,13 @@ export async function updateJusticeDemandAction(id: string, updates: any) {
 }
 
 /**
- * Busca documentos do processo via Escavador.
+ * Busca documentos do processo (Depreciado, não suportado pelo DataJud).
  */
 export async function getProcessDocumentsAction(processNumber: string) {
-  try {
-    const { EscavadorService } = await import('@/lib/services/escavador')
-    const documents = await EscavadorService.getProcessDocuments(processNumber)
-    return { success: true, data: documents }
-  } catch (err: any) {
-    console.error('getProcessDocumentsAction Error:', err)
-    return { error: err.message || 'Falha ao buscar documentos no Escavador' }
-  }
+  console.log(`[ACTION] getProcessDocumentsAction chamada para: ${processNumber}, mas documentos não são suportados pelo DataJud.`);
+  return { success: true, data: [] }
 }
+
 /**
  * Simula a extração de texto de um PDF de petição (OCR/Regex).
  */

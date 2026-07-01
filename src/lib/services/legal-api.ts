@@ -5,13 +5,32 @@ export interface ProcessMovement {
   type: string;
 }
 
+export interface ProcessParty {
+  nome: string;
+  tipo: string;
+}
+
+export interface ProcessDocument {
+  id: string;
+  name: string;
+  url: string;
+  date: string;
+  type?: string;
+  size?: string;
+}
+
 export interface ProcessStatus {
   number: string;
   status: string;
   court: string;
   distributionDate: string;
   judge?: string;
+  subject?: string;
+  classe?: string;
+  valorCausa?: string;
+  partes?: ProcessParty[];
   movements: ProcessMovement[];
+  documents?: ProcessDocument[];
 }
 
 export interface LegalApiInterface {
@@ -30,6 +49,13 @@ export class MockLegalApi implements LegalApiInterface {
       court: '1ª Vara Cível de São Paulo - Foro Central',
       distributionDate: '15/01/2024',
       judge: 'Dr. Roberto Cardoso',
+      subject: 'Indenização por Dano Moral',
+      classe: 'Procedimento Comum Cível',
+      valorCausa: 'R$ 50.000,00',
+      partes: [
+        { nome: 'João Silva', tipo: 'Ativo' },
+        { nome: 'Empresa XYZ Ltda', tipo: 'Passivo' }
+      ],
       movements: [
         {
           id: '1',
@@ -61,6 +87,10 @@ export class MockLegalApi implements LegalApiInterface {
           description: 'Distribuição por sorteio.',
           type: 'Distribuição'
         }
+      ],
+      documents: [
+        { id: 'doc-1', name: 'Petição Inicial', url: '#', date: '2024-01-15', type: 'PDF' },
+        { id: 'doc-2', name: 'Contestação', url: '#', date: '2024-03-05', type: 'PDF' }
       ]
     };
   }
@@ -76,4 +106,9 @@ export class MockLegalApi implements LegalApiInterface {
   }
 }
 
-export const legalApi = new MockLegalApi();
+import { DataJudService } from './datajud';
+
+export const legalApi: LegalApiInterface = {
+  getProcessInfo: (number: string) => DataJudService.getProcessInfo(number),
+  analyzeProcess: async (status: ProcessStatus) => []
+};
